@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie'
 
 export interface LocalTransaction {
   id?: number
+  owner_id: string
   from_account_id: string | null
   to_account_id: string | null
   amount: number

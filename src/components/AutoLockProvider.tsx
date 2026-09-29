@@ -21,8 +21,9 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
     const isAutoLockEnabled = localStorage.getItem('financial_os_autolock') === 'true'
     const lockTimeMinutes = parseInt(localStorage.getItem('financial_os_lock_time') || '3', 10)
     const lastActive = localStorage.getItem('financial_os_last_active')
-    
-    if (isAutoLockEnabled && lastActive) {
+    const hasValidPin = /^\d{4}$/.test(localStorage.getItem('financial_os_pin') || '')
+
+    if (isAutoLockEnabled && hasValidPin && lastActive) {
       const timePassed = Date.now() - parseInt(lastActive, 10)
       if (timePassed > (lockTimeMinutes * 60 * 1000)) {
         setIsLocked(true)
@@ -66,8 +67,8 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
       setError(false)
       
       if (newPin.length === 4) {
-        const savedPin = localStorage.getItem('financial_os_pin') || '0000'
-        if (newPin === savedPin) {
+        const savedPin = localStorage.getItem('financial_os_pin') || ''
+        if (/^\d{4}$/.test(savedPin) && newPin === savedPin) {
           setIsLocked(false)
           setPinInput('')
           localStorage.setItem('financial_os_last_active', Date.now().toString())

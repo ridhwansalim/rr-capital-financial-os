@@ -30,8 +30,15 @@ export default function Transactions() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError || !session?.user) {
+      alert('Sign in before queuing a transaction.')
+      return
+    }
+
     // 1. Save locally to Dexie (Offline First)
     await localDB.outbox.add({
+      owner_id: session.user.id,
       from_account_id: fromAccount || null,
       to_account_id: toAccount || null,
       amount: parseFloat(amount),

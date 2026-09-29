@@ -18,11 +18,17 @@ export async function syncOutbox() {
   }
 
   for (const txn of pendingTxns) {
+    if (txn.owner_id !== user.id) {
+      console.warn('Skipping offline transaction ' + txn.id + ': it belongs to a different or unverified account.')
+      continue
+    }
+
     try {
       // 3. Insert the real transaction WITH your initiator ID
       const { data: newTxn, error: txnError } = await supabase
         .from('transactions')
         .insert({
+          owner_id: txn.owner_id,
           initiator_profile_id: user.id, // <-- V2 Security Requirement
           from_account_id: txn.from_account_id,
           to_account_id: txn.to_account_id,

@@ -49,7 +49,7 @@ export default function Settings() {
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
           setUserId(user.id)
-          const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+          const { data } = await supabase.from('profiles').select('full_name, username, theme_mode, theme_accent, ai_api_key, ai_model, ai_persona, telegram_chat_id, is_biometric_enabled, registered_devices').eq('id', user.id).single()
           if (data) {
             const loadedProfile = { ...defaultProfile, ...data, registered_devices: data.registered_devices || [] }
             setOriginalProfile(loadedProfile)
@@ -81,7 +81,19 @@ export default function Settings() {
     setIsSavingProfile(true)
     try {
       if (!userId) throw new Error('No user found')
-      const { error } = await supabase.from('profiles').update(draftProfile).eq('id', userId)
+      const profileUpdate = {
+        full_name: draftProfile.full_name,
+        username: draftProfile.username,
+        theme_mode: draftProfile.theme_mode,
+        theme_accent: draftProfile.theme_accent,
+        ai_api_key: draftProfile.ai_api_key,
+        ai_model: draftProfile.ai_model,
+        ai_persona: draftProfile.ai_persona,
+        telegram_chat_id: draftProfile.telegram_chat_id,
+        is_biometric_enabled: draftProfile.is_biometric_enabled,
+        registered_devices: draftProfile.registered_devices
+      }
+      const { error } = await supabase.from('profiles').update(profileUpdate).eq('id', userId)
       if (error) throw error
       
       setOriginalProfile(draftProfile)
@@ -141,6 +153,10 @@ export default function Settings() {
 
   const toggleAutoLock = () => {
     const newVal = !autoLock
+    if (newVal && !/^\d{4}$/.test(savedPin)) {
+      alert('Set a valid four-digit PIN before enabling Auto-Lock.')
+      return
+    }
     setAutoLock(newVal)
     localStorage.setItem('financial_os_autolock', String(newVal))
   }
@@ -432,7 +448,7 @@ export default function Settings() {
                     <h3 className="font-bold text-white flex items-center">
                       <Lock className="w-4 h-4 mr-2 text-slate-400" /> Auto-Lock Interface
                     </h3>
-                    <p className="text-sm text-slate-400 mt-1">Require a PIN after inactivity.</p>
+                    <p className="text-sm text-slate-400 mt-1">Local convenience lock only; it does not encrypt data or replace device and account security.</p>
                   </div>
                   <button 
                     onClick={toggleAutoLock}
@@ -468,7 +484,11 @@ export default function Settings() {
                         onChange={(e) => {
                           const val = e.target.value.replace(/\D/g, '').substring(0, 4)
                           setSavedPin(val)
-                          localStorage.setItem('financial_os_pin', val)
+                          if (val.length === 4) {
+                            localStorage.setItem('financial_os_pin', val)
+                          } else if (val.length === 0 && !autoLock) {
+                            localStorage.removeItem('financial_os_pin')
+                          }
                         }}
                         placeholder="0000"
                         className="w-full text-center tracking-[0.5em] font-black bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-amber-500/50 transition-colors"
