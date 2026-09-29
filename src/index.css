@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+/* 1. Define the default RGB values (Emerald) so the browser has a baseline */
+:root {
+  --accent-400: 52 211 153;
+  --accent-500: 16 185 129;
+  --accent-600: 5 150 105;
+}
+
+@theme {
+  --color-primary: #0f172a;
+  --color-primary-foreground: #f8fafc;
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #0f172a;
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #f8fafc;
+  --color-background: #ffffff;
+  --color-foreground: #020617;
+  --radius-md: 0.5rem;
+
+  /* 2. Register the dynamic Accent colors into Tailwind v4 */
+  --color-accent-400: rgb(var(--accent-400));
+  --color-accent-500: rgb(var(--accent-500));
+  --color-accent-600: rgb(var(--accent-600));
+}
