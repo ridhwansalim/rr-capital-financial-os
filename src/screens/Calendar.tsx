@@ -120,8 +120,9 @@ export default function Calendar() {
         if (profileRes.data) {
           profileRes.data.forEach((p: any) => {
             if (p.id !== currentUserId) {
-              const displayName = p.full_name || p.username || p.email
-              combined.push({ id: p.id, name: displayName, subtitle: `Registered User • ${p.email}`, type: 'profile' })
+              const displayName = p.full_name || p.username || 'Registered user'
+              const usernameLabel = p.username ? '@' + p.username : 'Registered user'
+              combined.push({ id: p.id, name: displayName, subtitle: 'Registered user ' + usernameLabel, type: 'profile' })
             }
           })
         }

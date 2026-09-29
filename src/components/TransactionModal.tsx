@@ -97,7 +97,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
         if (profileRes.data) {
           profileRes.data.forEach((p: any) => {
             if (p.id !== currentUserId) {
-              combined.push({ id: p.id, name: p.full_name || p.username, subtitle: `@${p.username}`, type: 'profile' })
+              combined.push({ id: p.id, name: p.full_name || p.username || 'Registered user', subtitle: p.username ? '@' + p.username : 'Registered user', type: 'profile' })
             }
           })
         }
