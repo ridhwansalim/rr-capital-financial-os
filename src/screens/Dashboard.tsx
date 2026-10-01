@@ -161,7 +161,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
             <TrendingUp className="w-7 h-7 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-emerald-400" />
-            Command Center
+            Financial Overview
           </h1>
           <p className="text-slate-400 mt-1">A clear view of your balances, commitments, and recent activity.</p>
         </div>

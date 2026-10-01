@@ -133,7 +133,7 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
             <Lock className="w-8 h-8 text-emerald-400" />
           </div>
           <h2 className="text-2xl font-bold mb-2">App Locked</h2>
-          <p className="text-slate-400 mb-8 text-sm">Enter PIN or use Biometrics</p>
+          <p className="text-slate-400 mb-8 text-sm">Enter your app PIN or use this device’s screen lock</p>
           
           <div className="flex space-x-6 mb-10">
             {[...Array(4)].map((_, i) => (

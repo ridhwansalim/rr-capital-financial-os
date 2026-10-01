@@ -140,12 +140,12 @@ export default function Ledger() {
           />
         </div>
 
-        <div className="flex p-1 bg-white/5 border border-white/10 rounded-xl backdrop-blur-md overflow-x-auto hide-scrollbar">
+        <div className="grid grid-cols-4 p-1 bg-white/5 border border-white/10 rounded-xl backdrop-blur-md min-w-0">
           {(['all', 'income', 'expense', 'transfer'] as const).map(f => (
             <button
               key={f}
               onClick={() => setFilterType(f)}
-              className={`px-6 py-2 text-sm font-semibold rounded-lg transition-all capitalize whitespace-nowrap ${
+              className={`px-2 sm:px-5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all capitalize whitespace-nowrap ${
                 filterType === f ? 'bg-indigo-500/20 text-indigo-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'
               }`}
             >

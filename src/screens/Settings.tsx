@@ -60,7 +60,8 @@ export default function Settings() {
           const { data } = await supabase.from('profiles').select('full_name, username, theme_mode, theme_accent, ai_model, ai_persona, telegram_chat_id, is_biometric_enabled, registered_devices').eq('id', user.id).single()
           if (data) {
             const themeMode = ['amoled', 'light'].includes(data.theme_mode) ? data.theme_mode : 'system'
-            const loadedProfile = { ...defaultProfile, ...data, theme_mode: themeMode, registered_devices: data.registered_devices || [] }
+            const uniqueDevices = Array.from(new Map((data.registered_devices || []).map((device: any) => [device.id, device])).values())
+            const loadedProfile = { ...defaultProfile, ...data, theme_mode: themeMode, registered_devices: uniqueDevices }
             setOriginalProfile(loadedProfile)
             setDraftProfile(loadedProfile)
             
@@ -86,6 +87,16 @@ export default function Settings() {
   }, [])
 
   const isProfileModified = JSON.stringify({ ...originalProfile, telegram_chat_id: '' }) !== JSON.stringify({ ...draftProfile, telegram_chat_id: '' })
+
+  useEffect(() => {
+    if (!isProfileModified) return
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeUnload)
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload)
+  }, [isProfileModified])
 
   const handleSaveProfile = async () => {
     setIsSavingProfile(true)
@@ -154,6 +165,17 @@ export default function Settings() {
     setTelegramBusy(true)
     setTelegramLinkError('')
     try {
+      const { data: setup, error: setupError } = await supabase.functions.invoke('telegram-webhook', { body: { action: 'configure' } })
+      if (setupError) {
+        let message = 'Could not configure the Telegram bot. Please retry.'
+        try {
+          const response = setupError.context as Response
+          const body = await response?.json()
+          if (typeof body?.error === 'string') message = body.error
+        } catch { /* Keep the actionable fallback when no response body is available. */ }
+        throw new Error(message)
+      }
+      if (setup?.configured !== true) throw new Error(setup?.error || 'Could not configure the Telegram bot.')
       const { data, error } = await supabase.rpc('issue_telegram_link_token')
       if (error) throw error
       if (typeof data !== 'string') throw new Error('Could not issue a link code')
@@ -196,7 +218,7 @@ export default function Settings() {
   const registerNewDevice = async () => {
     try {
       if (!window.PublicKeyCredential) {
-        alert("Your browser or device does not support Biometric WebAuthn.")
+        alert("This browser does not support device screen-lock authentication.")
         return
       }
 
@@ -221,8 +243,13 @@ export default function Settings() {
         const rawId = arrayBufferToBase64(cred.rawId)
         const deviceName = prompt("Name this device (e.g., iPhone 15, Macbook Pro):") || "Unknown Device"
         
+        const existingDevices = draftProfile.registered_devices || []
+        if (existingDevices.some((device: { id: string }) => device.id === rawId)) {
+          alert('This device is already registered.')
+          return
+        }
         const newDevice = { id: rawId, name: deviceName, added_at: new Date().toISOString() }
-        const updatedDevices = [...draftProfile.registered_devices, newDevice]
+        const updatedDevices = [...existingDevices, newDevice]
         
         setDraftProfile({ ...draftProfile, registered_devices: updatedDevices })
       }
@@ -232,7 +259,7 @@ export default function Settings() {
   }
 
   const removeDevice = (deviceId: string) => {
-    const updatedDevices = draftProfile.registered_devices.filter(d => d.id !== deviceId)
+    const updatedDevices = (draftProfile.registered_devices || []).filter(d => d.id !== deviceId)
     setDraftProfile({ ...draftProfile, registered_devices: updatedDevices })
   }
 
@@ -266,9 +293,10 @@ export default function Settings() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-40">
-        <Loader2 className="w-10 h-10 animate-spin text-emerald-500 mb-4" />
-        <p className="text-slate-400 font-medium">Loading preferences...</p>
+      <div className="p-4 sm:p-6 w-full max-w-4xl mx-auto pb-32 animate-pulse" aria-label="Loading settings">
+        <div className="mb-8 space-y-3"><div className="h-8 w-40 rounded-lg bg-white/10"/><div className="h-4 w-80 max-w-full rounded bg-white/5"/></div>
+        <div className="mb-6 h-12 rounded-2xl border border-white/10 bg-white/5"/>
+        <div className="space-y-4">{[0,1,2,3,4].map(i => <div key={i} className="h-24 rounded-2xl border border-white/10 bg-white/5 p-5"><div className="h-4 w-36 rounded bg-white/10"/><div className="mt-4 h-3 w-2/3 rounded bg-white/5"/></div>)}</div>
       </div>
     )
   }
@@ -497,7 +525,7 @@ export default function Settings() {
 
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3"><div><p className="font-semibold">Link Telegram</p><p className="text-sm text-slate-400">{originalProfile.telegram_chat_id ? 'Chat ID on file. Use the bot to verify or change it.' : 'Connect your private Telegram chat for alerts.'}</p></div><button type="button" onClick={() => void requestTelegramLink()} disabled={telegramBusy} className="shrink-0 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50">{telegramBusy ? 'Working…' : 'Link Telegram'}</button></div>
-                {telegramToken && <div className="text-sm text-slate-300 space-y-2"><p>Open your RR Capital bot and send this command within 10 minutes:</p><code className="block p-3 rounded-xl bg-black/30 break-all select-all">/start {telegramToken}</code><a className="inline-block text-emerald-300 underline" target="_blank" rel="noopener noreferrer" href={`https://t.me/${telegramBotUsername}?start=${encodeURIComponent(telegramToken)}`}>Open Telegram bot</a><p>The connection appears here after the bot confirms it.</p></div>}
+                {telegramToken && <div className="text-sm text-slate-300 space-y-2"><p>Open the bot and tap <strong>Start</strong> within 10 minutes (or send this command):</p><code className="block p-3 rounded-xl bg-black/30 break-all select-all">/start {telegramToken}</code><a className="inline-block text-emerald-300 underline" target="_blank" rel="noopener noreferrer" href={`https://t.me/${telegramBotUsername}?start=${encodeURIComponent(telegramToken)}`}>Open @{telegramBotUsername}</a><p>Keep this page open; it will confirm the link automatically. If Telegram only shows a Start button, tap it once in the private chat.</p></div>}
                 {telegramLinkError && <p role="alert" className="text-sm text-rose-300">{telegramLinkError}</p>}
               </div>
 

@@ -103,7 +103,9 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
     return () => clearTimeout(delayDebounceFn)
   }, [searchQuery, selectedEntity, newShadowName, currentUserId])
 
-  const handleClose = () => {
+  const handleClose = (discard = false) => {
+    if (!discard && (amount || description || searchQuery || newShadowName) &&
+        !window.confirm('You have unsaved debt details. Discard them and close?')) return
     setType('lent')
     setAmount('')
     setDescription('')
@@ -114,6 +116,21 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
     setSelectedAccount('')
     onClose()
   }
+
+  useEffect(() => {
+    if (!isOpen) return
+    const closeOnBack = (event: Event) => {
+      if (amount || description || searchQuery || newShadowName) {
+        if (!window.confirm('You have unsaved debt details. Discard them and close?')) {
+          event.preventDefault()
+          return
+        }
+      }
+      handleClose(true)
+    }
+    window.addEventListener('rr:modal-back', closeOnBack)
+    return () => window.removeEventListener('rr:modal-back', closeOnBack)
+  }, [isOpen, amount, description, searchQuery, newShadowName])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -151,7 +168,7 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
       
       if (rpcError) throw rpcError
 
-      handleClose()
+      handleClose(true)
       if (window.location.pathname === '/debts') window.location.reload()
     } catch (error: any) {
       console.error('Error saving obligation:', error)
@@ -167,7 +184,7 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
       <div className="w-full max-w-md p-6 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl relative animate-in zoom-in-95 duration-200 text-white max-h-[90vh] overflow-y-auto">
         
-        <button onClick={handleClose} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10">
+        <button onClick={() => handleClose()} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10">
           <X className="w-5 h-5" />
         </button>
 

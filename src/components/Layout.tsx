@@ -10,8 +10,36 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [isDebtModalOpen, setIsDebtModalOpen] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [sharedFile, setSharedFile] = useState<File | null>(null)
+  const modalHistoryRef = React.useRef(false)
   
   const location = useLocation()
+
+  useEffect(() => {
+    const modalOpen = isTxModalOpen || isDebtModalOpen
+    if (modalOpen && !modalHistoryRef.current) {
+      window.history.pushState({ ...(window.history.state || {}), rrModalOpen: true }, '', window.location.href)
+      modalHistoryRef.current = true
+    } else if (!modalOpen && modalHistoryRef.current) {
+      modalHistoryRef.current = false
+      if (window.history.state?.rrModalOpen) window.history.back()
+    }
+    const closeOnBack = () => {
+      if (!modalHistoryRef.current) return
+      modalHistoryRef.current = false
+      const backEvent = new Event('rr:modal-back', { cancelable: true })
+      window.dispatchEvent(backEvent)
+      if (backEvent.defaultPrevented) {
+        window.history.pushState({ ...(window.history.state || {}), rrModalOpen: true }, '', window.location.href)
+        modalHistoryRef.current = true
+      } else {
+        setIsTxModalOpen(false)
+        setIsDebtModalOpen(false)
+        setSharedFile(null)
+      }
+    }
+    window.addEventListener('popstate', closeOnBack)
+    return () => window.removeEventListener('popstate', closeOnBack)
+  }, [isTxModalOpen, isDebtModalOpen])
 
   // Desktop shows everything
   const desktopNavItems = [

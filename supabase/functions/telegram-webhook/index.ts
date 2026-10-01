@@ -5,7 +5,13 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL")!
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 const telegramBotToken = Deno.env.get("TELEGRAM_BOT_TOKEN")!
 const webhookSecret = Deno.env.get("TELEGRAM_WEBHOOK_SECRET")
+const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+}
 
 function equalSecret(actual: string | null, expected: string): boolean {
   if (actual === null) return false
@@ -19,7 +25,47 @@ function equalSecret(actual: string | null, expected: string): boolean {
 }
 
 serve(async (req) => {
-  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: corsHeaders })
+  let update: any
+  try {
+    update = await req.json()
+  } catch {
+    return new Response('Invalid request', { status: 400, headers: corsHeaders })
+  }
+
+  // Authenticated setup repairs Telegram's remote webhook registration without
+  // ever returning or exposing either server-side credential to the browser.
+  if (update?.action === 'configure') {
+    const authorization = req.headers.get('authorization') || ''
+    const accessToken = authorization.startsWith('Bearer ') ? authorization.slice(7) : ''
+    if (!accessToken || !anonKey) return new Response('Sign in required', { status: 401, headers: corsHeaders })
+    const authClient = createClient(supabaseUrl, anonKey)
+    const { data: { user }, error: authError } = await authClient.auth.getUser(accessToken)
+    if (authError || !user) return new Response('Sign in required', { status: 401, headers: corsHeaders })
+    if (!telegramBotToken || !webhookSecret || webhookSecret.length < 32) {
+      return Response.json({ error: 'Telegram server configuration is incomplete.' }, { status: 503, headers: corsHeaders })
+    }
+
+    try {
+      const webhookUrl = `${supabaseUrl}/functions/v1/telegram-webhook`
+      const configured = await fetch(`https://api.telegram.org/bot${telegramBotToken}/setWebhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: webhookUrl, secret_token: webhookSecret, allowed_updates: ['message'], drop_pending_updates: false }),
+      })
+      const result = await configured.json()
+      if (!configured.ok || result?.ok !== true) {
+        console.error('Telegram webhook setup failed', configured.status, result?.error_code)
+        return Response.json({ error: 'Telegram could not register the bot webhook. Try again or contact support.' }, { status: 502, headers: corsHeaders })
+      }
+      return Response.json({ configured: true }, { headers: corsHeaders })
+    } catch (error) {
+      console.error('Telegram webhook setup request failed', error instanceof Error ? error.name : 'unknown error')
+      return Response.json({ error: 'Could not reach Telegram to configure the bot. Check your connection and retry.' }, { status: 502, headers: corsHeaders })
+    }
+  }
+
   // setWebhook must use this same secret_token. A missing deployment secret
   // fails closed instead of trusting arbitrary requests to a public endpoint.
   if (!webhookSecret || webhookSecret.length < 32) {
@@ -33,7 +79,6 @@ serve(async (req) => {
   }
 
   try {
-    const update = await req.json()
     const message = update?.message
     const chatId = message?.chat?.id
     if (message?.chat?.type !== 'private' || message?.from?.id !== chatId ||
@@ -64,9 +109,9 @@ serve(async (req) => {
       })
       if (!response.ok) console.error('Telegram confirmation failed', response.status)
     }
-    return new Response('OK', { status: 200 })
+    return new Response('OK', { status: 200, headers: corsHeaders })
   } catch (error) {
     console.error('Telegram webhook failed', error)
-    return new Response('Error', { status: 500 })
+    return new Response('Error', { status: 500, headers: corsHeaders })
   }
 })

@@ -218,9 +218,10 @@ export default function Chittis() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center py-40">
-        <Loader2 className="w-10 h-10 animate-spin text-emerald-500 mb-4" />
-        <p className="text-slate-400">Loading Chitti engines...</p>
+      <div className="p-4 sm:p-6 w-full max-w-7xl mx-auto pb-32 animate-pulse" aria-label="Loading Chittis">
+        <div className="mb-8 flex items-end justify-between gap-4"><div className="space-y-3"><div className="h-8 w-48 rounded-lg bg-white/10"/><div className="h-4 w-72 max-w-full rounded bg-white/5"/></div><div className="h-11 w-36 rounded-xl bg-white/10"/></div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">{[0,1,2].map(i => <div key={i} className="h-28 rounded-3xl border border-white/10 bg-white/5"/>)}</div>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">{[0,1,2,3].map(i => <div key={i} className="h-64 rounded-3xl border border-white/10 bg-white/5 p-6"><div className="h-5 w-40 rounded bg-white/10"/><div className="mt-5 h-3 w-3/4 rounded bg-white/5"/><div className="mt-3 h-3 w-1/2 rounded bg-white/5"/></div>)}</div>
       </div>
     )
   }

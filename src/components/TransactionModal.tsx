@@ -29,6 +29,8 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
   const [targetAccount, setTargetAccount] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isAiScanning, setIsAiScanning] = useState(false)
+  const [geminiKeyConfigured, setGeminiKeyConfigured] = useState<boolean | null>(null)
+  const [showGeminiKeyPrompt, setShowGeminiKeyPrompt] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -57,6 +59,9 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
       setMyContacts([])
       setCurrentUserId(null)
       fetchAccounts()
+      void supabase.functions.invoke('manage-gemini-key', { body: { action: 'status' } })
+        .then(({ data, error }) => setGeminiKeyConfigured(!error && data?.configured === true))
+        .catch(() => setGeminiKeyConfigured(false))
       setError(null)
       setIsCreatingAccount(false)
       void loadContacts()
@@ -169,7 +174,9 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
     }
   }
 
-  const handleClose = () => {
+  const handleClose = (discard = false) => {
+    if (!discard && (amount || feeAmount || description || searchQuery || isCreatingAccount) &&
+        !window.confirm('You have unsaved transaction details. Discard them and close?')) return
     setType('expense')
     setAmount('')
     setFeeAmount('')
@@ -238,6 +245,39 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
       setIsAiScanning(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
+  }
+
+  useEffect(() => {
+    if (!isOpen || !(amount || feeAmount || description || searchQuery || isCreatingAccount)) return
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warnBeforeUnload)
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload)
+  }, [isOpen, amount, feeAmount, description, searchQuery, isCreatingAccount])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const closeOnBack = (event: Event) => {
+      if (amount || feeAmount || description || searchQuery || isCreatingAccount) {
+        if (!window.confirm('You have unsaved transaction details. Discard them and close?')) {
+          event.preventDefault()
+          return
+        }
+      }
+      handleClose(true)
+    }
+    window.addEventListener('rr:modal-back', closeOnBack)
+    return () => window.removeEventListener('rr:modal-back', closeOnBack)
+  }, [isOpen, amount, feeAmount, description, searchQuery, isCreatingAccount])
+
+  const openReceiptScanner = () => {
+    if (geminiKeyConfigured !== true) {
+      setShowGeminiKeyPrompt(true)
+      return
+    }
+    fileInputRef.current?.click()
   }
 
   const handleInlineAccountCreate = async (e: React.FormEvent) => {
@@ -333,7 +373,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
           rpcResult = await postQueuedTransaction(queued)
         } catch {
           alert('Transaction saved on this device. It will retry when the connection is available.')
-          handleClose()
+          handleClose(true)
           return
         }
         if (rpcResult.error) {
@@ -344,7 +384,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
             throw new Error(rpcResult.error.message)
           }
           alert('Transaction saved on this device. It will retry when the connection is available.')
-          handleClose()
+          handleClose(true)
           return
         }
         await localDB.outbox.delete(localId)
@@ -352,7 +392,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
         alert('Transaction saved on this device. It will sync when you reconnect.')
       }
 
-      handleClose()
+      handleClose(true)
       if (navigator.onLine && window.location.pathname === '/') window.location.reload()
 
     } catch (err: any) {
@@ -372,7 +412,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
       <div className="w-full max-w-md p-6 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl relative animate-in zoom-in-95 duration-200 text-white max-h-[90vh] overflow-y-auto">
         
-        <button onClick={handleClose} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10">
+        <button onClick={() => handleClose()} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10">
           <X className="w-5 h-5" />
         </button>
 
@@ -418,9 +458,10 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
           <>
             <div className="mb-6 flex flex-col items-center gap-2">
               <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" className="hidden" ref={fileInputRef} onChange={e => { const file = e.target.files?.[0]; if (file) void processFile(file) }} />
-              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isAiScanning || isSubmitting} className="flex items-center px-4 py-2 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-xl text-sm font-bold hover:bg-indigo-500/30 transition-all disabled:opacity-50">
+              <button type="button" onClick={openReceiptScanner} disabled={isAiScanning || isSubmitting || geminiKeyConfigured === null} className="flex items-center px-4 py-2 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-xl text-sm font-bold hover:bg-indigo-500/30 transition-all disabled:opacity-50">
                 {isAiScanning ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Scanning receipt...</> : <><Camera className="w-4 h-4 mr-2" /> Scan receipt</>}
               </button>
+              {showGeminiKeyPrompt && <div role="dialog" aria-modal="true" className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-5"><div className="max-w-sm rounded-2xl border border-white/15 bg-slate-900 p-5 text-white shadow-2xl"><h3 className="text-lg font-bold">Add your Gemini API key</h3><p className="mt-2 text-sm text-slate-300">Receipt scanning uses your personal Gemini key. Add it in Settings before selecting a receipt; your image is sent only when you start a scan.</p><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setShowGeminiKeyPrompt(false)} className="rounded-xl px-4 py-2 text-sm text-slate-300 hover:bg-white/10">Later</button><button type="button" onClick={() => { setShowGeminiKeyPrompt(false); handleClose(true); window.location.assign('/settings') }} className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold">Open Settings</button></div></div></div>}
               <p className="text-xs text-white/45 text-center">Receipt images are sent to Google Gemini. Review the fields before saving.</p>
             </div>
 
