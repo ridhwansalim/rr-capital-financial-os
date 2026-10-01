@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from './components/ThemeProvider'
 import { AutoLockProvider } from './components/AutoLockProvider'
@@ -5,18 +6,22 @@ import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
 import ReloadPrompt from './components/ReloadPrompt'
 
-// Screens
-import Auth from './screens/Auth'
-import Dashboard from './screens/Dashboard'
-import Ledger from './screens/Ledger'
-import Accounts from './screens/Accounts'
-import Debts from './screens/Debts'
-import Contacts from './screens/Contacts'
-import Settings from './screens/Settings'
-import OfflineQueue from './screens/OfflineQueue'
-import Calendar from './screens/Calendar'
-import Chittis from './screens/Chittis' // <-- NEW IMPORT
-import Reports from './screens/Reports'
+// Load only the active screen immediately; keep the established route and layout flow.
+const Auth = lazy(() => import('./screens/Auth'))
+const Dashboard = lazy(() => import('./screens/Dashboard'))
+const Ledger = lazy(() => import('./screens/Ledger'))
+const Accounts = lazy(() => import('./screens/Accounts'))
+const Debts = lazy(() => import('./screens/Debts'))
+const Contacts = lazy(() => import('./screens/Contacts'))
+const Settings = lazy(() => import('./screens/Settings'))
+const OfflineQueue = lazy(() => import('./screens/OfflineQueue'))
+const Calendar = lazy(() => import('./screens/Calendar'))
+const Chittis = lazy(() => import('./screens/Chittis'))
+const Reports = lazy(() => import('./screens/Reports'))
+
+function ScreenLoading() {
+  return <div className="min-h-[50vh] flex items-center justify-center text-sm text-slate-400" role="status" aria-live="polite">Loading page...</div>
+}
 
 export default function App() {
   return (
@@ -26,12 +31,13 @@ export default function App() {
           <ReloadPrompt />
             <Routes>
               {/* Public Route */}
-              <Route path="/auth" element={<Auth />} />
+              <Route path="/auth" element={<Suspense fallback={<ScreenLoading />}><Auth /></Suspense>} />
 
               {/* Protected Application Routes */}
               <Route path="/*" element={
                 <ProtectedRoute>
                   <Layout>
+                    <Suspense fallback={<ScreenLoading />}>
                     <Routes>
                       <Route path="/" element={<Dashboard />} />
                       <Route path="/ledger" element={<Ledger />} />
@@ -49,6 +55,7 @@ export default function App() {
                       {/* Fallback */}
                       <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
+                    </Suspense>
                   </Layout>
                 </ProtectedRoute>
               } />

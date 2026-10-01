@@ -4,6 +4,7 @@ import { Settings as SettingsIcon, Search, User, Key, Lock, ShieldAlert, RotateC
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../components/ThemeProvider'
 import { useModalBack } from '../lib/useModalBack'
+import { hasAppPinConfigured, migrateLegacyAppPin, removeAppPin, storeAppPin } from '../lib/appPin'
 
 // WebAuthn Helper to encode hardware keys
 const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
@@ -46,6 +47,8 @@ export default function Settings() {
   const [autoLock, setAutoLock] = useState(false)
   const [lockTime, setLockTime] = useState('3')
   const [savedPin, setSavedPin] = useState('')
+  const [hasPinConfigured, setHasPinConfigured] = useState(false)
+  const [isPinSaving, setIsPinSaving] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
 
   useEffect(() => {
@@ -78,7 +81,9 @@ export default function Settings() {
 
         setAutoLock(localStorage.getItem('financial_os_autolock') === 'true')
         setLockTime(localStorage.getItem('financial_os_lock_time') || '3')
-        setSavedPin(localStorage.getItem('financial_os_pin') || '')
+        await migrateLegacyAppPin()
+        setHasPinConfigured(hasAppPinConfigured())
+        setSavedPin('')
 
       } catch (error) {
         console.error('Error fetching settings:', error)
@@ -293,12 +298,36 @@ export default function Settings() {
     const newVal = !autoLock
     const savedDevices = JSON.parse(localStorage.getItem('financial_os_devices') || '[]')
     const hasSavedBiometric = localStorage.getItem('financial_os_bio_enabled') === 'true' && savedDevices.length > 0
-    if (newVal && !/^\d{4}$/.test(savedPin) && !hasSavedBiometric) {
+    if (newVal && !hasPinConfigured && !hasSavedBiometric) {
       alert('Set a four-digit app PIN, or save Biometric / FaceID Lock with a registered device first.')
       return
     }
     setAutoLock(newVal)
     localStorage.setItem('financial_os_autolock', String(newVal))
+  }
+
+  const updatePinDraft = (value: string) => {
+    const pin = value.replace(/\D/g, '').substring(0, 4)
+    setSavedPin(pin)
+    if (pin.length === 4) {
+      setIsPinSaving(true)
+      void storeAppPin(pin).then(() => {
+        setHasPinConfigured(true)
+        setSavedPin('')
+      }).catch(() => alert('Could not securely save the app PIN in this browser.')).finally(() => setIsPinSaving(false))
+    }
+  }
+
+  const clearAppPin = async () => {
+    const savedDevices = JSON.parse(localStorage.getItem('financial_os_devices') || '[]')
+    const hasSavedBiometric = localStorage.getItem('financial_os_bio_enabled') === 'true' && savedDevices.length > 0
+    if (autoLock && !hasSavedBiometric) {
+      alert('Disable Auto-Lock or enable a registered device screen lock before removing the PIN.')
+      return
+    }
+    await removeAppPin()
+    setHasPinConfigured(false)
+    setSavedPin('')
   }
 
   const renderUndo = (key: keyof typeof defaultProfile) => {
@@ -628,20 +657,14 @@ export default function Settings() {
                     
                     <div className="flex flex-col space-y-1">
                       <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Optional 4-Digit App PIN</label>
-                      <input 
-                        type="password" maxLength={4} value={savedPin}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, '').substring(0, 4)
-                          setSavedPin(val)
-                          if (val.length === 4) {
-                            localStorage.setItem('financial_os_pin', val)
-                          } else if (val.length === 0 && !autoLock) {
-                            localStorage.removeItem('financial_os_pin')
-                          }
-                        }}
-                        placeholder="0000"
+                      <input
+                        type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]*" maxLength={4} value={savedPin} disabled={isPinSaving}
+                        onChange={(e) => updatePinDraft(e.target.value)}
+                        placeholder={hasPinConfigured ? 'Enter to replace' : 'Set 4-digit PIN'}
                         className="w-full text-center tracking-[0.5em] font-black bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-white outline-none focus:border-amber-500/50 transition-colors"
                       />
+                      <p className="text-[11px] text-white/45">{hasPinConfigured ? 'A PIN is set. Enter four digits to replace it.' : 'Stored as a salted verifier on this device.'}</p>
+                      {hasPinConfigured && <button type="button" onClick={() => void clearAppPin()} className="self-start text-xs text-rose-300 hover:text-rose-200">Remove app PIN</button>}
                     </div>
                   </div>
                 )}

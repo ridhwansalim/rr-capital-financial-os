@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Lock, Delete, Fingerprint } from 'lucide-react'
+import { hasAppPinConfigured, migrateLegacyAppPin, verifyAppPin } from '../lib/appPin'
 
 // WebAuthn Helper to decode saved hardware keys
 const base64ToArrayBuffer = (base64: string) => {
@@ -9,6 +10,28 @@ const base64ToArrayBuffer = (base64: string) => {
     bytes[i] = binaryString.charCodeAt(i)
   }
   return bytes.buffer
+}
+
+const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
+  let binary = ''
+  for (const byte of new Uint8Array(buffer)) binary += String.fromCharCode(byte)
+  return btoa(binary)
+}
+
+const bytesToBase64Url = (bytes: Uint8Array) => {
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function readRegisteredDevices(): Array<{ id: string }> {
+  try {
+    const devices: unknown = JSON.parse(localStorage.getItem('financial_os_devices') || '[]')
+    if (!Array.isArray(devices)) return []
+    return devices.filter((device): device is { id: string } => Boolean(device && typeof device.id === 'string'))
+  } catch {
+    return []
+  }
 }
 
 export function AutoLockProvider({ children }: { children: React.ReactNode }) {
@@ -21,8 +44,8 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
     const isAutoLockEnabled = localStorage.getItem('financial_os_autolock') === 'true'
     const lockTimeMinutes = parseInt(localStorage.getItem('financial_os_lock_time') || '3', 10)
     const lastActive = localStorage.getItem('financial_os_last_active')
-    const hasValidPin = /^\d{4}$/.test(localStorage.getItem('financial_os_pin') || '')
-    const devices = JSON.parse(localStorage.getItem('financial_os_devices') || '[]')
+    const hasValidPin = hasAppPinConfigured()
+    const devices = readRegisteredDevices()
     const hasBiometrics = localStorage.getItem('financial_os_bio_enabled') === 'true' && devices.length > 0
 
     if (isAutoLockEnabled && (hasValidPin || hasBiometrics) && lastActive) {
@@ -34,6 +57,10 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
+    void migrateLegacyAppPin().catch((migrationError) => {
+      console.error('Could not upgrade the stored app PIN.', migrationError)
+    })
+
     const handleActivity = () => {
       if (!isLocked) localStorage.setItem('financial_os_last_active', Date.now().toString())
     }
@@ -49,7 +76,7 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
     const interval = setInterval(checkLockState, 5000)
 
     // Check if we have registered biometric devices locally
-    const devices = JSON.parse(localStorage.getItem('financial_os_devices') || '[]')
+    const devices = readRegisteredDevices()
     const isBioEnabled = localStorage.getItem('financial_os_bio_enabled') === 'true'
     setHasBiometrics(isBioEnabled && devices.length > 0)
 
@@ -62,19 +89,23 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isLocked, checkLockState])
 
-  const handlePinPress = (digit: string) => {
+  const handlePinPress = async (digit: string) => {
     if (pinInput.length < 4) {
       const newPin = pinInput + digit
       setPinInput(newPin)
       setError(false)
       
       if (newPin.length === 4) {
-        const savedPin = localStorage.getItem('financial_os_pin') || ''
-        if (/^\d{4}$/.test(savedPin) && newPin === savedPin) {
-          setIsLocked(false)
-          setPinInput('')
-          localStorage.setItem('financial_os_last_active', Date.now().toString())
-        } else {
+        try {
+          if (await verifyAppPin(newPin)) {
+            setIsLocked(false)
+            setPinInput('')
+            localStorage.setItem('financial_os_last_active', Date.now().toString())
+            return
+          }
+          setError(true)
+          setTimeout(() => setPinInput(''), 500)
+        } catch {
           setError(true)
           setTimeout(() => setPinInput(''), 500)
         }
@@ -90,13 +121,13 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
   // Hardware WebAuthn Request
   const triggerBiometricUnlock = async () => {
     try {
-      const savedDevices = JSON.parse(localStorage.getItem('financial_os_devices') || '[]')
+      const savedDevices = readRegisteredDevices()
       if (savedDevices.length === 0) return
 
       const challenge = window.crypto.getRandomValues(new Uint8Array(32))
-      const allowCredentials = savedDevices.map((d: any) => ({
+      const allowCredentials = savedDevices.map((d) => ({
         id: base64ToArrayBuffer(d.id),
-        type: 'public-key'
+        type: 'public-key' as const
       }))
 
       const assertion = await navigator.credentials.get({
@@ -108,11 +139,36 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
         }
       })
 
-      if (assertion) {
-        setIsLocked(false)
-        setPinInput('')
-        localStorage.setItem('financial_os_last_active', Date.now().toString())
+      if (!(assertion instanceof PublicKeyCredential)) throw new Error('The authenticator returned an invalid response.')
+      if (!(assertion.response instanceof AuthenticatorAssertionResponse)) throw new Error('The authenticator response was incomplete.')
+      if (!savedDevices.some(device => device.id === arrayBufferToBase64(assertion.rawId))) {
+        throw new Error('The response did not match a registered device.')
       }
+
+      const response = assertion.response
+      const clientData = JSON.parse(new TextDecoder().decode(response.clientDataJSON)) as {
+        type?: string
+        origin?: string
+        challenge?: string
+      }
+      if (clientData.type !== 'webauthn.get' || clientData.origin !== window.location.origin || clientData.challenge !== bytesToBase64Url(challenge)) {
+        throw new Error('The authenticator response did not match this unlock request.')
+      }
+
+      const authenticatorData = new Uint8Array(response.authenticatorData)
+      if (authenticatorData.length < 37 || (authenticatorData[32] & 0x05) !== 0x05 || response.signature.byteLength === 0) {
+        throw new Error('The device did not confirm user verification.')
+      }
+
+      const expectedRpIdHash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(window.location.hostname)))
+      const rpIdHash = authenticatorData.subarray(0, 32)
+      if (expectedRpIdHash.some((value, index) => value !== rpIdHash[index])) {
+        throw new Error('The response came from a different relying party.')
+      }
+
+      setIsLocked(false)
+      setPinInput('')
+      localStorage.setItem('financial_os_last_active', Date.now().toString())
     } catch (err: any) {
       console.warn("Biometric auth failed", err)
       setError(true)
@@ -128,7 +184,7 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
   }, [isLocked, hasBiometrics])
 
   if (isLocked) {
-    const hasPin = /^\d{4}$/.test(localStorage.getItem('financial_os_pin') || '')
+    const hasPin = hasAppPinConfigured()
     return (
       <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/80 backdrop-blur-3xl text-white transition-all">
         <div className="flex flex-col items-center animate-in zoom-in-95 duration-300 w-full max-w-sm px-6">
@@ -152,7 +208,7 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
           {hasPin && <div className="grid grid-cols-3 gap-6 w-full max-w-[260px]">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
               <button
-                key={num} onClick={() => handlePinPress(num.toString())}
+                key={num} onClick={() => void handlePinPress(num.toString())}
                 className="w-16 h-16 rounded-full bg-white/5 hover:bg-white/15 flex items-center justify-center text-2xl font-semibold transition-colors border border-white/5 mx-auto"
               >
                 {num}
@@ -169,7 +225,7 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
             ) : <div />}
             
             <button
-              onClick={() => handlePinPress('0')}
+              onClick={() => void handlePinPress('0')}
               className="w-16 h-16 rounded-full bg-white/5 hover:bg-white/15 flex items-center justify-center text-2xl font-semibold transition-colors border border-white/5 mx-auto"
             >
               0

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Settings as SettingsIcon, Search, User, Key, Lock, ShieldAlert, RotateCcw, Save, ChevronDown, ChevronUp, Trash2, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { hasAppPinConfigured } from '../lib/appPin'
 
 export default function Settings() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -108,6 +109,12 @@ export default function Settings() {
   // Instant Save Handlers
   const toggleAutoLock = () => {
     const newVal = !autoLock
+    const savedDevices = JSON.parse(localStorage.getItem('financial_os_devices') || '[]')
+    const hasSavedBiometric = localStorage.getItem('financial_os_bio_enabled') === 'true' && savedDevices.length > 0
+    if (newVal && !hasAppPinConfigured() && !hasSavedBiometric) {
+      alert('Set a four-digit app PIN, or save Biometric / FaceID Lock with a registered device first.')
+      return
+    }
     setAutoLock(newVal)
     localStorage.setItem('financial_os_autolock', String(newVal))
   }
