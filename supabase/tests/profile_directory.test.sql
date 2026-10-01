@@ -2,8 +2,14 @@ BEGIN;
 INSERT INTO auth.users(id,email,raw_user_meta_data) VALUES
 ('00000000-0000-4000-a000-000000000021','directory-a@example.invalid','{"full_name":"Directory A","username":"a_directory"}'),
 ('00000000-0000-4000-a000-000000000022','directory-b@example.invalid','{"full_name":"Directory B","username":"b_directory"}');
-UPDATE public.profiles SET ai_api_key='never expose', telegram_chat_id='private'
+UPDATE public.profiles SET telegram_chat_id='private'
 WHERE id='00000000-0000-4000-a000-000000000022';
+DO $$ BEGIN
+ IF EXISTS (
+   SELECT 1 FROM information_schema.columns
+   WHERE table_schema='public' AND table_name='profiles' AND column_name='ai_api_key'
+ ) THEN RAISE EXCEPTION 'Provider key remains in the client-readable profile table'; END IF;
+END $$;
 SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-a000-000000000021',true);
 SET LOCAL ROLE authenticated;
 DO $$ DECLARE n integer; BEGIN

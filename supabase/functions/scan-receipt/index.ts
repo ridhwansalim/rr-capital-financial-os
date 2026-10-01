@@ -49,16 +49,11 @@ serve(async (req) => {
   const { data: { user }, error: authError } = await supabase.auth.getUser(bearer[1])
   if (authError || !user) return jsonResponse({ error: "Sign in to scan a receipt." }, 401, headers)
 
-  // Each account supplies its own Gemini BYOK value in its owner-only profile.
-  // Resolve it with the service role only after validating the caller; never
-  // return the secret to the browser or include it in logs.
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("ai_api_key")
-    .eq("id", user.id)
-    .single()
-  const geminiApiKey = profile?.ai_api_key
-  if (profileError || typeof geminiApiKey !== "string" || !geminiApiKey.trim()) {
+  // Resolve this owner's key from Supabase Vault through a service_role-only RPC.
+  const { data: geminiApiKey, error: keyError } = await supabase.rpc("get_user_gemini_key", {
+    p_user_id: user.id,
+  })
+  if (keyError || typeof geminiApiKey !== "string" || !geminiApiKey.trim()) {
     return jsonResponse({ error: "Add your Gemini API key in Settings to scan receipts." }, 409, headers)
   }
 

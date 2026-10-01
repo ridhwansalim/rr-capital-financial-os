@@ -22,7 +22,7 @@ The app uses React, TypeScript, Vite, Tailwind CSS, Supabase, Dexie, and a servi
 
 Use a Supabase project you control. Review the migrations before applying them to an existing database; the first migration captures this project's schema baseline.
 
-Receipt scanning sends the selected image to Google Gemini for extraction using each person's own Gemini API key from Settings. The image is not written to RR Capital storage by the scanner. The endpoint accepts images up to 8 MB and limits each account to ten scans per minute. Users should review extracted values before saving. See [`docs/receipt-scanning.md`](docs/receipt-scanning.md).
+Receipt scanning sends the selected image to Google Gemini for extraction using each person's own Gemini API key from Settings. Keys are encrypted in Supabase Vault and excluded from the readable profile table. The image is not written to RR Capital storage by the scanner. The endpoint accepts images up to 8 MB and limits each account to ten scans per minute. Users should review extracted values before saving. See [`docs/receipt-scanning.md`](docs/receipt-scanning.md).
 
 ## Current rollout status
 

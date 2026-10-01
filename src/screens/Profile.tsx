@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings as SettingsIcon, Search, User, Key, Lock, ShieldAlert, RotateCcw, Save, ChevronDown, ChevronUp, Trash2, CheckCircle2, Loader2 } from 'lucide-react'
+import { Settings as SettingsIcon, Search, User, Key, Lock, ShieldAlert, RotateCcw, Save, ChevronDown, ChevronUp, Trash2, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 export default function Settings() {
@@ -13,9 +13,10 @@ export default function Settings() {
   const [draftProfile, setDraftProfile] = useState({ full_name: '', username: '' })
 
   // 2. AI BYOK Data (Requires explicit owner save)
-  const [originalAiKey, setOriginalAiKey] = useState('')
-  const [draftAiKey, setDraftAiKey] = useState('')
-  const [isAiSaved, setIsAiSaved] = useState(false)
+  const [geminiKeyDraft, setGeminiKeyDraft] = useState('')
+  const [geminiKeyConfigured, setGeminiKeyConfigured] = useState(false)
+  const [geminiKeyBusy, setGeminiKeyBusy] = useState(false)
+  const [geminiKeyMessage, setGeminiKeyMessage] = useState('')
 
   // 3. Toggles (Instant Save)
   const [autoLock, setAutoLock] = useState(false)
@@ -29,12 +30,12 @@ export default function Settings() {
         // Fetch Profile from Supabase
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
-          const { data } = await supabase.from('profiles').select('full_name, username, ai_api_key').eq('id', user.id).single()
+          const { data } = await supabase.from('profiles').select('full_name, username').eq('id', user.id).single()
           if (data) {
             setOriginalProfile({ full_name: data.full_name || '', username: data.username || '' })
             setDraftProfile({ full_name: data.full_name || '', username: data.username || '' })
-            setOriginalAiKey(data.ai_api_key || '')
-            setDraftAiKey(data.ai_api_key || '')
+            const { data: keyStatus } = await supabase.functions.invoke('manage-gemini-key', { body: { action: 'status' } })
+            setGeminiKeyConfigured(keyStatus?.configured === true)
           }
         }
 
@@ -52,7 +53,6 @@ export default function Settings() {
 
   // Check if sections have unsaved modifications
   const isProfileModified = JSON.stringify(originalProfile) !== JSON.stringify(draftProfile)
-  const isAiModified = originalAiKey !== draftAiKey
 
   // Explicit Save Handlers
   const handleSaveProfile = async () => {
@@ -75,14 +75,34 @@ export default function Settings() {
     }
   }
 
-  const handleSaveAiKey = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { error } = await supabase.from('profiles').update({ ai_api_key: draftAiKey }).eq('id', user.id)
-    if (error) { alert('Could not save the API key.'); return }
-    setOriginalAiKey(draftAiKey)
-    setIsAiSaved(true)
-    setTimeout(() => setIsAiSaved(false), 3000)
+  const saveGeminiKey = async () => {
+    setGeminiKeyBusy(true)
+    setGeminiKeyMessage('')
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-gemini-key', { body: { action: 'save', apiKey: geminiKeyDraft.trim() } })
+      if (error) throw error
+      if (data?.configured !== true) throw new Error(data?.error || 'Could not save your Gemini key.')
+      setGeminiKeyConfigured(true)
+      setGeminiKeyDraft('')
+      setGeminiKeyMessage('Your key is encrypted in Supabase Vault.')
+    } catch (error) {
+      setGeminiKeyMessage(error instanceof Error ? error.message : 'Could not save your Gemini key.')
+    } finally { setGeminiKeyBusy(false) }
+  }
+
+  const removeGeminiKey = async () => {
+    setGeminiKeyBusy(true)
+    setGeminiKeyMessage('')
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-gemini-key', { body: { action: 'delete' } })
+      if (error) throw error
+      if (data?.configured !== false) throw new Error(data?.error || 'Could not remove your Gemini key.')
+      setGeminiKeyConfigured(false)
+      setGeminiKeyDraft('')
+      setGeminiKeyMessage('Your key has been removed.')
+    } catch (error) {
+      setGeminiKeyMessage(error instanceof Error ? error.message : 'Could not remove your Gemini key.')
+    } finally { setGeminiKeyBusy(false) }
   }
 
   // Instant Save Handlers
@@ -224,7 +244,7 @@ export default function Settings() {
               </div>
               <div>
                 <h2 className="text-xl font-bold">Gemini Receipt Scanning (BYOK)</h2>
-                <p className="text-sm text-slate-400">Keys are stored securely in your local browser storage.</p>
+                <p className="text-sm text-slate-400">Your personal key is encrypted in Supabase Vault.</p>
               </div>
             </div>
 
@@ -232,40 +252,26 @@ export default function Settings() {
               <div className="flex flex-col space-y-1 relative">
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase flex justify-between">
                   <span>Your personal Gemini API Key</span>
-                  {isAiModified && (
-                    <span className="text-amber-400 font-bold flex items-center gap-1">
-                      Modified 
-                      <button onClick={() => setDraftAiKey(originalAiKey)} className="hover:text-amber-300 ml-1">
-                        <RotateCcw className="w-3 h-3" />
-                      </button>
-                    </span>
-                  )}
+                  <span className={geminiKeyConfigured ? 'text-emerald-400' : 'text-slate-500'}>{geminiKeyConfigured ? 'Saved securely' : 'Not configured'}</span>
                 </label>
                 <input 
                   type="password"
-                  placeholder="sk-..."
-                  value={draftAiKey}
-                  onChange={(e) => setDraftAiKey(e.target.value)}
+                  autoComplete="new-password"
+                  placeholder={geminiKeyConfigured ? 'Enter a new key to replace the saved key' : 'Google Gemini API key'}
+                  value={geminiKeyDraft}
+                  onChange={(e) => setGeminiKeyDraft(e.target.value)}
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-emerald-500/50 transition-colors font-mono"
                 />
               </div>
 
-              {isAiModified && (
-                <div className="pt-5 flex gap-3 animate-in fade-in slide-in-from-top-2">
-                  <button 
-                    onClick={handleSaveAiKey}
-                    className="flex items-center px-6 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all"
-                  >
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Key Locally
-                  </button>
-                </div>
-              )}
-              {isAiSaved && !isAiModified && (
-                <div className="pt-3 flex items-center text-emerald-400 text-sm font-bold animate-in fade-in">
-                  <CheckCircle2 className="w-4 h-4 mr-1.5" /> Key secured to device
-                </div>
-              )}
+              <div className="pt-4 flex flex-wrap gap-3">
+                <button type="button" onClick={saveGeminiKey} disabled={geminiKeyBusy || geminiKeyDraft.trim().length < 20} className="flex items-center px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-xl font-bold transition-all">
+                  {geminiKeyBusy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                  {geminiKeyConfigured ? 'Replace Key' : 'Save Key'}
+                </button>
+                {geminiKeyConfigured && <button type="button" onClick={removeGeminiKey} disabled={geminiKeyBusy} className="px-5 py-2.5 border border-white/10 rounded-xl text-sm disabled:opacity-50">Remove Key</button>}
+                {geminiKeyMessage && <span role="status" className="self-center text-sm text-slate-400">{geminiKeyMessage}</span>}
+              </div>
             </div>
           </section>
         )}

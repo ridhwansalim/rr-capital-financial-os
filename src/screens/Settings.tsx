@@ -20,13 +20,16 @@ export default function Settings() {
   const [telegramLinkError, setTelegramLinkError] = useState('')
   const [telegramBusy, setTelegramBusy] = useState(false)
   const [telegramExpiresAt, setTelegramExpiresAt] = useState(0)
+  const [geminiKeyDraft, setGeminiKeyDraft] = useState('')
+  const [geminiKeyConfigured, setGeminiKeyConfigured] = useState(false)
+  const [geminiKeyBusy, setGeminiKeyBusy] = useState(false)
+  const [geminiKeyMessage, setGeminiKeyMessage] = useState('')
 
   const defaultProfile = {
     full_name: '',
     username: '',
     theme_mode: 'system',
     theme_accent: 'emerald',
-    ai_api_key: '',
     ai_model: 'gemini-1.5-flash',
     ai_persona: 'Analyst',
     telegram_chat_id: '',
@@ -54,7 +57,7 @@ export default function Settings() {
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
           setUserId(user.id)
-          const { data } = await supabase.from('profiles').select('full_name, username, theme_mode, theme_accent, ai_api_key, ai_model, ai_persona, telegram_chat_id, is_biometric_enabled, registered_devices').eq('id', user.id).single()
+          const { data } = await supabase.from('profiles').select('full_name, username, theme_mode, theme_accent, ai_model, ai_persona, telegram_chat_id, is_biometric_enabled, registered_devices').eq('id', user.id).single()
           if (data) {
             const themeMode = ['amoled', 'light'].includes(data.theme_mode) ? data.theme_mode : 'system'
             const loadedProfile = { ...defaultProfile, ...data, theme_mode: themeMode, registered_devices: data.registered_devices || [] }
@@ -65,6 +68,8 @@ export default function Settings() {
             localStorage.setItem('financial_os_devices', JSON.stringify(loadedProfile.registered_devices))
             localStorage.setItem('financial_os_bio_enabled', loadedProfile.is_biometric_enabled ? 'true' : 'false')
           }
+          const { data: keyStatus } = await supabase.functions.invoke('manage-gemini-key', { body: { action: 'status' } })
+          setGeminiKeyConfigured(keyStatus?.configured === true)
         }
 
         setAutoLock(localStorage.getItem('financial_os_autolock') === 'true')
@@ -91,7 +96,6 @@ export default function Settings() {
         username: draftProfile.username,
         theme_mode: draftProfile.theme_mode,
         theme_accent: draftProfile.theme_accent,
-        ai_api_key: draftProfile.ai_api_key,
         ai_model: draftProfile.ai_model,
         ai_persona: draftProfile.ai_persona,
         is_biometric_enabled: draftProfile.is_biometric_enabled,
@@ -107,6 +111,42 @@ export default function Settings() {
       alert('Failed to save settings.')
     } finally {
       setIsSavingProfile(false)
+    }
+  }
+
+  const saveGeminiKey = async () => {
+    setGeminiKeyBusy(true)
+    setGeminiKeyMessage('')
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-gemini-key', {
+        body: { action: 'save', apiKey: geminiKeyDraft.trim() },
+      })
+      if (error) throw error
+      if (data?.configured !== true) throw new Error(data?.error || 'Could not save your Gemini key.')
+      setGeminiKeyConfigured(true)
+      setGeminiKeyDraft('')
+      setGeminiKeyMessage('Your key is encrypted in Supabase Vault and ready for receipt scans.')
+    } catch (error) {
+      setGeminiKeyMessage(error instanceof Error ? error.message : 'Could not save your Gemini key.')
+    } finally {
+      setGeminiKeyBusy(false)
+    }
+  }
+
+  const removeGeminiKey = async () => {
+    setGeminiKeyBusy(true)
+    setGeminiKeyMessage('')
+    try {
+      const { data, error } = await supabase.functions.invoke('manage-gemini-key', { body: { action: 'delete' } })
+      if (error) throw error
+      if (data?.configured !== false) throw new Error(data?.error || 'Could not remove your Gemini key.')
+      setGeminiKeyConfigured(false)
+      setGeminiKeyDraft('')
+      setGeminiKeyMessage('Your Gemini key has been removed.')
+    } catch (error) {
+      setGeminiKeyMessage(error instanceof Error ? error.message : 'Could not remove your Gemini key.')
+    } finally {
+      setGeminiKeyBusy(false)
     }
   }
 
@@ -388,13 +428,21 @@ export default function Settings() {
               <div className="flex flex-col space-y-1">
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase flex justify-between items-center">
                   <span className="flex items-center"><Key className="w-3 h-3 mr-1" /> Your Gemini API Key (BYOK)</span>
-                  {renderUndo('ai_api_key')}
+                  <span className={geminiKeyConfigured ? 'text-emerald-400 normal-case' : 'text-slate-500 normal-case'}>{geminiKeyConfigured ? 'Key saved securely' : 'No key saved'}</span>
                 </label>
                 <input 
-                  type="password" placeholder="AIzaSy…" value={draftProfile.ai_api_key}
-                  onChange={(e) => setDraftProfile({...draftProfile, ai_api_key: e.target.value})}
+                  type="password" autoComplete="new-password" placeholder="Google Gemini API key" value={geminiKeyDraft}
+                  onChange={(e) => setGeminiKeyDraft(e.target.value)}
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-emerald-500/50 transition-colors font-mono"
                 />
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <button type="button" onClick={saveGeminiKey} disabled={geminiKeyBusy || geminiKeyDraft.trim().length < 20} className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-bold">
+                    {geminiKeyBusy ? 'Saving...' : geminiKeyConfigured ? 'Replace key' : 'Save key'}
+                  </button>
+                  {geminiKeyConfigured && <button type="button" onClick={removeGeminiKey} disabled={geminiKeyBusy} className="px-4 py-2 rounded-xl border border-white/10 hover:bg-white/5 disabled:opacity-50 text-sm">Remove key</button>}
+                  {geminiKeyMessage && <span role="status" className="text-xs text-slate-400">{geminiKeyMessage}</span>}
+                </div>
+                <p className="text-xs leading-relaxed text-slate-500">Your key is stored encrypted in Supabase Vault. The server uses it only for your scans and never returns it to the browser.</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
