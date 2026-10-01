@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, CreditCard, Users, LayoutDashboard, Wallet, Receipt, Settings, ArrowRightLeft, CalendarDays, Landmark, Menu, X, CloudUpload } from 'lucide-react'
+import { Plus, CreditCard, Users, LayoutDashboard, Wallet, Receipt, Settings, ArrowRightLeft, CalendarDays, Landmark, Menu, X, CloudUpload, ChartNoAxesCombined } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import TransactionModal from './TransactionModal'
 import AddDebtModal from './AddDebtModal'
@@ -46,6 +46,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
     { name: 'Calendar', path: '/calendar', icon: CalendarDays },
     { name: 'Ledger', path: '/ledger', icon: ArrowRightLeft },
+    { name: 'Reports', path: '/reports', icon: ChartNoAxesCombined },
     { name: 'Offline Queue', path: '/offline', icon: CloudUpload },
     { name: 'Chittis', path: '/chittis', icon: Landmark },
     { name: 'Accounts', path: '/accounts', icon: Wallet },
@@ -63,6 +64,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const mobileDrawerItems = [
     { name: 'Calendar', path: '/calendar', icon: CalendarDays },
+    { name: 'Reports', path: '/reports', icon: ChartNoAxesCombined },
     { name: 'Accounts', path: '/accounts', icon: Wallet },
     { name: 'Debts', path: '/debts', icon: Receipt },
     { name: 'Contacts', path: '/contacts', icon: Users },

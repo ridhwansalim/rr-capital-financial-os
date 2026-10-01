@@ -16,6 +16,7 @@ import Settings from './screens/Settings'
 import OfflineQueue from './screens/OfflineQueue'
 import Calendar from './screens/Calendar'
 import Chittis from './screens/Chittis' // <-- NEW IMPORT
+import Reports from './screens/Reports'
 
 export default function App() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
                     <Routes>
                       <Route path="/" element={<Dashboard />} />
                       <Route path="/ledger" element={<Ledger />} />
+                      <Route path="/reports" element={<Reports />} />
                       <Route path="/accounts" element={<Accounts />} />
                       <Route path="/debts" element={<Debts />} />
                       <Route path="/contacts" element={<Contacts />} />
