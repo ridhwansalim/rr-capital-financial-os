@@ -1,3 +1,5 @@
+-- This must remain after atomic_chitti_actions and peer-financial-writes:
+-- those migrations create private request tables and participant policies.
 -- Index foreign-key columns used by cascades/joins and evaluate auth.uid once
 -- per statement in policies. Access predicates remain unchanged.
 
