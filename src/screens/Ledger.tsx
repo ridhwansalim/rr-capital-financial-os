@@ -54,7 +54,7 @@ export default function Ledger() {
         accounts?.forEach(a => nameMap[a.id] = a.name)
       }
       if (profileIds.size > 0) {
-        const { data: profiles } = await supabase.from('profiles').select('id, full_name, username').in('id', Array.from(profileIds))
+        const { data: profiles } = await supabase.from('profile_directory').select('id, full_name, username').in('id', Array.from(profileIds))
         profiles?.forEach(p => nameMap[p.id] = p.full_name || p.username || 'User')
       }
       if (contactIds.size > 0) {

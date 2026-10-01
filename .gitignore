@@ -32,12 +32,9 @@ dev-dist/
 
 *.tsbuildinfo
 
-.env*
-
+.env.*
 !.env.example
-
-dev-dist/
-
-*.tsbuildinfo
-
-.temp/
+*.dump
+*.sql.gz
+*.backup
+*.bak

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, CreditCard, Users, LayoutDashboard, Wallet, Receipt, Settings, ArrowRightLeft, CalendarDays, Landmark, Menu, X } from 'lucide-react'
+import { Plus, CreditCard, Users, LayoutDashboard, Wallet, Receipt, Settings, ArrowRightLeft, CalendarDays, Landmark, Menu, X, CloudUpload } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import TransactionModal from './TransactionModal'
 import AddDebtModal from './AddDebtModal'
@@ -18,10 +18,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
     { name: 'Calendar', path: '/calendar', icon: CalendarDays },
     { name: 'Ledger', path: '/ledger', icon: ArrowRightLeft },
+    { name: 'Offline Queue', path: '/offline', icon: CloudUpload },
     { name: 'Chittis', path: '/chittis', icon: Landmark },
     { name: 'Accounts', path: '/accounts', icon: Wallet },
     { name: 'Debts', path: '/debts', icon: Receipt },
     { name: 'Contacts', path: '/contacts', icon: Users },
+    { name: 'Offline Queue', path: '/offline', icon: CloudUpload },
     { name: 'Settings', path: '/settings', icon: Settings },
   ]
 

@@ -1,6 +1,6 @@
 import { precacheAndRoute } from 'workbox-precaching'
 
-precacheAndRoute(self.__WB_MANIFEST || [])
+precacheAndRoute(self.__WB_MANIFEST)
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)

@@ -9,12 +9,17 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
 }
 
 export default function Settings() {
+  const telegramBotUsername = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'ridhwans_fin_bot').replace(/^@/, '')
   const { setTheme } = useTheme()
   const [searchQuery, setSearchQuery] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
+  const [telegramToken, setTelegramToken] = useState('')
+  const [telegramLinkError, setTelegramLinkError] = useState('')
+  const [telegramBusy, setTelegramBusy] = useState(false)
+  const [telegramExpiresAt, setTelegramExpiresAt] = useState(0)
 
   const defaultProfile = {
     full_name: '',
@@ -55,8 +60,8 @@ export default function Settings() {
             setOriginalProfile(loadedProfile)
             setDraftProfile(loadedProfile)
             
-            // Sync AI Key and Biometric Devices to Local Storage for Lock Screen / Scanners
-            if (loadedProfile.ai_api_key) localStorage.setItem('financial_os_ai_key', loadedProfile.ai_api_key)
+            // Keep only device preferences locally; the provider key stays in
+            // the owner's protected profile and is fetched when scanning.
             localStorage.setItem('financial_os_devices', JSON.stringify(loadedProfile.registered_devices))
             localStorage.setItem('financial_os_bio_enabled', loadedProfile.is_biometric_enabled ? 'true' : 'false')
           }
@@ -75,7 +80,7 @@ export default function Settings() {
     fetchSettings()
   }, [])
 
-  const isProfileModified = JSON.stringify(originalProfile) !== JSON.stringify(draftProfile)
+  const isProfileModified = JSON.stringify({ ...originalProfile, telegram_chat_id: '' }) !== JSON.stringify({ ...draftProfile, telegram_chat_id: '' })
 
   const handleSaveProfile = async () => {
     setIsSavingProfile(true)
@@ -89,7 +94,6 @@ export default function Settings() {
         ai_api_key: draftProfile.ai_api_key,
         ai_model: draftProfile.ai_model,
         ai_persona: draftProfile.ai_persona,
-        telegram_chat_id: draftProfile.telegram_chat_id,
         is_biometric_enabled: draftProfile.is_biometric_enabled,
         registered_devices: draftProfile.registered_devices
       }
@@ -97,7 +101,6 @@ export default function Settings() {
       if (error) throw error
       
       setOriginalProfile(draftProfile)
-      localStorage.setItem('financial_os_ai_key', draftProfile.ai_api_key)
       localStorage.setItem('financial_os_devices', JSON.stringify(draftProfile.registered_devices))
       localStorage.setItem('financial_os_bio_enabled', draftProfile.is_biometric_enabled ? 'true' : 'false')
     } catch (error) {
@@ -106,6 +109,48 @@ export default function Settings() {
       setIsSavingProfile(false)
     }
   }
+
+  const requestTelegramLink = async () => {
+    setTelegramBusy(true)
+    setTelegramLinkError('')
+    try {
+      const { data, error } = await supabase.rpc('issue_telegram_link_token')
+      if (error) throw error
+      if (typeof data !== 'string') throw new Error('Could not issue a link code')
+      setTelegramToken(data)
+      setTelegramExpiresAt(Date.now() + 10 * 60 * 1000)
+    } catch (error) {
+      setTelegramLinkError(error instanceof Error ? error.message : 'Could not create a link code')
+    } finally { setTelegramBusy(false) }
+  }
+
+  const saveManualTelegramId = async () => {
+    if (!userId) return
+    setTelegramBusy(true)
+    setTelegramLinkError('')
+    try {
+      const { error } = await supabase.from('profiles').update({ telegram_chat_id: draftProfile.telegram_chat_id.trim() }).eq('id', userId)
+      if (error) throw error
+      setOriginalProfile(prev => ({ ...prev, telegram_chat_id: draftProfile.telegram_chat_id.trim() }))
+    } catch (error) {
+      setTelegramLinkError(error instanceof Error ? error.message : 'Could not save Chat ID')
+    } finally { setTelegramBusy(false) }
+  }
+
+  useEffect(() => {
+    if (!userId || !telegramToken) return
+    const checkLink = async () => {
+      if (Date.now() >= telegramExpiresAt) { setTelegramToken(''); return }
+      const { data } = await supabase.from('profiles').select('telegram_chat_id').eq('id', userId).single()
+      if (data?.telegram_chat_id && data.telegram_chat_id !== originalProfile.telegram_chat_id) {
+        setOriginalProfile(prev => ({ ...prev, telegram_chat_id: data.telegram_chat_id }))
+        setDraftProfile(prev => ({ ...prev, telegram_chat_id: data.telegram_chat_id }))
+        setTelegramToken('')
+      }
+    }
+    const interval = window.setInterval(() => { void checkLink() }, 3000)
+    return () => window.clearInterval(interval)
+  }, [userId, telegramToken, telegramExpiresAt, originalProfile.telegram_chat_id])
 
   // --- HARDWARE WEBAUTHN REGISTRATION ---
   const registerNewDevice = async () => {
@@ -411,6 +456,12 @@ export default function Settings() {
 
               <hr className="border-white/10 my-2" />
 
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3"><div><p className="font-semibold">Link Telegram</p><p className="text-sm text-slate-400">{originalProfile.telegram_chat_id ? 'Chat ID on file. Use the bot to verify or change it.' : 'Connect your private Telegram chat for alerts.'}</p></div><button type="button" onClick={() => void requestTelegramLink()} disabled={telegramBusy} className="shrink-0 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50">{telegramBusy ? 'Working…' : 'Link Telegram'}</button></div>
+                {telegramToken && <div className="text-sm text-slate-300 space-y-2"><p>Open your RR Capital bot and send this command within 10 minutes:</p><code className="block p-3 rounded-xl bg-black/30 break-all select-all">/start {telegramToken}</code><a className="inline-block text-emerald-300 underline" target="_blank" rel="noopener noreferrer" href={`https://t.me/${telegramBotUsername}?start=${encodeURIComponent(telegramToken)}`}>Open Telegram bot</a><p>The connection appears here after the bot confirms it.</p></div>}
+                {telegramLinkError && <p role="alert" className="text-sm text-rose-300">{telegramLinkError}</p>}
+              </div>
+
               <div className="flex flex-col space-y-1">
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase flex justify-between items-center">
                   <span className="flex items-center"><MessageSquare className="w-3 h-3 mr-1" /> Telegram Chat ID</span>
@@ -421,6 +472,8 @@ export default function Settings() {
                   onChange={(e) => setDraftProfile({...draftProfile, telegram_chat_id: e.target.value})}
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-emerald-500/50 transition-colors"
                 />
+                <p className="text-xs text-slate-500">Advanced: enter a Chat ID manually if you need to keep the existing setup. Linking through the bot verifies the chat.</p>
+                {draftProfile.telegram_chat_id !== originalProfile.telegram_chat_id && <button type="button" onClick={() => void saveManualTelegramId()} disabled={telegramBusy} className="self-start px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-50">Save Chat ID</button>}
               </div>
             </div>
           </section>

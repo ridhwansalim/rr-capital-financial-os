@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { X, ArrowDownRight, ArrowUpRight, ArrowRightLeft, Loader2, IndianRupee, Sparkles, Camera, Search, User, Users, UserPlus, AlertCircle } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { X, ArrowDownRight, ArrowUpRight, ArrowRightLeft, Loader2, IndianRupee, Camera, Search, User, Users, UserPlus, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { localDB, type CachedAccount, type LocalTransaction } from '../lib/db'
+import { postQueuedTransaction } from '../lib/sync'
 
 interface TransactionModalProps {
   isOpen: boolean
@@ -8,12 +10,7 @@ interface TransactionModalProps {
   initialFile?: File | null
 }
 
-interface Account {
-  id: string
-  name: string
-  type: string
-  balance: number // NEW: Added for overdraft protection
-}
+type Account = CachedAccount
 
 interface SearchEntity {
   id: string
@@ -35,8 +32,6 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
   const [error, setError] = useState<string | null>(null)
   
   // AI State
-  const [isAiScanning, setIsAiScanning] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Unified Contact Search State
   const [searchQuery, setSearchQuery] = useState('')
@@ -54,22 +49,36 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
 
   useEffect(() => {
     if (isOpen) {
+      setAccounts([])
+      setSelectedAccount('')
+      setTargetAccount('')
+      setMyContacts([])
+      setCurrentUserId(null)
       fetchAccounts()
       setError(null)
       setIsCreatingAccount(false)
-      supabase.auth.getUser().then(({ data: { user } }) => {
-        if (user) {
-          setCurrentUserId(user.id)
-          supabase.from('contacts').select('id, name').eq('owner_id', user.id).order('name').limit(10)
-            .then(({ data }) => {
-              if (data) {
-                setMyContacts(data.map(c => ({ id: c.id, name: c.name, subtitle: 'Shadow Contact', type: 'contact' })))
-              }
-            })
-        }
-      })
+      void loadContacts()
     }
   }, [isOpen])
+
+  const loadContacts = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) return
+    const ownerId = session.user.id
+    setCurrentUserId(ownerId)
+    try {
+      if (!navigator.onLine) throw new Error('Offline')
+      const { data, error } = await supabase.from('contacts').select('id, name')
+        .eq('owner_id', ownerId).order('name')
+      if (error) throw error
+      const contacts = data || []
+      await localDB.contactCache.put({ owner_id: ownerId, contacts })
+      setMyContacts(contacts.slice(0, 10).map(c => ({ id: c.id, name: c.name, subtitle: 'Shadow Contact', type: 'contact' })))
+    } catch {
+      const cached = await localDB.contactCache.get(ownerId)
+      setMyContacts((cached?.contacts || []).slice(0, 10).map(c => ({ id: c.id, name: c.name, subtitle: 'Shadow Contact', type: 'contact' })))
+    }
+  }
 
   useEffect(() => {
     if (isOpen && initialFile) processFile(initialFile)
@@ -86,6 +95,14 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
     const delayDebounceFn = setTimeout(async () => {
       setIsSearching(true)
       try {
+        if (!navigator.onLine) {
+          const cached = currentUserId ? await localDB.contactCache.get(currentUserId) : null
+          setSearchResults((cached?.contacts || [])
+            .filter(c => c.name.toLocaleLowerCase().includes(searchQuery.toLocaleLowerCase()))
+            .slice(0, 3)
+            .map(c => ({ id: c.id, name: c.name, subtitle: 'Shadow Contact', type: 'contact' })))
+          return
+        }
         const profileQuery = supabase.rpc('search_users', { search_term: searchQuery })
         const contactQuery = supabase.from('contacts').select('id, name')
           .eq('owner_id', currentUserId).ilike('name', `%${searchQuery}%`).limit(3)
@@ -115,24 +132,38 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
 
   // FIX: Fetch balances alongside accounts for Overdraft protection
   const fetchAccounts = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const ownerId = session?.user.id
+    if (!ownerId) return
     try {
-      const { data: accData, error: accError } = await supabase.from('accounts').select('id, name, type').order('name')
-      const { data: balData } = await supabase.from('account_balances').select('*')
-      
-      if (accError) throw accError
-      if (accData) {
-        const merged = accData.map(acc => {
-          const matched = balData?.find(b => b.id === acc.id)
-          return { ...acc, balance: matched ? Number(matched.balance) : 0 }
-        })
-        setAccounts(merged)
-        if (merged.length > 0 && !selectedAccount) {
-          setSelectedAccount(merged[0].id)
-          setTargetAccount(merged.length > 1 ? merged[1].id : merged[0].id)
-        }
+      if (!navigator.onLine) throw new Error('Offline')
+      const [accResult, balResult] = await Promise.all([
+        supabase.from('accounts').select('id, name, type').eq('owner_id', ownerId).order('name'),
+        supabase.from('account_balances').select('id, balance')
+      ])
+      if (accResult.error) throw accResult.error
+      if (balResult.error) throw balResult.error
+      const merged: Account[] = (accResult.data || []).map(acc => {
+        const matched = balResult.data?.find(b => b.id === acc.id)
+        return { ...acc, balance: matched ? Number(matched.balance) : 0 }
+      })
+      await localDB.accountCache.put({ owner_id: ownerId, accounts: merged })
+      setAccounts(merged)
+      if (merged.length > 0 && !merged.some(a => a.id === selectedAccount)) {
+        setSelectedAccount(merged[0].id)
+        setTargetAccount(merged.length > 1 ? merged[1].id : merged[0].id)
       }
-    } catch (err) {
-      console.error('Error fetching accounts:', err)
+    } catch {
+      const cached = await localDB.accountCache.get(ownerId)
+      if (!cached) {
+        setError('Account choices are unavailable offline. Connect once to save them on this device.')
+        return
+      }
+      setAccounts(cached.accounts)
+      if (cached.accounts.length > 0 && !cached.accounts.some(a => a.id === selectedAccount)) {
+        setSelectedAccount(cached.accounts[0].id)
+        setTargetAccount(cached.accounts.length > 1 ? cached.accounts[1].id : cached.accounts[0].id)
+      }
     }
   }
 
@@ -150,51 +181,8 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
     onClose()
   }
 
-  const processFile = async (file: File) => {
-    const apiKey = localStorage.getItem('financial_os_ai_key')
-    if (!apiKey) {
-      alert('Please add your Gemini API Key in the Settings page first!')
-      if (fileInputRef.current) fileInputRef.current.value = ''
-      return
-    }
-    setIsAiScanning(true)
-    try {
-      const reader = new FileReader()
-      reader.readAsDataURL(file)
-      reader.onload = async () => {
-        const base64Data = (reader.result as string).split(',')[1]
-        const prompt = `You are a financial data extractor. Analyze this receipt or invoice. Return ONLY a raw JSON object (no markdown formatting, no backticks) with these exact keys: "amount" (the total number only, no currency symbols), "description" (a brief 2-4 word summary of the purchase/vendor), and "type" (must be strictly "expense" or "income").`
-
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: file.type, data: base64Data } }] }] })
-        })
-
-        const data = await response.json()
-        if (data.error) throw new Error(data.error.message)
-
-        const rawText = data.candidates[0].content.parts[0].text
-        const cleanJson = rawText.replace(/```json/gi, '').replace(/```/g, '').trim()
-        const result = JSON.parse(cleanJson)
-
-        if (result.amount) setAmount(result.amount.toString())
-        if (result.description) setDescription(result.description)
-        if (result.type === 'expense' || result.type === 'income') setType(result.type)
-        
-        setIsAiScanning(false)
-      }
-    } catch (error: any) {
-      alert(`AI Scan failed: ${error.message}.`)
-      setIsAiScanning(false)
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }
-
-  const handleAiScan = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) processFile(file)
+  const processFile = (_file: File) => {
+    alert('Receipt scanning is temporarily unavailable while external scanning is being reviewed.')
   }
 
   const handleInlineAccountCreate = async (e: React.FormEvent) => {
@@ -233,10 +221,14 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
     setError(null)
 
     try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser()
-      if (authError || !user) throw new Error('Not authenticated')
+      const { data: { session }, error: authError } = await supabase.auth.getSession()
+      if (authError || !session?.user) throw new Error('Not authenticated')
 
       const parsedAmount = parseFloat(amount)
+      if (!Number.isFinite(parsedAmount) || parsedAmount <= 0 ||
+          parsedAmount !== Math.round(parsedAmount * 100) / 100) {
+        throw new Error('Enter a positive amount with at most two decimal places.')
+      }
 
       // FIX: OVERDRAFT PREVENTION LOGIC
       const sourceAcc = accounts.find(a => a.id === selectedAccount)
@@ -246,47 +238,67 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
         }
       }
 
-      let finalContactId = null
-      let finalProfileId = null
+      let finalContactId: string | null = null
+      let finalProfileId: string | null = null
 
       if (selectedEntity) {
         if (selectedEntity.type === 'profile') finalProfileId = selectedEntity.id
         if (selectedEntity.type === 'contact') finalContactId = selectedEntity.id
-      } else if (newShadowName) {
-        const { data: newContact, error: insertError } = await supabase
-          .from('contacts')
-          .insert({ owner_id: user.id, name: newShadowName })
-          .select('id').single()
-        if (insertError) throw insertError
-        finalContactId = newContact.id
       }
 
       const isCreditCardSource = sourceAcc?.type === 'credit_card' || sourceAcc?.type === 'credit'
       const appliedFee = (type === 'transfer' && isCreditCardSource) ? parseFloat(feeAmount || '0') : 0
+      if (!Number.isFinite(appliedFee) || appliedFee < 0 ||
+          appliedFee !== Math.round(appliedFee * 100) / 100) {
+        throw new Error('Enter a valid fee with at most two decimal places.')
+      }
+      if (!sourceAcc) throw new Error('Choose an account before posting.')
+      if (type === 'transfer' && selectedAccount === targetAccount) {
+        throw new Error('Choose two different accounts for a transfer.')
+      }
 
-      const payload: any = {
-        owner_id: user.id,
-        initiator_profile_id: user.id,
+      const queued: LocalTransaction = {
+        request_id: crypto.randomUUID(),
+        owner_id: session.user.id,
+        from_account_id: type === 'income' ? null : selectedAccount,
+        to_account_id: type === 'expense' ? null : (type === 'income' ? selectedAccount : targetAccount),
         amount: parsedAmount,
         fee_amount: appliedFee,
         description,
-        status: 'COMPLETED',
+        sync_status: 'pending',
+        created_at: new Date().toISOString(),
         tagged_profile_id: finalProfileId,
-        contact_id: finalContactId
+        contact_id: finalContactId,
+        new_contact_name: newShadowName.trim() || null
       }
-
-      if (type === 'expense') payload.from_account_id = selectedAccount
-      if (type === 'income') payload.to_account_id = selectedAccount
-      if (type === 'transfer') {
-        payload.from_account_id = selectedAccount
-        payload.to_account_id = targetAccount
+      const localId = await localDB.outbox.add(queued)
+      if (navigator.onLine) {
+        let rpcResult: Awaited<ReturnType<typeof postQueuedTransaction>>
+        try {
+          rpcResult = await postQueuedTransaction(queued)
+        } catch {
+          alert('Transaction saved on this device. It will retry when the connection is available.')
+          handleClose()
+          return
+        }
+        if (rpcResult.error) {
+          // A database rejection cannot have committed. Keep the form open
+          // for correction; ambiguous network failures remain in the outbox.
+          if (/^(22|23|42501|PGRST2)/.test(rpcResult.error.code || '')) {
+            await localDB.outbox.delete(localId)
+            throw new Error(rpcResult.error.message)
+          }
+          alert('Transaction saved on this device. It will retry when the connection is available.')
+          handleClose()
+          return
+        }
+        await localDB.outbox.delete(localId)
+      } else {
+        alert('Transaction saved on this device. It will sync when you reconnect.')
       }
-
-      const { error: txError } = await supabase.from('transactions').insert(payload)
-      if (txError) throw txError
 
       handleClose()
-      if (window.location.pathname === '/') window.location.reload()
+      if (navigator.onLine && window.location.pathname === '/') window.location.reload()
 
     } catch (err: any) {
       setError(err.message)
@@ -350,9 +362,8 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
           /* MAIN TRANSACTION FORM */
           <>
             <div className="mb-6 flex justify-center">
-              <input type="file" accept="image/*" capture="environment" className="hidden" ref={fileInputRef} onChange={handleAiScan} />
-              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isAiScanning} className="flex items-center px-4 py-2 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-xl text-sm font-bold hover:bg-indigo-500/30 transition-all disabled:opacity-50">
-                {isAiScanning ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing...</> : <><Camera className="w-4 h-4 mr-2" /> Auto-fill with AI <Sparkles className="w-4 h-4 ml-2 text-indigo-400" /></>}
+              <button type="button" disabled title="Receipt scanning is temporarily unavailable" className="flex items-center px-4 py-2 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-xl text-sm font-bold opacity-50 cursor-not-allowed">
+                <Camera className="w-4 h-4 mr-2" /> Receipt scan unavailable
               </button>
             </div>
 

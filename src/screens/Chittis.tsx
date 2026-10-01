@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Landmark, Plus, IndianRupee, Calendar, Trophy, ArrowUpRight, ArrowDownRight, Wallet, Loader2, CheckCircle2, History, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
@@ -32,6 +32,8 @@ export default function Chittis() {
   const [editingChitti, setEditingChitti] = useState<Chitti | null>(null)
   const [claimModalData, setClaimModalData] = useState<Chitti | null>(null)
   const [payModalData, setPayModalData] = useState<Chitti | null>(null)
+  const claimRequestId = useRef<string | null>(null)
+  const payRequestId = useRef<string | null>(null)
 
   // New/Edit Chitti Form
   const [newName, setNewName] = useState('')
@@ -141,32 +143,18 @@ export default function Chittis() {
     setIsSubmitting(true)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error("Not authenticated")
-
       const fee = parseFloat(claimFee || '0')
-      const payout = claimModalData.total_pot - fee
+      claimRequestId.current ||= crypto.randomUUID()
+      const { error } = await supabase.rpc('claim_chitti_pot', {
+        p_request_id: claimRequestId.current,
+        p_chitti_id: claimModalData.id,
+        p_account_id: claimAccountId,
+        p_month_number: Number(claimMonth),
+        p_fee_amount: fee
+      })
+      if (error) throw error
 
-      const { error: txError } = await supabase.from('transactions').insert([{
-        owner_id: user.id,
-        initiator_profile_id: user.id, 
-        to_account_id: claimAccountId,
-        amount: payout,
-        description: `Chitti Claim: ${claimModalData.name} (Month ${claimMonth})`,
-        status: 'COMPLETED'
-      }])
-      if (txError) throw txError
-
-      const { error: chittiError } = await supabase.from('chittis')
-        .update({
-          received_month_number: parseInt(claimMonth),
-          fee_deducted: fee,
-          payout_received: payout
-        })
-        .eq('id', claimModalData.id)
-      
-      if (chittiError) throw chittiError
-
+      claimRequestId.current = null
       setClaimModalData(null)
       setClaimMonth('')
       setClaimFee('')
@@ -185,39 +173,20 @@ export default function Chittis() {
     setIsSubmitting(true)
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error("Not authenticated")
-
       // Ensure timezone safety by forcing midday
       const secureDate = new Date(`${payDate}T12:00:00`).toISOString()
       const currentMonthPaying = (payModalData.months_paid || 0) + 1
+      payRequestId.current ||= crypto.randomUUID()
+      const { error } = await supabase.rpc('pay_chitti_installment', {
+        p_request_id: payRequestId.current,
+        p_chitti_id: payModalData.id,
+        p_account_id: payAccountId,
+        p_expected_month: currentMonthPaying,
+        p_created_at: secureDate
+      })
+      if (error) throw error
 
-      // 1. Log Transaction
-      const { error: txError } = await supabase.from('transactions').insert([{
-        owner_id: user.id,
-        initiator_profile_id: user.id,
-        from_account_id: payAccountId,
-        amount: Number(payModalData.monthly_installment),
-        description: `Chitti Installment: ${payModalData.name} (Month ${currentMonthPaying}/${payModalData.duration_months})`,
-        status: 'COMPLETED',
-        created_at: secureDate
-      }])
-      if (txError) throw txError
-
-      // 2. Update Progress Counter in Chitti Table
-      const updateData: { months_paid: number; status?: string } = {
-        months_paid: currentMonthPaying
-      }
-      if (currentMonthPaying >= payModalData.duration_months) {
-        updateData.status = 'COMPLETED'
-      }
-
-      const { error: chittiError } = await supabase.from('chittis')
-        .update(updateData)
-        .eq('id', payModalData.id)
-      
-      if (chittiError) throw chittiError
-
+      payRequestId.current = null
       setPayModalData(null)
       setPayAccountId('')
       setPayDate(new Date().toISOString().split('T')[0])
@@ -373,7 +342,7 @@ export default function Chittis() {
               <div className="flex gap-3 pt-4 border-t border-white/10">
                 {!isCompleted ? (
                   <button 
-                    onClick={() => setPayModalData(chitti)}
+                    onClick={() => { payRequestId.current = crypto.randomUUID(); setPayModalData(chitti) }}
                     className="flex-1 flex items-center justify-center py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-bold transition-all border border-white/10"
                   >
                     <ArrowUpRight className="w-4 h-4 mr-1.5 text-rose-400" /> Pay
@@ -386,7 +355,7 @@ export default function Chittis() {
                 
                 {!chitti.received_month_number && (
                   <button 
-                    onClick={() => setClaimModalData(chitti)}
+                    onClick={() => { claimRequestId.current = crypto.randomUUID(); setClaimModalData(chitti) }}
                     className="flex-1 flex items-center justify-center py-2.5 bg-accent-500/20 hover:bg-accent-500/30 text-accent-300 rounded-xl text-sm font-bold transition-all border border-accent-500/30"
                   >
                     <Trophy className="w-4 h-4 mr-1.5" /> Claim Pot
@@ -505,7 +474,7 @@ export default function Chittis() {
               )}
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => setClaimModalData(null)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
+                <button type="button" onClick={() => { claimRequestId.current = null; setClaimModalData(null) }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
                 <button type="submit" disabled={isSubmitting} className="flex-1 flex justify-center py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50">
                   {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Log Payout'}
                 </button>
@@ -564,7 +533,7 @@ export default function Chittis() {
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => setPayModalData(null)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
+                <button type="button" onClick={() => { payRequestId.current = null; setPayModalData(null) }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
                 <button type="submit" disabled={isSubmitting} className="flex-1 flex justify-center py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(244,63,94,0.3)] disabled:opacity-50">
                   {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Log Payment'}
                 </button>

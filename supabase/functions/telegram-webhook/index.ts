@@ -1,55 +1,72 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-// These are automatically injected by Supabase when deployed
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 const telegramBotToken = Deno.env.get("TELEGRAM_BOT_TOKEN")!
-
+const webhookSecret = Deno.env.get("TELEGRAM_WEBHOOK_SECRET")
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+function equalSecret(actual: string | null, expected: string): boolean {
+  if (actual === null) return false
+  const left = new TextEncoder().encode(actual)
+  const right = new TextEncoder().encode(expected)
+  let difference = left.length ^ right.length
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    difference |= (left[i] || 0) ^ (right[i] || 0)
+  }
+  return difference === 0
+}
+
 serve(async (req) => {
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 })
+  // setWebhook must use this same secret_token. A missing deployment secret
+  // fails closed instead of trusting arbitrary requests to a public endpoint.
+  if (!webhookSecret || webhookSecret.length < 32) {
+    return new Response('Webhook unavailable', { status: 503 })
+  }
+  if (!equalSecret(req.headers.get('X-Telegram-Bot-Api-Secret-Token'), webhookSecret)) {
+    return new Response('Forbidden', { status: 403 })
+  }
+  if (Number(req.headers.get('content-length') || 0) > 1_000_000) {
+    return new Response('Payload too large', { status: 413 })
+  }
+
   try {
-    // Only accept POST requests from Telegram
-    if (req.method !== 'POST') return new Response('OK', { status: 200 })
-
     const update = await req.json()
-    
-    // Check if the update contains a text message
-    if (update.message && update.message.text) {
-      const chatId = update.message.chat.id
-      const text = update.message.text
-
-      // Look for our specific Deep Link payload: "/start YOUR_USER_ID"
-      if (text.startsWith('/start ')) {
-        const userId = text.split(' ')[1]
-
-        if (userId) {
-          // 1. Save the Telegram Chat ID to the user's secure profile
-          const { error } = await supabase
-            .from('profiles')
-            .update({ telegram_chat_id: chatId.toString() })
-            .eq('id', userId)
-
-          if (!error) {
-            // 2. Send a confirmation message back to the user on Telegram
-            const replyUrl = `https://api.telegram.org/bot${telegramBotToken}/sendMessage`
-            await fetch(replyUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                chat_id: chatId,
-                text: "✅ Authentication successful! Your Telegram account is now securely linked to your Financial OS ledger. You will receive 2-way handshake alerts here."
-              })
-            })
-          }
-        }
-      }
+    const message = update?.message
+    const chatId = message?.chat?.id
+    if (message?.chat?.type !== 'private' || message?.from?.id !== chatId ||
+        !Number.isSafeInteger(chatId) || chatId <= 0) {
+      return new Response('OK', { status: 200 })
     }
+    const match = typeof message.text === 'string'
+      ? /^\/start ([0-9a-f]{48})$/.exec(message.text.trim())
+      : null
+    if (!match) return new Response('OK', { status: 200 })
 
-    return new Response("OK", { status: 200 })
+    const { data: linked, error } = await supabase.rpc('consume_telegram_link_token', {
+      p_token: match[1],
+      p_chat_id: String(chatId)
+    })
+    if (error) {
+      console.error('Telegram link failed', error.code)
+      return new Response('Error', { status: 500 })
+    }
+    if (linked) {
+      const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: 'Your Telegram chat is now linked to RR Capital.'
+        })
+      })
+      if (!response.ok) console.error('Telegram confirmation failed', response.status)
+    }
+    return new Response('OK', { status: 200 })
   } catch (error) {
-    console.error("Webhook error:", error)
-    return new Response("Error", { status: 500 })
+    console.error('Telegram webhook failed', error)
+    return new Response('Error', { status: 500 })
   }
 })

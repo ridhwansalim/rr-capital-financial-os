@@ -105,7 +105,7 @@ export default function Contacts() {
         const { data: { user } } = await supabase.auth.getUser()
         
         let query = supabase
-          .from('profiles')
+          .from('profile_directory')
           .select('id, full_name, username')
           .or(`username.ilike.%${searchQuery}%,full_name.ilike.%${searchQuery}%`)
           .limit(5)

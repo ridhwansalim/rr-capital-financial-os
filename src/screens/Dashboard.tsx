@@ -122,7 +122,7 @@ export default function Dashboard() {
            chittiData.forEach(chitti => {
              const startDate = new Date(chitti.start_date)
              const emiStartMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
-             const emiEndMonth = new Date(startDate.getFullYear(), startDate.getMonth() + chitti.duration_months, 1)
+             const emiEndMonth = new Date(startDate.getFullYear(), startDate.getMonth() + chitti.duration_months - 1, 1)
 
              if (viewDate >= emiStartMonth && viewDate <= emiEndMonth) {
                 totalOutflow += Number(chitti.monthly_installment)
@@ -152,7 +152,7 @@ export default function Dashboard() {
 
           const nameMap: Record<string, string> = {}
           if (pIds.size > 0) {
-            const { data: profiles } = await supabase.from('profiles').select('id, full_name, username').in('id', Array.from(pIds))
+            const { data: profiles } = await supabase.from('profile_directory').select('id, full_name, username').in('id', Array.from(pIds))
             profiles?.forEach(p => nameMap[p.id] = p.full_name || p.username || 'User')
           }
           if (cIds.size > 0) {

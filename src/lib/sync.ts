@@ -1,80 +1,91 @@
-import { localDB } from './db'
+import { localDB, type LocalTransaction } from './db'
 import { supabase } from './supabase'
 
-export async function syncOutbox() {
-  // 1. If offline, stop immediately.
+let activeSync: Promise<void> | null = null
+
+export function postQueuedTransaction(txn: LocalTransaction) {
+  if (!txn.request_id) throw new Error('Offline transaction is missing its request ID')
+  return supabase.rpc('post_ledger_transaction', {
+    p_request_id: txn.request_id,
+    p_from_account_id: txn.from_account_id,
+    p_to_account_id: txn.to_account_id,
+    p_amount: txn.amount,
+    p_fee_amount: txn.fee_amount,
+    p_description: txn.description,
+    p_created_at: txn.created_at,
+    p_tagged_profile_id: txn.tagged_profile_id || null,
+    p_contact_id: txn.contact_id || null,
+    p_obligation_id: txn.obligation_id || null,
+    p_new_contact_name: txn.new_contact_name || null
+  })
+}
+
+async function runSync() {
   if (!navigator.onLine) return
+  try {
+    const pending = await localDB.outbox.where('sync_status').equals('pending').toArray()
+    if (pending.length === 0) return
 
-  const pendingTxns = await localDB.outbox.where('sync_status').equals('pending').toArray()
-  if (pendingTxns.length === 0) return 
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) return
 
-  console.log(`Attempting to sync ${pendingTxns.length} offline transactions...`)
+    for (const txn of pending) {
+      // A shared browser can have pending entries for a different login.
+      if (txn.owner_id !== user.id || txn.id === undefined) continue
 
-  // 2. NEW FOR V2: We MUST get your cryptographic user ID for RLS!
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    console.error('Cannot sync: No authenticated user found.')
-    return
-  }
-
-  for (const txn of pendingTxns) {
-    if (txn.owner_id !== user.id) {
-      console.warn('Skipping offline transaction ' + txn.id + ': it belongs to a different or unverified account.')
-      continue
-    }
-
-    try {
-      // 3. Insert the real transaction WITH your initiator ID
-      const { data: newTxn, error: txnError } = await supabase
-        .from('transactions')
-        .insert({
-          owner_id: txn.owner_id,
-          initiator_profile_id: user.id, // <-- V2 Security Requirement
-          from_account_id: txn.from_account_id,
-          to_account_id: txn.to_account_id,
-          amount: txn.amount,
-          fee_amount: txn.fee_amount,
-          description: txn.description,
-          status: 'COMPLETED', // Offline outbox items are standard completed transfers
-          created_at: txn.created_at
-        })
-        .select('id')
-        .single() // Ask Supabase to return the new row ID
-
-      if (txnError) {
-        console.error('Transaction sync failed:', txnError.message)
-        continue // Skip to the next one
+      // Older local records predate request IDs. Persist one before the first
+      // network request so an ambiguous success has the same ID on retry.
+      const requestId = txn.request_id || crypto.randomUUID()
+      if (!txn.request_id) {
+        await localDB.outbox.update(txn.id, { request_id: requestId })
       }
 
-      // 4. Preserved V1 Logic: If this was a debt payment, link it!
-      if (txn.obligation_id && newTxn) {
-        const { error: oblError } = await supabase
-          .from('obligation_payments')
-          .insert({
-            obligation_id: txn.obligation_id,
-            transaction_id: newTxn.id,
-            amount: txn.amount
+      try {
+        const { error } = await postQueuedTransaction({ ...txn, request_id: requestId })
+        if (error) {
+          // Validation and permission failures need user attention. Keep
+          // transport/server failures pending so reconnection retries them.
+          const needsAttention = /^(22|23|42501|PGRST2)/.test(error.code || '')
+          await localDB.outbox.update(txn.id, {
+            sync_status: needsAttention ? 'failed' : 'pending',
+            last_error: error.message, last_attempt_at: new Date().toISOString()
           })
-          
-        if (oblError) {
-          console.error('Failed to link obligation:', oblError.message)
+          if (!needsAttention) break
           continue
         }
+        await localDB.outbox.delete(txn.id)
+      } catch (error) {
+        await localDB.outbox.update(txn.id, {
+          last_error: error instanceof Error ? error.message : 'Connection failed',
+          last_attempt_at: new Date().toISOString()
+        })
+        break
       }
-
-      // 5. Success. Remove from the local offline device.
-      await localDB.outbox.delete(txn.id!)
-      console.log(`Successfully synced transaction ${txn.id}`)
-      
-    } catch (err) {
-      console.error('Network error during sync:', err)
-      break 
     }
+  } catch (error) {
+    console.error('Could not read or sync offline transactions:', error)
   }
 }
 
-// Auto-sync the exact second the device reconnects to Wi-Fi or 4G/5G
-window.addEventListener('online', syncOutbox)
+export function syncOutbox(): Promise<void> {
+  if (activeSync) return activeSync
+  activeSync = runSync().finally(() => { activeSync = null })
+  return activeSync
+}
 
-// Attempt a sync immediately whenever the app boots up
-syncOutbox()
+export async function retryOutboxItem(id: number, ownerId: string): Promise<void> {
+  if (activeSync) await activeSync
+  const item = await localDB.outbox.get(id)
+  if (!item || item.owner_id !== ownerId) return
+  await localDB.outbox.update(id, { sync_status: 'pending', last_error: null })
+  await syncOutbox()
+}
+
+window.addEventListener('online', () => { void syncOutbox() })
+window.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') void syncOutbox()
+})
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_IN') setTimeout(() => { void syncOutbox() }, 0)
+})
+void syncOutbox()

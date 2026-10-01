@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { X, IndianRupee, Loader2, Wallet, ArrowUpRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
@@ -13,9 +13,11 @@ export default function SettleDebtModal({ isOpen, onClose, obligation }: SettleD
   const [accounts, setAccounts] = useState<any[]>([])
   const [selectedAccount, setSelectedAccount] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const requestId = useRef<string | null>(null)
 
   useEffect(() => {
     if (isOpen && obligation) {
+      requestId.current = crypto.randomUUID()
       // Default to the remaining balance
       setAmount(obligation.amount?.toString() || '')
       fetchAccounts()
@@ -45,23 +47,17 @@ export default function SettleDebtModal({ isOpen, onClose, obligation }: SettleD
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Authentication missing")
       
-      // Figure out who the money is going to
-      let counterpartyId = obligation.owner_id
-      if (obligation.owner_id === user.id) {
-        counterpartyId = obligation.type === 'lent' ? obligation.debtor_profile_id : obligation.creditor_profile_id
-      }
-
-      // Log to Escrow
-      const { error } = await supabase.from('settlements').insert({
-        obligation_id: obligation.id,
-        initiator_id: user.id,
-        counterparty_profile_id: counterpartyId,
-        amount: parseFloat(amount),
-        source_account_id: selectedAccount,
-        status: 'PENDING_APPROVAL'
+      requestId.current ||= crypto.randomUUID()
+      const { error } = await supabase.rpc('request_settlement', {
+        p_request_id: requestId.current,
+        p_obligation_id: obligation.id,
+        p_source_account_id: selectedAccount,
+        p_amount: parseFloat(amount),
+        p_expected_month: null
       })
       
       if (error) throw error
+      requestId.current = null
       
       alert("Payment request sent! Waiting for receiver to accept.")
       onClose()

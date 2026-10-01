@@ -4,64 +4,84 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 const telegramBotToken = Deno.env.get("TELEGRAM_BOT_TOKEN")!
+const webhookSecret = Deno.env.get("FINANCIAL_OS_WEBHOOK_SECRET")
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function secretsMatch(expected: string, supplied: string): boolean {
+  const encoder = new TextEncoder()
+  const expectedBytes = encoder.encode(expected)
+  const suppliedBytes = encoder.encode(supplied)
+  if (expectedBytes.length !== suppliedBytes.length) return false
+
+  let difference = 0
+  for (let i = 0; i < expectedBytes.length; i++) {
+    difference |= expectedBytes[i] ^ suppliedBytes[i]
+  }
+  return difference === 0
+}
 
 serve(async (req) => {
+  if (req.method !== "POST") return new Response("Method not allowed", { status: 405 })
+  if (!webhookSecret) {
+    console.error("Financial OS webhook secret is not configured")
+    return new Response("Webhook is not configured", { status: 503 })
+  }
+
+  const suppliedSecret = req.headers.get("x-financial-os-webhook-secret") || ""
+  if (!secretsMatch(webhookSecret, suppliedSecret)) {
+    return new Response("Unauthorized", { status: 401 })
+  }
+
+  let payload: any
   try {
-    console.log("1. Webhook woke up! Receiving request...");
-    const payload = await req.json();
-    console.log("2. Payload received:", JSON.stringify(payload));
+    payload = await req.json()
+  } catch {
+    return new Response("Invalid JSON", { status: 400 })
+  }
 
-    const record = payload.record;
+  if (payload?.table !== "transactions" || payload?.type !== "INSERT" || payload?.record?.status !== "PENDING") {
+    return new Response(null, { status: 204 })
+  }
 
-    if (payload.type === 'INSERT' && record.status === 'PENDING') {
-      console.log(`3. Valid PENDING transaction detected for receiver: ${record.receiver_profile_id}`);
+  const record = payload.record
+  const receiverId = record.receiver_profile_id
+  const amount = Number(record.amount)
+  if (typeof receiverId !== "string" || !uuidPattern.test(receiverId) || !Number.isFinite(amount) || amount <= 0) {
+    return new Response("Invalid transaction event", { status: 400 })
+  }
 
-      // Lookup the receiver's Telegram ID
-      const { data: profile, error: profError } = await supabase
-        .from('profiles')
-        .select('telegram_chat_id, full_name')
-        .eq('id', record.receiver_profile_id)
-        .single();
+  try {
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("telegram_chat_id")
+      .eq("id", receiverId)
+      .maybeSingle()
 
-      if (profError) {
-        console.error("4. ERROR fetching profile from Supabase:", profError);
-        return new Response("Profile error", { status: 200 });
-      }
-
-      console.log("5. Profile found in database:", JSON.stringify(profile));
-
-      if (profile && profile.telegram_chat_id) {
-        console.log(`6. ATTEMPTING to send Telegram message to chat ID: ${profile.telegram_chat_id}`);
-        
-        const message = `🔔 *New Pending Handshake*\n\nYou have an incoming transfer of *₹${Number(record.amount).toFixed(2)}*.\n📝 Note: ${record.description}\n\nOpen Financial OS to accept and deposit the funds.`;
-
-        const replyUrl = `https://api.telegram.org/bot${telegramBotToken}/sendMessage`;
-        
-        const tgResponse = await fetch(replyUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: profile.telegram_chat_id,
-            text: message,
-            parse_mode: 'Markdown'
-          })
-        });
-
-        const tgResult = await tgResponse.json();
-        console.log("7. TELEGRAM API RESPONSE:", JSON.stringify(tgResult));
-
-      } else {
-        console.error("6. STOPPING: The user's profile does not have a telegram_chat_id linked!");
-      }
-    } else {
-      console.log("3. IGNORED: Not an INSERT or not PENDING.");
+    if (profileError) {
+      console.error("Notification profile lookup failed", profileError.code || "unknown")
+      return new Response("Profile lookup failed", { status: 502 })
     }
-    
-    return new Response("OK", { status: 200 });
-  } catch (error) {
-    console.error("CRITICAL CRASH:", error);
-    return new Response("Error", { status: 500 });
+
+    if (!profile?.telegram_chat_id) return new Response(null, { status: 204 })
+
+    const description = typeof record.description === "string" ? record.description.slice(0, 500) : ""
+    const message = `New pending transfer\n\nAmount: INR ${amount.toFixed(2)}\nNote: ${description}\n\nOpen Financial OS to review it.`
+    const telegramResponse = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: profile.telegram_chat_id, text: message })
+    })
+
+    if (!telegramResponse.ok) {
+      console.error("Telegram notification failed", telegramResponse.status)
+      return new Response("Notification delivery failed", { status: 502 })
+    }
+
+    return new Response("OK", { status: 200 })
+  } catch {
+    console.error("Financial OS notification handler failed")
+    return new Response("Notification handler failed", { status: 500 })
   }
 })

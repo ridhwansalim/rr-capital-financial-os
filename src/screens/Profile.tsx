@@ -29,17 +29,14 @@ export default function Settings() {
         // Fetch Profile from Supabase
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
-          const { data } = await supabase.from('profiles').select('full_name, username').eq('id', user.id).single()
+          const { data } = await supabase.from('profiles').select('full_name, username, ai_api_key').eq('id', user.id).single()
           if (data) {
             setOriginalProfile({ full_name: data.full_name || '', username: data.username || '' })
             setDraftProfile({ full_name: data.full_name || '', username: data.username || '' })
+            setOriginalAiKey(data.ai_api_key || '')
+            setDraftAiKey(data.ai_api_key || '')
           }
         }
-
-        // Fetch AI Key & Preferences from localStorage (BYOK)
-        const savedKey = localStorage.getItem('financial_os_ai_key') || ''
-        setOriginalAiKey(savedKey)
-        setDraftAiKey(savedKey)
 
         const savedAutoLock = localStorage.getItem('financial_os_autolock') === 'true'
         setAutoLock(savedAutoLock)
@@ -78,8 +75,11 @@ export default function Settings() {
     }
   }
 
-  const handleSaveAiKey = () => {
-    localStorage.setItem('financial_os_ai_key', draftAiKey)
+  const handleSaveAiKey = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { error } = await supabase.from('profiles').update({ ai_api_key: draftAiKey }).eq('id', user.id)
+    if (error) { alert('Could not save the API key.'); return }
     setOriginalAiKey(draftAiKey)
     setIsAiSaved(true)
     setTimeout(() => setIsAiSaved(false), 3000)

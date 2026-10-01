@@ -50,7 +50,7 @@ export default function Debts() {
       obs.forEach(o => {
         if (o.creditor_profile_id && o.creditor_profile_id !== currentUserId) profileIds.add(o.creditor_profile_id)
         if (o.debtor_profile_id && o.debtor_profile_id !== currentUserId) profileIds.add(o.debtor_profile_id)
-        if (o.debtor_contact_id) contactIds.add(o.debtor_contact_id)
+        if (o.shadow_contact_id) contactIds.add(o.shadow_contact_id)
       })
 
       // 4. Build the Name Map
@@ -58,7 +58,7 @@ export default function Debts() {
 
       if (profileIds.size > 0) {
         const { data: profiles } = await supabase
-          .from('profiles')
+          .from('profile_directory')
           .select('id, full_name, username')
           .in('id', Array.from(profileIds))
         
@@ -88,14 +88,14 @@ export default function Debts() {
         let cpName = 'Unknown'
         if (isLender) {
           if (o.debtor_profile_id) cpName = nameMap[o.debtor_profile_id] || cpName
-          else if (o.debtor_contact_id) cpName = nameMap[o.debtor_contact_id] || cpName
+          else if (o.shadow_contact_id) cpName = nameMap[o.shadow_contact_id] || cpName
         } else {
           if (o.creditor_profile_id) cpName = nameMap[o.creditor_profile_id] || cpName
-          else if (o.debtor_contact_id) cpName = nameMap[o.debtor_contact_id] || cpName
+          else if (o.shadow_contact_id) cpName = nameMap[o.shadow_contact_id] || cpName
         }
 
         const type = isLender ? 'lent' : 'borrowed'
-        const amount = Number(o.total_amount)
+        const amount = Number(o.amount)
 
         if (!grouped[cpName]) {
           grouped[cpName] = { counterpartyName: cpName, netBalance: 0, transactions: [] }

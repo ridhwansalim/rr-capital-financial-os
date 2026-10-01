@@ -39,6 +39,8 @@ export default function Calendar() {
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [payEmiData, setPayEmiData] = useState<{emi: EMI, role: 'p2p' | 'bank', currentMonth: number} | null>(null)
+  const bankPaymentRequestId = useRef<string | null>(null)
+  const peerPaymentRequestId = useRef<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   const [emiType, setEmiType] = useState<'personal' | 'lent' | 'borrowed'>('personal')
@@ -189,29 +191,32 @@ export default function Calendar() {
 
       const secureDate = new Date(`${payDate}T12:00:00`).toISOString()
       const { emi, role, currentMonth } = payEmiData
-      const isOwner = user.id === emi.owner_id
 
       if (role === 'p2p' && emi.related_obligation_id) {
-        const counterpartyId = isOwner ? emi.counterparty_profile_id : emi.owner_id
-        const { error: escrowError } = await supabase.from('settlements').insert({
-          obligation_id: emi.related_obligation_id, initiator_id: user.id,
-          counterparty_profile_id: counterpartyId, amount: Number(emi.amount),
-          source_account_id: payAccountId, status: 'PENDING_APPROVAL'
+        peerPaymentRequestId.current ||= crypto.randomUUID()
+        const { error: escrowError } = await supabase.rpc('request_settlement', {
+          p_request_id: peerPaymentRequestId.current,
+          p_obligation_id: emi.related_obligation_id,
+          p_source_account_id: payAccountId,
+          p_amount: Number(emi.amount),
+          p_expected_month: currentMonth
         })
         if (escrowError) throw escrowError
+        peerPaymentRequestId.current = null
         alert("Payment request sent to Escrow! Waiting for receiver to approve.")
+      } else if (role === 'bank') {
+        bankPaymentRequestId.current ||= crypto.randomUUID()
+        const { error } = await supabase.rpc('pay_bank_emi', {
+          p_request_id: bankPaymentRequestId.current,
+          p_emi_id: emi.id,
+          p_account_id: payAccountId,
+          p_expected_month: currentMonth,
+          p_created_at: secureDate
+        })
+        if (error) throw error
+        bankPaymentRequestId.current = null
       } else {
-        const { error: txError } = await supabase.from('transactions').insert([{
-          owner_id: user.id, initiator_profile_id: user.id, from_account_id: payAccountId,
-          to_account_id: emi.initiator_account_id || null, 
-          amount: Number(emi.amount), description: `Bank EMI Installment: ${emi.name} (Month ${currentMonth})`,
-          status: 'COMPLETED', created_at: secureDate
-        }])
-        if (txError) throw txError
-
-        const updateCol = isOwner ? 'owner_months_paid' : 'counterparty_months_paid'
-        const currentCount = isOwner ? (emi.owner_months_paid || 0) : (emi.counterparty_months_paid || 0)
-        await supabase.from('recurring_emis').update({ [updateCol]: currentCount + 1 }).eq('id', emi.id)
+        throw new Error('This peer payment has no linked debt. Refresh the EMI and check its setup before paying.')
       }
 
       setPayEmiData(null); setPayAccountId(''); setPayDate(new Date().toISOString().split('T')[0])
@@ -380,7 +385,7 @@ export default function Calendar() {
                       <div className="flex gap-2 pt-3 border-t border-white/10">
                         {/* THE FIX: Button relies only on your personal task progress */}
                         {!isMyTaskCompleted ? (
-                          <button onClick={() => setPayEmiData({emi, role: myRole, currentMonth: myProgress + 1})} className="flex-1 flex items-center justify-center py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-bold transition-all border border-white/10">
+                          <button onClick={() => { bankPaymentRequestId.current = crypto.randomUUID(); peerPaymentRequestId.current = crypto.randomUUID(); setPayEmiData({emi, role: myRole, currentMonth: myProgress + 1}) }} className="flex-1 flex items-center justify-center py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-bold transition-all border border-white/10">
                             {myRole === 'bank' ? <ArrowUpRight className="w-3 h-3 mr-1.5 text-rose-400" /> : <ArrowRightLeft className="w-3 h-3 mr-1.5 text-amber-400" />}
                             {myRole === 'bank' ? 'Pay Bank' : 'Pay Peer'}
                           </button>
@@ -558,7 +563,7 @@ export default function Calendar() {
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => setPayEmiData(null)} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
+                <button type="button" onClick={() => { bankPaymentRequestId.current = null; peerPaymentRequestId.current = null; setPayEmiData(null) }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
                 <button type="submit" disabled={isSubmitting} className="flex-1 flex justify-center py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] disabled:opacity-50">
                   {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Log Payment'}
                 </button>

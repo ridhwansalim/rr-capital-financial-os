@@ -13,6 +13,7 @@ import Accounts from './screens/Accounts'
 import Debts from './screens/Debts'
 import Contacts from './screens/Contacts'
 import Settings from './screens/Settings'
+import OfflineQueue from './screens/OfflineQueue'
 import Calendar from './screens/Calendar'
 import Chittis from './screens/Chittis' // <-- NEW IMPORT
 
@@ -37,6 +38,7 @@ export default function App() {
                       <Route path="/debts" element={<Debts />} />
                       <Route path="/contacts" element={<Contacts />} />
                       <Route path="/settings" element={<Settings />} />
+                      <Route path="/offline" element={<OfflineQueue />} />
                       <Route path="/calendar" element={<Calendar />} />
                       
                       {/* FIRED UP THE ENGINE */}

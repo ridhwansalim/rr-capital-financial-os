@@ -38,6 +38,7 @@ export default function Transactions() {
 
     // 1. Save locally to Dexie (Offline First)
     await localDB.outbox.add({
+      request_id: crypto.randomUUID(),
       owner_id: session.user.id,
       from_account_id: fromAccount || null,
       to_account_id: toAccount || null,

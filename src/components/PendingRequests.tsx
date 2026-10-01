@@ -33,7 +33,7 @@ export default function PendingRequests() {
 
       const { data: decDebts } = await supabase.from('obligations').select('*').eq('status', 'DECLINED').eq('owner_id', user.id)
       const { data: decEmis } = await supabase.from('recurring_emis').select('*').eq('status', 'DECLINED').eq('owner_id', user.id)
-      const { data: decSettlements } = await supabase.from('settlements').select('*').eq('status', 'DECLINED').eq('initiator_id', user.id)
+      const { data: decSettlements } = await supabase.from('settlements').select('*').eq('status', 'DECLINED').eq('initiator_id', user.id).is('initiator_dismissed_at', null)
 
       const taggedIncDebts = (incDebts || []).map(d => ({ ...d, req_category: 'debt' }))
       const taggedIncEmis = (incEmis || []).map(e => ({ ...e, req_category: 'emi' }))
@@ -57,7 +57,7 @@ export default function PendingRequests() {
         }
       })
 
-      const { data: profiles } = await supabase.from('profiles').select('id, full_name, username').in('id', Array.from(profileIds))
+      const { data: profiles } = await supabase.from('profile_directory').select('id, full_name, username').in('id', Array.from(profileIds))
 
       const enrich = (data: any[]) => data.map(req => {
         let targetId = req.owner_id
@@ -81,8 +81,14 @@ export default function PendingRequests() {
 
     setProcessingId(id)
     try {
-      const table = category === 'debt' ? 'obligations' : category === 'emi' ? 'recurring_emis' : 'settlements'
-      await supabase.from(table).update({ status: 'DECLINED', decline_reason: reason }).eq('id', id)
+      if (category === 'settlement') {
+        const { error } = await supabase.rpc('decline_settlement', { p_settlement_id: id, p_reason: reason })
+        if (error) throw error
+      } else {
+        const table = category === 'debt' ? 'obligations' : 'recurring_emis'
+        const { error } = await supabase.from(table).update({ status: 'DECLINED', decline_reason: reason }).eq('id', id)
+        if (error) throw error
+      }
       setRequests(requests.filter(req => !(req.id === id && req.req_category === category)))
     } catch (error: any) { alert(error.message) } finally { setProcessingId(null) }
   }
@@ -120,9 +126,14 @@ export default function PendingRequests() {
   const handleDismissDeclined = async (id: string, category: 'debt' | 'emi' | 'settlement') => {
     setProcessingId(id)
     try {
-      const table = category === 'debt' ? 'obligations' : category === 'emi' ? 'recurring_emis' : 'settlements'
-      const payload = category === 'settlement' ? { status: 'COMPLETED' } : { status: 'CANCELED' }
-      await supabase.from(table).update(payload).eq('id', id)
+      if (category === 'settlement') {
+        const { error } = await supabase.rpc('dismiss_declined_settlement', { p_settlement_id: id })
+        if (error) throw error
+      } else {
+        const table = category === 'debt' ? 'obligations' : 'recurring_emis'
+        const { error } = await supabase.from(table).update({ status: 'CANCELED' }).eq('id', id)
+        if (error) throw error
+      }
       setDeclinedAlerts(declinedAlerts.filter(req => !(req.id === id && req.req_category === category)))
     } catch (error) { console.error(error) } finally { setProcessingId(null) }
   }
