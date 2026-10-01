@@ -1,30 +1,26 @@
-# Financial OS (Personal & Household Ledger)
+# RR Capital / Financial OS
 
-A cross-platform, multi-entity Progressive Web App (PWA) designed to track personal finances, joint household budgets, proxy purchases, credit card rolling fees, and regional financial schemes (Chit Funds).
+A personal and household finance PWA built around real accounts, shared obligations, and the way money moves between people. It supports ordinary transactions alongside lending, borrowing, bank EMIs, and Chitti commitments.
 
-## 🚀 The Architecture
-This is not a standard expense tracker. It is built on a strict double-entry ledger system using PostgreSQL, separating real-world accounts from virtual obligations (IOUs).
+## What it does
 
-* **Frontend:** React.js, Vite, Tailwind CSS, `shadcn/ui`
-* **Backend:** Supabase (PostgreSQL, Auth, RLS, Storage)
-* **Offline Sync:** Dexie.js (IndexedDB) via the **Outbox Pattern**
-* **UI/UX:** Liquid Glassmorphism (`@samasante/liquid-glass`), Draggable Dashboards (`react-grid-layout`), Auto/Dark/AMOLED themes.
+- Tracks accounts, income, expenses, transfers, contacts, and a searchable ledger.
+- Records peer-to-peer requests and settlements, including approval by the other person.
+- Tracks recurring bank EMIs and Chitti installments and payouts.
+- Queues offline transactions locally and provides a pending/retry view when a sync fails.
+- Supports Telegram alert linking through a short-lived, single-use challenge.
+- Uses Supabase Auth, PostgreSQL row-level security, and database functions for ownership checks and atomic financial actions.
 
-## ✨ Core Features
-* **The "Yours, Mine, Ours" Engine:** Strict data isolation via Row Level Security (RLS). Track personal net worth while maintaining shared household budgets.
-* **Shadow Contacts & 2-Way Handshakes:** Lend money to unregistered friends (Shadow Contacts), or send funds to registered users who must "Accept/Reject" the transaction.
-* **Credit Card Liquidity Rolling:** Track exact withdrawal processing fees against actual liquidity.
-* **Chit Fund (Chitti) Engine:** Track monthly ROSCA installments, auction/processing fees, and lump-sum payouts.
-* **AI Bring-Your-Own-Key (BYOK):** Local storage of Gemini API keys for AI receipt scanning, auto-categorization, and monthly burn-rate forecasting.
-* **Maximum Security:** Google OAuth, Passkeys (WebAuthn), Email Confirmation, and a 3-minute glassmorphism Auto-Lock screen.
+The app uses React, TypeScript, Vite, Tailwind CSS, Supabase, Dexie, and a service worker. The database migrations and SQL checks live in [`supabase/`](supabase/). The migration and restore workflow is documented in [`docs/database-recovery.md`](docs/database-recovery.md).
 
-## 🛠️ Local Setup
-1. Clone the repository.
-2. Run `npm install`.
-3. Rename `.env.example` to `.env.local` and add your Supabase credentials:
-VITE_SUPABASE_URL=your_project_url
-VITE_SUPABASE_ANON_KEY=your_anon_key
-4. Run `npm run dev` to start the local development server.
+## Run locally
 
-## 🗄️ Database Philosophy
-We **never** store static computed balances. All account balances, net worths, and active debt totals are calculated in real-time using PostgreSQL `CREATE VIEW` statements ensuring 100% mathematical accuracy.
+1. Install Node.js 20 or newer and run `npm ci`.
+2. Copy `.env.example` to `.env.local` and set your own Supabase URL and publishable/anon key. Keep service-role keys and bot tokens out of browser variables.
+3. Run `npm run dev` for development or `npm run build` to check a production build.
+
+Use a Supabase project you control. Review the migrations before applying them to an existing database; the first migration captures this project's schema baseline.
+
+## Current rollout status
+
+The RR Capital production database has the hardening migrations applied, and the Telegram link webhook is deployed. The alert notification function and Telegram `setWebhook` registration remain to be completed. Receipt scanning is paused while its external image/key flow is reviewed. The public repository is a source showcase; live-service configuration and credentials are intentionally excluded.
