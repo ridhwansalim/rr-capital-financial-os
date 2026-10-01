@@ -291,8 +291,10 @@ export default function Settings() {
 
   const toggleAutoLock = () => {
     const newVal = !autoLock
-    if (newVal && !/^\d{4}$/.test(savedPin)) {
-      alert('Set a valid four-digit PIN before enabling Auto-Lock.')
+    const savedDevices = JSON.parse(localStorage.getItem('financial_os_devices') || '[]')
+    const hasSavedBiometric = localStorage.getItem('financial_os_bio_enabled') === 'true' && savedDevices.length > 0
+    if (newVal && !/^\d{4}$/.test(savedPin) && !hasSavedBiometric) {
+      alert('Set a four-digit app PIN, or save Biometric / FaceID Lock with a registered device first.')
       return
     }
     setAutoLock(newVal)
@@ -595,7 +597,7 @@ export default function Settings() {
                     <h3 className="font-bold text-white flex items-center">
                       <Lock className="w-4 h-4 mr-2 text-slate-400" /> Auto-Lock Interface
                     </h3>
-                    <p className="text-sm text-slate-400 mt-1">Local convenience lock only; it does not encrypt data or replace device and account security.</p>
+                    <p className="text-sm text-slate-400 mt-1">Local convenience lock only. Use an app PIN or a registered device screen lock (biometric or device passcode).</p>
                   </div>
                   <button 
                     onClick={toggleAutoLock}
@@ -625,7 +627,7 @@ export default function Settings() {
                     </div>
                     
                     <div className="flex flex-col space-y-1">
-                      <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">4-Digit PIN</label>
+                      <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Optional 4-Digit App PIN</label>
                       <input 
                         type="password" maxLength={4} value={savedPin}
                         onChange={(e) => {
@@ -692,7 +694,7 @@ export default function Settings() {
                       ))}
                       {draftProfile.registered_devices.length === 0 && (
                         <div className="p-4 text-center border border-dashed border-white/10 rounded-xl">
-                          <p className="text-sm text-slate-500">No devices registered. Add this device to enable Biometrics.</p>
+                          <p className="text-sm text-slate-500">No devices registered. Add this device to use its biometrics or device passcode for Auto-Lock.</p>
                         </div>
                       )}
                     </div>

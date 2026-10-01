@@ -22,8 +22,10 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
     const lockTimeMinutes = parseInt(localStorage.getItem('financial_os_lock_time') || '3', 10)
     const lastActive = localStorage.getItem('financial_os_last_active')
     const hasValidPin = /^\d{4}$/.test(localStorage.getItem('financial_os_pin') || '')
+    const devices = JSON.parse(localStorage.getItem('financial_os_devices') || '[]')
+    const hasBiometrics = localStorage.getItem('financial_os_bio_enabled') === 'true' && devices.length > 0
 
-    if (isAutoLockEnabled && hasValidPin && lastActive) {
+    if (isAutoLockEnabled && (hasValidPin || hasBiometrics) && lastActive) {
       const timePassed = Date.now() - parseInt(lastActive, 10)
       if (timePassed > (lockTimeMinutes * 60 * 1000)) {
         setIsLocked(true)
@@ -126,6 +128,7 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
   }, [isLocked, hasBiometrics])
 
   if (isLocked) {
+    const hasPin = /^\d{4}$/.test(localStorage.getItem('financial_os_pin') || '')
     return (
       <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/80 backdrop-blur-3xl text-white transition-all">
         <div className="flex flex-col items-center animate-in zoom-in-95 duration-300 w-full max-w-sm px-6">
@@ -133,9 +136,9 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
             <Lock className="w-8 h-8 text-emerald-400" />
           </div>
           <h2 className="text-2xl font-bold mb-2">App Locked</h2>
-          <p className="text-slate-400 mb-8 text-sm">Enter your app PIN or use this device’s screen lock</p>
+          <p className="text-slate-400 mb-8 text-sm">{hasPin ? 'Enter your app PIN or use this device’s screen lock.' : 'Unlock with this device’s screen lock. Your phone may ask for a fingerprint, face, or device passcode.'}</p>
           
-          <div className="flex space-x-6 mb-10">
+          {hasPin && <div className="flex space-x-6 mb-10">
             {[...Array(4)].map((_, i) => (
               <div 
                 key={i}
@@ -144,9 +147,9 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
                 } ${error ? 'bg-rose-500 animate-bounce' : ''}`}
               />
             ))}
-          </div>
+          </div>}
 
-          <div className="grid grid-cols-3 gap-6 w-full max-w-[260px]">
+          {hasPin && <div className="grid grid-cols-3 gap-6 w-full max-w-[260px]">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
               <button
                 key={num} onClick={() => handlePinPress(num.toString())}
@@ -177,7 +180,11 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
             >
               <Delete className="w-6 h-6" />
             </button>
-          </div>
+          </div>}
+          {!hasPin && hasBiometrics && <button
+            onClick={triggerBiometricUnlock}
+            className="rounded-xl bg-emerald-500/20 px-5 py-3 text-emerald-300 border border-emerald-500/30"
+          ><Fingerprint className="inline w-5 h-5 mr-2" />Use device screen lock</button>}
         </div>
       </div>
     )
