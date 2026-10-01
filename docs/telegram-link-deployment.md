@@ -18,21 +18,27 @@ link token issued to an authenticated RR Capital user.
   obligation, EMI, or settlement request. Its database trigger reads the
   endpoint and verification secret from Supabase Vault and includes no amount
   or user-entered description in the Telegram payload.
-- Telegram's `setWebhook` registration has not yet been completed. Until it is,
-  the bot cannot deliver link confirmations to the function.
+- The authenticated Settings flow calls Telegram `setWebhook`, then checks
+  `getWebhookInfo` and verifies the registered URL before it issues a link code.
+- Recent Edge request logs contain three successful POSTs, one unauthorized
+  setup call, one GET rejected with 405, and one OPTIONS success. These counts
+  do not establish that a real link completed. The reset currently leaves no
+  auth user, so the authenticated setup path must be exercised after the owner
+  signs up again.
 
 ## Finish registration and verify
 
-1. Register `https://hnebvwfgsotrknxpgpmv.supabase.co/functions/v1/telegram-webhook`
-   with Telegram's `setWebhook`, using the rotated token for `@ridhwans_fin_bot`
-   and the matching `TELEGRAM_WEBHOOK_SECRET` value as `secret_token`. Enter the
-   bot token only in a local secure prompt. Never put credentials in Git or chat.
-2. Test requests with a missing or wrong secret, `/start <profile UUID>`, a
-   group chat, an expired token, and a replayed token. Each must leave profile
-   links unchanged.
-3. Issue a link token while signed in, open the bot deep link from Settings,
-   and verify only the issuing user's profile receives the private chat ID.
-   Verify issuing a second token invalidates the first.
+1. Sign up again at the public RR Capital login page, then open Settings and tap
+   **Link Telegram**. The Edge Function registers the webhook with Telegram and
+   verifies its URL before returning a short-lived token; credentials stay
+   server-side.
+2. Open the bot deep link for `@ridhwans_fin_bot` and tap **Start** in the
+   private chat within ten minutes. Settings should detect the linked profile,
+   and the bot should confirm success. A malformed, expired, or replayed `/start`
+   now receives an instruction to create a fresh link instead of failing silently.
+3. Verify a second token invalidates the first, and that an invalid token,
+   group chat, and request without the Telegram secret header cannot change any
+   profile. Only the issuing user's private chat may be linked.
 4. Verify alert delivery separately using a newly-created test request. The
    trigger sends a generic notice without financial details. A successful
    Telegram link alone does not establish request notification delivery.

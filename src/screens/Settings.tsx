@@ -22,6 +22,7 @@ export default function Settings() {
   const [userId, setUserId] = useState<string | null>(null)
   const [telegramToken, setTelegramToken] = useState('')
   const [telegramLinkError, setTelegramLinkError] = useState('')
+  const [telegramWebhookWarning, setTelegramWebhookWarning] = useState('')
   const [telegramBusy, setTelegramBusy] = useState(false)
   const [telegramExpiresAt, setTelegramExpiresAt] = useState(0)
   const [geminiKeyDraft, setGeminiKeyDraft] = useState('')
@@ -195,6 +196,7 @@ export default function Settings() {
   const requestTelegramLink = async () => {
     setTelegramBusy(true)
     setTelegramLinkError('')
+    setTelegramWebhookWarning('')
     try {
       const { data: setup, error: setupError } = await supabase.functions.invoke('telegram-webhook', { body: { action: 'configure' } })
       if (setupError) {
@@ -207,6 +209,12 @@ export default function Settings() {
         throw new Error(message)
       }
       if (setup?.configured !== true) throw new Error(setup?.error || 'Could not configure the Telegram bot.')
+      if (setup?.webhookReady !== true) throw new Error('Telegram accepted the setup, but its webhook could not be verified. Please retry.')
+      if (setup.hasDeliveryError) {
+        setTelegramWebhookWarning('Telegram reports an earlier delivery error. Try the fresh link below; if the bot still does not reply, contact support.')
+      } else if (setup.pendingUpdates > 0) {
+        setTelegramWebhookWarning(`Telegram has ${setup.pendingUpdates} queued update${setup.pendingUpdates === 1 ? '' : 's'} to deliver.`)
+      }
       const { data, error } = await supabase.rpc('issue_telegram_link_token')
       if (error) throw error
       if (typeof data !== 'string') throw new Error('Could not issue a link code')
@@ -233,7 +241,11 @@ export default function Settings() {
   useEffect(() => {
     if (!userId || !telegramToken) return
     const checkLink = async () => {
-      if (Date.now() >= telegramExpiresAt) { setTelegramToken(''); return }
+      if (Date.now() >= telegramExpiresAt) {
+        setTelegramToken('')
+        setTelegramLinkError('That Telegram link code expired. Tap Link Telegram to create a fresh one.')
+        return
+      }
       const { data } = await supabase.from('profiles').select('telegram_chat_id').eq('id', userId).single()
       if (data?.telegram_chat_id && data.telegram_chat_id !== originalProfile.telegram_chat_id) {
         setOriginalProfile(prev => ({ ...prev, telegram_chat_id: data.telegram_chat_id }))
@@ -582,7 +594,8 @@ export default function Settings() {
 
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3"><div><p className="font-semibold">Link Telegram</p><p className="text-sm text-slate-400">{originalProfile.telegram_chat_id ? 'Chat ID on file. Use the bot to verify or change it.' : 'Connect your private Telegram chat for alerts.'}</p></div><button type="button" onClick={() => void requestTelegramLink()} disabled={telegramBusy} className="shrink-0 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50">{telegramBusy ? 'Working…' : 'Link Telegram'}</button></div>
-                {telegramToken && <div className="text-sm text-slate-300 space-y-2"><p>Open the bot and tap <strong>Start</strong> within 10 minutes (or send this command):</p><code className="block p-3 rounded-xl bg-black/30 break-all select-all">/start {telegramToken}</code><a className="inline-block text-emerald-300 underline" target="_blank" rel="noopener noreferrer" href={`https://t.me/${telegramBotUsername}?start=${encodeURIComponent(telegramToken)}`}>Open @{telegramBotUsername}</a><p>Keep this page open; it will confirm the link automatically. If Telegram only shows a Start button, tap it once in the private chat.</p></div>}
+                {telegramToken && <div className="text-sm text-slate-300 space-y-2"><p>The bot webhook is verified. Open the bot and tap <strong>Start</strong> within 10 minutes (or send this command):</p><code className="block p-3 rounded-xl bg-black/30 break-all select-all">/start {telegramToken}</code><a className="inline-block text-emerald-300 underline" target="_blank" rel="noopener noreferrer" href={`https://t.me/${telegramBotUsername}?start=${encodeURIComponent(telegramToken)}`}>Open @{telegramBotUsername}</a><p>Keep this page open; it will confirm the link automatically. If Telegram only shows a Start button, tap it once in the private chat.</p></div>}
+                {telegramWebhookWarning && <p role="status" className="text-sm text-amber-300">{telegramWebhookWarning}</p>}
                 {telegramLinkError && <p role="alert" className="text-sm text-rose-300">{telegramLinkError}</p>}
               </div>
 

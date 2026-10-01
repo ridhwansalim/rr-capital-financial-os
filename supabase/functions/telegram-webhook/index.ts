@@ -24,6 +24,25 @@ function equalSecret(actual: string | null, expected: string): boolean {
   return difference === 0
 }
 
+async function sendTelegramMessage(chatId: number, text: string): Promise<boolean> {
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text })
+    })
+    const result = await response.json().catch(() => null)
+    if (!response.ok || result?.ok !== true) {
+      console.error('Telegram message delivery failed', response.status, result?.error_code)
+      return false
+    }
+    return true
+  } catch (error) {
+    console.error('Telegram message request failed', error instanceof Error ? error.name : 'unknown error')
+    return false
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: corsHeaders })
@@ -59,7 +78,19 @@ serve(async (req) => {
         console.error('Telegram webhook setup failed', configured.status, result?.error_code)
         return Response.json({ error: 'Telegram could not register the bot webhook. Try again or contact support.' }, { status: 502, headers: corsHeaders })
       }
-      return Response.json({ configured: true }, { headers: corsHeaders })
+
+      const verification = await fetch(`https://api.telegram.org/bot${telegramBotToken}/getWebhookInfo`)
+      const info = await verification.json()
+      if (!verification.ok || info?.ok !== true || info?.result?.url !== webhookUrl) {
+        console.error('Telegram webhook verification failed', verification.status, info?.error_code)
+        return Response.json({ error: 'Telegram accepted setup but the webhook could not be verified. Please retry.' }, { status: 502, headers: corsHeaders })
+      }
+      return Response.json({
+        configured: true,
+        webhookReady: true,
+        pendingUpdates: Number.isSafeInteger(info.result.pending_update_count) ? info.result.pending_update_count : 0,
+        hasDeliveryError: Number.isSafeInteger(info.result.last_error_date)
+      }, { headers: corsHeaders })
     } catch (error) {
       console.error('Telegram webhook setup request failed', error instanceof Error ? error.name : 'unknown error')
       return Response.json({ error: 'Could not reach Telegram to configure the bot. Check your connection and retry.' }, { status: 502, headers: corsHeaders })
@@ -85,10 +116,13 @@ serve(async (req) => {
         !Number.isSafeInteger(chatId) || chatId <= 0) {
       return new Response('OK', { status: 200 })
     }
-    const match = typeof message.text === 'string'
-      ? /^\/start ([0-9a-f]{48})$/.exec(message.text.trim())
-      : null
-    if (!match) return new Response('OK', { status: 200 })
+    const messageText = typeof message.text === 'string' ? message.text.trim() : ''
+    if (!messageText.startsWith('/start')) return new Response('OK', { status: 200 })
+    const match = /^\/start ([0-9a-f]{48})$/.exec(messageText)
+    if (!match) {
+      const delivered = await sendTelegramMessage(chatId, 'To link this chat, open RR Capital Settings, tap Link Telegram, then use the fresh Start button before the code expires.')
+      return new Response(delivered ? 'OK' : 'Retry', { status: delivered ? 200 : 500, headers: corsHeaders })
+    }
 
     const { data: linked, error } = await supabase.rpc('consume_telegram_link_token', {
       p_token: match[1],
@@ -98,17 +132,15 @@ serve(async (req) => {
       console.error('Telegram link failed', error.code)
       return new Response('Error', { status: 500 })
     }
-    if (linked) {
-      const response = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: 'Your Telegram chat is now linked to RR Capital.'
-        })
-      })
-      if (!response.ok) console.error('Telegram confirmation failed', response.status)
-    }
+    const delivered = await sendTelegramMessage(
+      chatId,
+      linked
+        ? 'Your Telegram chat is now linked to RR Capital.'
+        : 'That RR Capital link code is invalid, expired, or already used. Go back to Settings and create a new link.'
+    )
+    // Once a valid token is consumed, a send failure must not retry the update:
+    // the Settings page confirms the committed link by reading the profile.
+    if (!linked && !delivered) return new Response('Retry', { status: 500, headers: corsHeaders })
     return new Response('OK', { status: 200, headers: corsHeaders })
   } catch (error) {
     console.error('Telegram webhook failed', error)
