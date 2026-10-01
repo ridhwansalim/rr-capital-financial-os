@@ -1,0 +1,5 @@
+-- The Supabase management migration API applied this idempotent RLS change
+-- directly and recorded version 20261001070135. Keep this marker so linked
+-- migration history matches. The source-ordered reassertion lives in
+-- 20261002010000_reinforce_private_workflow_rls.sql, after these tables exist
+-- in a clean database migration run.
