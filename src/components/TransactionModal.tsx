@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { X, ArrowDownRight, ArrowUpRight, ArrowRightLeft, Loader2, IndianRupee, Camera, Search, User, Users, UserPlus, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDB, type CachedAccount, type LocalTransaction } from '../lib/db'
@@ -28,8 +28,10 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
   const [selectedAccount, setSelectedAccount] = useState('')
   const [targetAccount, setTargetAccount] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isAiScanning, setIsAiScanning] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   
   // AI State
 
@@ -181,8 +183,61 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
     onClose()
   }
 
-  const processFile = (_file: File) => {
-    alert('Receipt scanning is temporarily unavailable while external scanning is being reviewed.')
+  const processFile = async (file: File) => {
+    setError(null)
+    if (!navigator.onLine) {
+      setError('Connect to the internet to scan a receipt.')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+
+    const supportedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+    if (!supportedTypes.includes(file.type)) {
+      setError('Choose a JPEG, PNG, WebP, HEIC, or HEIF receipt image.')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+    if (file.size === 0 || file.size > 8 * 1024 * 1024) {
+      setError('Choose a receipt image smaller than 8 MB.')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+
+    setIsAiScanning(true)
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      let binary = ''
+      for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+      }
+      const { data, error: scanError } = await supabase.functions.invoke('scan-receipt', {
+        body: { mimeType: file.type, imageBase64: btoa(binary) },
+      })
+      if (scanError) {
+        let message = 'Receipt scanning failed. Please try again.'
+        try {
+          const response = scanError.context as Response
+          const body = await response?.json()
+          if (typeof body?.error === 'string') message = body.error
+        } catch {
+          // Keep the generic message if the function returned no readable error body.
+        }
+        throw new Error(message)
+      }
+      if (!data || typeof data.amount !== 'number' || !Number.isFinite(data.amount) || data.amount <= 0 ||
+          typeof data.description !== 'string' || !['expense', 'income'].includes(data.type)) {
+        throw new Error('The receipt total could not be read. Enter it manually or try a clearer image.')
+      }
+
+      setAmount(String(Math.round(data.amount * 100) / 100))
+      setDescription(data.description)
+      setType(data.type)
+    } catch (scanError: any) {
+      setError(scanError?.message || 'Receipt scanning failed. Please try again.')
+    } finally {
+      setIsAiScanning(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
   }
 
   const handleInlineAccountCreate = async (e: React.FormEvent) => {
@@ -361,10 +416,12 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
         ) : (
           /* MAIN TRANSACTION FORM */
           <>
-            <div className="mb-6 flex justify-center">
-              <button type="button" disabled title="Receipt scanning is temporarily unavailable" className="flex items-center px-4 py-2 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-xl text-sm font-bold opacity-50 cursor-not-allowed">
-                <Camera className="w-4 h-4 mr-2" /> Receipt scan unavailable
+            <div className="mb-6 flex flex-col items-center gap-2">
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" className="hidden" ref={fileInputRef} onChange={e => { const file = e.target.files?.[0]; if (file) void processFile(file) }} />
+              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isAiScanning || isSubmitting} className="flex items-center px-4 py-2 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-xl text-sm font-bold hover:bg-indigo-500/30 transition-all disabled:opacity-50">
+                {isAiScanning ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Scanning receipt...</> : <><Camera className="w-4 h-4 mr-2" /> Scan receipt</>}
               </button>
+              <p className="text-xs text-white/45 text-center">Receipt images are sent to Google Gemini. Review the fields before saving.</p>
             </div>
 
             <form onSubmit={handleSubmit} className="flex flex-col space-y-5">

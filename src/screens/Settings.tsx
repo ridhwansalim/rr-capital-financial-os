@@ -24,7 +24,7 @@ export default function Settings() {
   const defaultProfile = {
     full_name: '',
     username: '',
-    theme_mode: 'dark',
+    theme_mode: 'system',
     theme_accent: 'emerald',
     ai_api_key: '',
     ai_model: 'gemini-1.5-flash',
@@ -56,12 +56,12 @@ export default function Settings() {
           setUserId(user.id)
           const { data } = await supabase.from('profiles').select('full_name, username, theme_mode, theme_accent, ai_api_key, ai_model, ai_persona, telegram_chat_id, is_biometric_enabled, registered_devices').eq('id', user.id).single()
           if (data) {
-            const loadedProfile = { ...defaultProfile, ...data, registered_devices: data.registered_devices || [] }
+            const themeMode = ['amoled', 'light'].includes(data.theme_mode) ? data.theme_mode : 'system'
+            const loadedProfile = { ...defaultProfile, ...data, theme_mode: themeMode, registered_devices: data.registered_devices || [] }
             setOriginalProfile(loadedProfile)
             setDraftProfile(loadedProfile)
             
-            // Keep only device preferences locally; the provider key stays in
-            // the owner's protected profile and is fetched when scanning.
+            // Keep only device preferences locally; provider credentials remain in the owner's protected profile.
             localStorage.setItem('financial_os_devices', JSON.stringify(loadedProfile.registered_devices))
             localStorage.setItem('financial_os_bio_enabled', loadedProfile.is_biometric_enabled ? 'true' : 'false')
           }
@@ -339,17 +339,16 @@ export default function Settings() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl">
               <div className="flex flex-col space-y-1">
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase flex justify-between">
-                  <span>Base Mode</span> {renderUndo('theme_mode')}
+                  <span>Theme</span> {renderUndo('theme_mode')}
                 </label>
                 <select 
                   value={draftProfile.theme_mode}
                   onChange={(e) => setDraftProfile({...draftProfile, theme_mode: e.target.value})}
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-amber-500/50 transition-colors appearance-none"
                 >
-                  <option value="dark" className="text-slate-900">Dark Glass (Default)</option>
-                  <option value="amoled" className="text-slate-900">Pitch Black (OLED)</option>
-                  <option value="light" className="text-slate-900">Light Glass</option>
-                  <option value="auto" className="text-slate-900">System Auto</option>
+                  <option value="system" className="text-slate-900">System default</option>
+                  <option value="amoled" className="text-slate-900">AMOLED black</option>
+                  <option value="light" className="text-slate-900">Light / day</option>
                 </select>
               </div>
               <div className="flex flex-col space-y-1">
@@ -388,11 +387,11 @@ export default function Settings() {
             <div className="space-y-6 max-w-3xl">
               <div className="flex flex-col space-y-1">
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase flex justify-between items-center">
-                  <span className="flex items-center"><Key className="w-3 h-3 mr-1" /> Provider API Key (BYOK)</span>
+                  <span className="flex items-center"><Key className="w-3 h-3 mr-1" /> Your Gemini API Key (BYOK)</span>
                   {renderUndo('ai_api_key')}
                 </label>
                 <input 
-                  type="password" placeholder="sk-proj... or AIzaSy..." value={draftProfile.ai_api_key}
+                  type="password" placeholder="AIzaSy…" value={draftProfile.ai_api_key}
                   onChange={(e) => setDraftProfile({...draftProfile, ai_api_key: e.target.value})}
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-emerald-500/50 transition-colors font-mono"
                 />
@@ -472,6 +471,7 @@ export default function Settings() {
                   onChange={(e) => setDraftProfile({...draftProfile, telegram_chat_id: e.target.value})}
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-emerald-500/50 transition-colors"
                 />
+                <p className="text-xs leading-relaxed text-slate-500">Receipt scans use your personal key. It is sent only from RR Capital’s server to Google Gemini and is never shared with other accounts.</p>
                 <p className="text-xs text-slate-500">Advanced: enter a Chat ID manually if you need to keep the existing setup. Linking through the bot verifies the chat.</p>
                 {draftProfile.telegram_chat_id !== originalProfile.telegram_chat_id && <button type="button" onClick={() => void saveManualTelegramId()} disabled={telegramBusy} className="self-start px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-50">Save Chat ID</button>}
               </div>

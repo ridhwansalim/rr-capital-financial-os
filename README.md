@@ -9,6 +9,7 @@ A personal and household finance PWA built around real accounts, shared obligati
 - Tracks recurring bank EMIs and Chitti installments and payouts.
 - Queues offline transactions locally and provides a pending/retry view when a sync fails.
 - Supports Telegram alert linking through a short-lived, single-use challenge.
+- Scans receipt images through an authenticated Supabase Edge Function and returns an amount, description, and transaction type for the user to review.
 - Uses Supabase Auth, PostgreSQL row-level security, and database functions for ownership checks and atomic financial actions.
 
 The app uses React, TypeScript, Vite, Tailwind CSS, Supabase, Dexie, and a service worker. The database migrations and SQL checks live in [`supabase/`](supabase/). The migration and restore workflow is documented in [`docs/database-recovery.md`](docs/database-recovery.md).
@@ -21,6 +22,8 @@ The app uses React, TypeScript, Vite, Tailwind CSS, Supabase, Dexie, and a servi
 
 Use a Supabase project you control. Review the migrations before applying them to an existing database; the first migration captures this project's schema baseline.
 
+Receipt scanning sends the selected image to Google Gemini for extraction using each person's own Gemini API key from Settings. The image is not written to RR Capital storage by the scanner. The endpoint accepts images up to 8 MB and limits each account to ten scans per minute. Users should review extracted values before saving. See [`docs/receipt-scanning.md`](docs/receipt-scanning.md).
+
 ## Current rollout status
 
-The RR Capital production database has the hardening migrations applied. The Telegram link webhook and alert function are deployed, while Telegram `setWebhook` registration and the database transaction event hook remain to be completed. Receipt scanning is paused while its external image/key flow is reviewed. The public repository is a source showcase; live-service configuration and credentials are intentionally excluded.
+The RR Capital production database has the hardening migrations applied. Generic Telegram alerts now have a database event hook; Telegram `setWebhook` registration remains outstanding, so verified bot linking is not live yet. Receipt scanning is deployed and requires each user to add their own Gemini key in Settings. The production Vercel URL is public so users can reach Supabase sign-in; preview deployments remain Vercel-protected. The public repository is a source showcase; live-service configuration and credentials are intentionally excluded.

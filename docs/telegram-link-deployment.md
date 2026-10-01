@@ -14,6 +14,10 @@ link token issued to an authenticated RR Capital user.
 - The `telegram-webhook` function is deployed with JWT verification disabled.
   It rejects requests without Telegram's secret header and only accepts
   one-time tokens in private chats.
+- The `send-alert` function sends a generic notification after a new peer
+  obligation, EMI, or settlement request. Its database trigger reads the
+  endpoint and verification secret from Supabase Vault and includes no amount
+  or user-entered description in the Telegram payload.
 - Telegram's `setWebhook` registration has not yet been completed. Until it is,
   the bot cannot deliver link confirmations to the function.
 
@@ -29,10 +33,9 @@ link token issued to an authenticated RR Capital user.
 3. Issue a link token while signed in, open the bot deep link from Settings,
    and verify only the issuing user's profile receives the private chat ID.
    Verify issuing a second token invalidates the first.
-4. Verify alert delivery separately. The `send-alert` function is deployed
-   with a separate header secret, but the database transaction event hook is
-   not configured yet. A successful Telegram link alone does not establish
-   transaction notifications.
+4. Verify alert delivery separately using a newly-created test request. The
+   trigger sends a generic notice without financial details. A successful
+   Telegram link alone does not establish request notification delivery.
 
 The Settings screen labels manual Chat ID entry as an advanced option, separate
 from verified linking. No bot token, webhook secret, or service-role key belongs

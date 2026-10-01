@@ -158,22 +158,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Floating Action Button */}
       {/* FIX: Parent container set to pointer-events-none so it doesn't block underlying navbar links */}
-      <div className="fixed bottom-10 left-1/2 -translate-x-1/2 md:bottom-8 md:left-auto md:right-8 md:translate-x-0 z-50 flex flex-col items-center md:items-end space-y-4 pointer-events-none">
+      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 md:bottom-8 md:left-auto md:right-8 md:translate-x-0 z-50 flex flex-col items-center md:items-end space-y-4 pointer-events-none">
         
-        <div className={`flex flex-col items-center md:items-end space-y-3 transition-all duration-300 origin-bottom ${isFabOpen ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-90 translate-y-4 pointer-events-none'}`}>
-          <button onClick={() => { setIsTxModalOpen(true); setIsFabOpen(false) }} className="pointer-events-auto flex items-center space-x-3 px-4 py-2 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] hover:bg-white/20 transition-all w-48 justify-center md:justify-end md:w-auto">
+        <div aria-hidden={!isFabOpen} className={`flex flex-col items-center md:items-end space-y-3 transition-all duration-300 origin-bottom ${isFabOpen ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-90 translate-y-4 pointer-events-none'}`}>
+          <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={() => { setIsTxModalOpen(true); setIsFabOpen(false) }} className="flex items-center space-x-3 px-4 py-2 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] hover:bg-white/20 transition-all w-48 justify-center md:justify-end md:w-auto">
             <span className="font-medium text-sm tracking-wide">Transaction</span>
             <div className="p-2 bg-indigo-500 rounded-full shadow-lg ml-2"><CreditCard className="w-4 h-4 text-white" /></div>
           </button>
           
-          <button onClick={() => { setIsDebtModalOpen(true); setIsFabOpen(false) }} className="pointer-events-auto flex items-center space-x-3 px-4 py-2 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] hover:bg-white/20 transition-all w-48 justify-center md:justify-end md:w-auto">
+          <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={() => { setIsDebtModalOpen(true); setIsFabOpen(false) }} className="flex items-center space-x-3 px-4 py-2 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] hover:bg-white/20 transition-all w-48 justify-center md:justify-end md:w-auto">
             <span className="font-medium text-sm tracking-wide">Add Debt / IOU</span>
             <div className="p-2 bg-emerald-500 rounded-full shadow-lg ml-2"><Users className="w-4 h-4 text-white" /></div>
           </button>
         </div>
 
         {/* FIX: Enable pointer events exclusively for the + button */}
-        <button onClick={() => setIsFabOpen(!isFabOpen)} className={`pointer-events-auto p-4 rounded-full backdrop-blur-xl border shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] transition-all duration-300 z-50 ${isFabOpen ? 'bg-white/20 border-white/40 rotate-45' : 'bg-white/10 border-white/20 hover:bg-white/20 hover:scale-105'}`}>
+        <button type="button" aria-label={isFabOpen ? 'Close add menu' : 'Open add menu'} aria-expanded={isFabOpen} onClick={() => setIsFabOpen(!isFabOpen)} className={`pointer-events-auto p-4 rounded-full backdrop-blur-xl border shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] transition-all duration-300 z-50 ${isFabOpen ? 'bg-white/20 border-white/40 rotate-45' : 'bg-white/10 border-white/20 hover:bg-white/20 hover:scale-105'}`}>
           <Plus className="w-7 h-7 text-white" />
         </button>
       </div>

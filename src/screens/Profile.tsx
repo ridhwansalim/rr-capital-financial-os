@@ -12,7 +12,7 @@ export default function Settings() {
   const [originalProfile, setOriginalProfile] = useState({ full_name: '', username: '' })
   const [draftProfile, setDraftProfile] = useState({ full_name: '', username: '' })
 
-  // 2. AI BYOK Data (Requires Explicit Save, stored locally)
+  // 2. AI BYOK Data (Requires explicit owner save)
   const [originalAiKey, setOriginalAiKey] = useState('')
   const [draftAiKey, setDraftAiKey] = useState('')
   const [isAiSaved, setIsAiSaved] = useState(false)
@@ -223,7 +223,7 @@ export default function Settings() {
                 <Key className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
-                <h2 className="text-xl font-bold">AI Integrations (BYOK)</h2>
+                <h2 className="text-xl font-bold">Gemini Receipt Scanning (BYOK)</h2>
                 <p className="text-sm text-slate-400">Keys are stored securely in your local browser storage.</p>
               </div>
             </div>
@@ -231,7 +231,7 @@ export default function Settings() {
             <div className="max-w-xl">
               <div className="flex flex-col space-y-1 relative">
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase flex justify-between">
-                  <span>OpenAI / Gemini API Key</span>
+                  <span>Your personal Gemini API Key</span>
                   {isAiModified && (
                     <span className="text-amber-400 font-bold flex items-center gap-1">
                       Modified 

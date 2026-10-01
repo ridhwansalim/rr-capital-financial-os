@@ -41,15 +41,15 @@ serve(async (req) => {
     return new Response("Invalid JSON", { status: 400 })
   }
 
-  if (payload?.table !== "transactions" || payload?.type !== "INSERT" || payload?.record?.status !== "PENDING") {
+  const alertTables = ["obligations", "recurring_emis", "settlements"]
+  if (!alertTables.includes(payload?.table) || payload?.type !== "INSERT" || payload?.record?.status !== "PENDING_APPROVAL") {
     return new Response(null, { status: 204 })
   }
 
   const record = payload.record
   const receiverId = record.receiver_profile_id
-  const amount = Number(record.amount)
-  if (typeof receiverId !== "string" || !uuidPattern.test(receiverId) || !Number.isFinite(amount) || amount <= 0) {
-    return new Response("Invalid transaction event", { status: 400 })
+  if (typeof receiverId !== "string" || !uuidPattern.test(receiverId)) {
+    return new Response("Invalid request event", { status: 400 })
   }
 
   try {
@@ -66,8 +66,7 @@ serve(async (req) => {
 
     if (!profile?.telegram_chat_id) return new Response(null, { status: 204 })
 
-    const description = typeof record.description === "string" ? record.description.slice(0, 500) : ""
-    const message = `New pending transfer\n\nAmount: INR ${amount.toFixed(2)}\nNote: ${description}\n\nOpen Financial OS to review it.`
+    const message = "A new request is waiting in RR Capital. Open the app to review it."
     const telegramResponse = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

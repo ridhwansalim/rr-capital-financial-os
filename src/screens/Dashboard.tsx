@@ -1,63 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react'
-import GridLayout from 'react-grid-layout'
-import 'react-grid-layout/css/styles.css'
-import 'react-resizable/css/styles.css'
-import { GripHorizontal, Settings2, Wallet, ArrowRightLeft, TrendingUp, IndianRupee, Check, User, CalendarDays, ShieldCheck, AlertTriangle } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { Wallet, ArrowRightLeft, TrendingUp, IndianRupee, User, CalendarDays, ShieldCheck, AlertTriangle, Landmark } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import PendingRequests from '../components/PendingRequests'
 
-const ReactGridLayout = GridLayout as any; 
-const DEFAULT_WIDGETS = ['net_worth', 'forecast', 'accounts', 'recent_tx']
-
-const DEFAULT_LAYOUT: any[] = [
-  { i: 'net_worth', x: 0, y: 0, w: 6, h: 2, minW: 4, minH: 2 },
-  { i: 'forecast', x: 6, y: 0, w: 6, h: 2, minW: 4, minH: 2 },
-  { i: 'accounts', x: 0, y: 2, w: 6, h: 4, minW: 4, minH: 3 },
-  { i: 'recent_tx', x: 6, y: 2, w: 6, h: 4, minW: 4, minH: 3 }
-]
-
 export default function Dashboard() {
-  const containerRef = useRef<HTMLDivElement>(null)
-  
-  const [width, setWidth] = useState(1200)
-  const [cols, setCols] = useState(12)
-
-  const [activeWidgets, setActiveWidgets] = useState<string[]>(() => {
-    const saved = localStorage.getItem('finos_widgets')
-    const parsed = saved ? JSON.parse(saved) : DEFAULT_WIDGETS
-    if (!parsed.includes('forecast')) parsed.push('forecast')
-    return parsed
-  })
-  
-  const [layout, setLayout] = useState<any[]>(() => {
-    const saved = localStorage.getItem('finos_layout_v3')
-    return saved ? JSON.parse(saved) : DEFAULT_LAYOUT
-  })
-
-  const [isEditMode, setIsEditMode] = useState(false)
-  
   const [netWorth, setNetWorth] = useState(0)
   const [liquidCash, setLiquidCash] = useState(0)
   const [upcomingOutflow, setUpcomingOutflow] = useState(0)
+  const [monthIncome, setMonthIncome] = useState(0)
+  const [monthExpenses, setMonthExpenses] = useState(0)
   
   const [accounts, setAccounts] = useState<any[]>([])
   const [recentTx, setRecentTx] = useState<any[]>([])
-
-  useEffect(() => {
-    const observer = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        const w = entry.contentRect.width
-        setWidth(w)
-        if (w >= 1200) setCols(12)
-        else if (w >= 996) setCols(10)
-        else if (w >= 768) setCols(6)
-        else if (w >= 480) setCols(4)
-        else setCols(2)
-      }
-    })
-    if (containerRef.current) observer.observe(containerRef.current)
-    return () => observer.disconnect()
-  }, [])
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -136,6 +90,22 @@ export default function Dashboard() {
       }
 
       try {
+        const now = new Date()
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+        const { data: monthTx } = await supabase
+          .from('transactions')
+          .select('amount, from_account_id, to_account_id')
+          .gte('created_at', monthStart)
+          .limit(1000)
+        if (monthTx) {
+          setMonthIncome(monthTx.reduce((sum, tx) => sum + (!tx.from_account_id ? Number(tx.amount) : 0), 0))
+          setMonthExpenses(monthTx.reduce((sum, tx) => sum + (!tx.to_account_id ? Number(tx.amount) : 0), 0))
+        }
+      } catch (err) {
+        console.warn('Could not fetch this month\'s cash flow:', err)
+      }
+
+      try {
         const { data: txData } = await supabase
           .from('transactions')
           .select('id, amount, description, created_at, from_account_id, to_account_id, tagged_profile_id, contact_id')
@@ -180,118 +150,42 @@ export default function Dashboard() {
     fetchDashboardData()
   }, [])
 
-  const handleLayoutChange = (newLayout: any) => {
-    if (!isEditMode) return
-    setLayout(newLayout)
-    localStorage.setItem('finos_layout_v3', JSON.stringify(newLayout))
-  }
-
-  const toggleWidget = (id: string) => {
-    setActiveWidgets(prev => {
-      const next = prev.includes(id) ? prev.filter(w => w !== id) : [...prev, id]
-      localStorage.setItem('finos_widgets', JSON.stringify(next))
-      return next
-    })
-  }
-
   const safeToSpend = liquidCash - upcomingOutflow
-
-  const activeLayout = layout.map(item => ({
-    ...item,
-    static: !isEditMode 
-  }))
+  const monthNet = monthIncome - monthExpenses
+  const currentMonth = new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
 
   return (
-    <div ref={containerRef} className="p-6 w-full max-w-7xl mx-auto text-white animate-in fade-in duration-300 pb-32">
+    <div className="p-4 sm:p-6 w-full max-w-7xl mx-auto text-white animate-in fade-in duration-300 pb-32">
       
-      <div className="flex justify-between items-end mb-8">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end mb-6 sm:mb-8 gap-3">
         <div>
-          <h1 className="text-3xl font-bold flex items-center">
-            <TrendingUp className="w-8 h-8 mr-3 text-emerald-400" />
+          <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
+            <TrendingUp className="w-7 h-7 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-emerald-400" />
             Command Center
           </h1>
-          <p className="text-slate-400 mt-1">Your financial overview</p>
+          <p className="text-slate-400 mt-1">A clear view of your balances, commitments, and recent activity.</p>
         </div>
-        <button 
-          onClick={() => setIsEditMode(!isEditMode)}
-          className={`flex items-center px-4 py-2 rounded-xl font-bold transition-all ${
-            isEditMode ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'bg-white/10 text-white hover:bg-white/20 border border-white/10'
-          }`}
-        >
-          {isEditMode ? <Check className="w-4 h-4 mr-2" /> : <Settings2 className="w-4 h-4 mr-2" />}
-          {isEditMode ? 'Done' : 'Edit Layout'}
-        </button>
       </div>
 
       {/* P2P APPROVALS INBOX INJECTED HERE */}
       <PendingRequests />
 
-      {isEditMode && (
-        <div className="mb-8 p-6 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-md animate-in slide-in-from-top-4">
-          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Toggle Widgets</h3>
-          <div className="flex flex-wrap gap-4">
-            {[
-              { id: 'net_worth', label: 'Net Worth' },
-              { id: 'forecast', label: 'Runway Forecast' },
-              { id: 'accounts', label: 'Account Balances' },
-              { id: 'recent_tx', label: 'Recent Transactions' }
-            ].map(w => (
-              <button
-                key={w.id}
-                onClick={() => toggleWidget(w.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all border ${
-                  activeWidgets.includes(w.id) 
-                    ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300' 
-                    : 'bg-black/20 border-white/5 text-slate-500 hover:text-slate-300'
-                }`}
-              >
-                {w.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <ReactGridLayout
-        className="layout"
-        layout={activeLayout}
-        cols={cols}
-        width={width}
-        rowHeight={60}
-        onLayoutChange={handleLayoutChange}
-        isDraggable={isEditMode}
-        isResizable={isEditMode}
-        draggableHandle=".drag-handle"
-        margin={[16, 16]}
-      >
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6 items-stretch">
         
-        {activeWidgets.includes('net_worth') && (
-          <div key="net_worth" className="bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl overflow-hidden flex flex-col group relative">
-            {isEditMode && (
-              <div className="drag-handle absolute top-4 right-4 p-2 bg-black/40 rounded-lg cursor-grab active:cursor-grabbing z-10 hover:bg-black/60 transition-colors">
-                <GripHorizontal className="w-4 h-4 text-slate-400" />
-              </div>
-            )}
-            <div className="p-6 flex-1 flex flex-col justify-center">
-              <h3 className="text-slate-400 font-medium mb-1">Total Net Worth</h3>
+        <section className="bg-gradient-to-br from-emerald-500/15 via-white/5 to-white/5 border border-emerald-400/20 backdrop-blur-md rounded-3xl overflow-hidden flex flex-col min-h-40">
+            <div className="p-5 sm:p-6 flex-1 flex flex-col justify-center">
+              <h3 className="text-slate-300 font-medium mb-1">Total Net Worth</h3>
               <div className="flex items-center text-4xl md:text-5xl font-black">
                 <IndianRupee className="w-8 h-8 md:w-10 md:h-10 text-emerald-400/70 mr-2" />
                 <span className={netWorth < 0 ? 'text-rose-400' : 'text-white'}>
-                  {netWorth.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <span className="min-w-0 break-all">{netWorth.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </span>
               </div>
             </div>
-          </div>
-        )}
+        </section>
 
-        {activeWidgets.includes('forecast') && (
-          <div key="forecast" className="bg-indigo-500/10 border border-indigo-500/20 backdrop-blur-md rounded-3xl overflow-hidden flex flex-col group relative">
-            {isEditMode && (
-              <div className="drag-handle absolute top-4 right-4 p-2 bg-black/40 rounded-lg cursor-grab active:cursor-grabbing z-10 hover:bg-black/60 transition-colors">
-                <GripHorizontal className="w-4 h-4 text-slate-400" />
-              </div>
-            )}
-            <div className="p-6 flex-1 flex flex-col justify-center">
+        <section className="bg-indigo-500/10 border border-indigo-500/20 backdrop-blur-md rounded-3xl overflow-hidden flex flex-col min-h-40">
+            <div className="p-5 sm:p-6 flex-1 flex flex-col justify-center">
               <h3 className="text-indigo-400 font-bold mb-3 flex items-center text-sm uppercase tracking-wider">
                 <CalendarDays className="w-4 h-4 mr-2" /> Runway Forecast
               </h3>
@@ -319,38 +213,60 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-          </div>
-        )}
+        </section>
 
-        {activeWidgets.includes('accounts') && (
-          <div key="accounts" className="bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl overflow-hidden flex flex-col group relative">
-            <div className={`p-5 border-b border-white/5 flex items-center justify-between bg-black/10 ${isEditMode ? 'drag-handle cursor-grab active:cursor-grabbing' : ''}`}>
+        <section className="xl:col-span-2 bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl p-5 sm:p-6">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 className="font-bold text-slate-200">Monthly cash flow</h3>
+              <p className="text-xs text-slate-500 mt-0.5">{currentMonth} · transfers excluded</p>
+            </div>
+            <span className={`text-sm sm:text-base font-bold ${monthNet >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {monthNet >= 0 ? '+' : '-'}₹{Math.abs(monthNet).toLocaleString('en-IN', { maximumFractionDigits: 0 })} net
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/15 p-3 sm:p-4">
+              <p className="text-xs text-slate-400">Income</p>
+              <p className="mt-1 font-bold text-emerald-400 break-all">+₹{monthIncome.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+            </div>
+            <div className="rounded-2xl bg-rose-500/10 border border-rose-500/15 p-3 sm:p-4">
+              <p className="text-xs text-slate-400">Expenses</p>
+              <p className="mt-1 font-bold text-rose-400 break-all">-₹{monthExpenses.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+            </div>
+            <div className="col-span-2 sm:col-span-1 rounded-2xl bg-white/5 border border-white/10 p-3 sm:p-4">
+              <p className="text-xs text-slate-400">Savings rate</p>
+              <p className={`mt-1 font-bold ${monthIncome > 0 && monthNet >= 0 ? 'text-emerald-400' : 'text-slate-200'}`}>
+                {monthIncome > 0 ? `${Math.round((monthNet / monthIncome) * 100)}%` : '—'}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl overflow-hidden flex flex-col min-h-60">
+            <div className="p-5 border-b border-white/5 flex items-center justify-between bg-black/10">
               <h3 className="font-bold flex items-center text-slate-200">
-                <Wallet className="w-4 h-4 mr-2 text-indigo-400" /> Accounts
+                <Landmark className="w-4 h-4 mr-2 text-indigo-400" /> Accounts <span className="ml-2 text-xs font-normal text-slate-500">{accounts.length}</span>
               </h3>
-              {isEditMode && <GripHorizontal className="w-4 h-4 text-slate-500" />}
             </div>
             <div className="p-4 flex-1 overflow-y-auto space-y-2">
               {accounts.map(acc => (
                 <div key={acc.id} className="flex justify-between items-center p-3 rounded-xl hover:bg-white/5 transition-colors">
-                  <span className="text-sm font-medium text-slate-300">{acc.name}</span>
-                  <span className={`text-sm font-bold ${Number(acc.balance) < 0 ? 'text-rose-400' : 'text-white'}`}>
+                    <span className="text-sm font-medium text-slate-300 min-w-0 truncate">{acc.name}</span>
+                  <span className={`text-sm font-bold shrink-0 ml-3 ${Number(acc.balance) < 0 ? 'text-rose-400' : 'text-white'}`}>
                     ₹{Number(acc.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               ))}
               {accounts.length === 0 && <p className="text-sm text-slate-500 text-center py-4">No accounts found.</p>}
             </div>
-          </div>
-        )}
+        </section>
 
-        {activeWidgets.includes('recent_tx') && (
-          <div key="recent_tx" className="bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl overflow-hidden flex flex-col group relative">
-            <div className={`p-5 border-b border-white/5 flex items-center justify-between bg-black/10 ${isEditMode ? 'drag-handle cursor-grab active:cursor-grabbing' : ''}`}>
+        <section className="bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl overflow-hidden flex flex-col min-h-60">
+            <div className="p-5 border-b border-white/5 flex items-center justify-between bg-black/10">
               <h3 className="font-bold flex items-center text-slate-200">
                 <ArrowRightLeft className="w-4 h-4 mr-2 text-rose-400" /> Recent Activity
               </h3>
-              {isEditMode && <GripHorizontal className="w-4 h-4 text-slate-500" />}
             </div>
             <div className="p-4 flex-1 overflow-y-auto space-y-2">
               {recentTx.map(tx => (
@@ -371,12 +287,11 @@ export default function Dashboard() {
                   </span>
                 </div>
               ))}
-              {recentTx.length === 0 && <p className="text-sm text-slate-500 text-center py-4">No transactions logged.</p>}
+              {recentTx.length === 0 && <p className="text-sm text-slate-500 text-center py-8">No transactions yet. Add your first transaction to see it here.</p>}
             </div>
-          </div>
-        )}
+        </section>
 
-      </ReactGridLayout>
+      </div>
     </div>
   )
 }

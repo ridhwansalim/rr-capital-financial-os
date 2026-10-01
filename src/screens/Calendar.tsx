@@ -36,6 +36,7 @@ export default function Calendar() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [selectedDay, setSelectedDay] = useState(() => new Date().getDate())
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [payEmiData, setPayEmiData] = useState<{emi: EMI, role: 'p2p' | 'bank', currentMonth: number} | null>(null)
@@ -235,8 +236,14 @@ export default function Calendar() {
   const monthName = currentDate.toLocaleString('default', { month: 'long' })
   const year = currentDate.getFullYear()
 
-  const prevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
-  const nextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
+  const prevMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
+    setSelectedDay(1)
+  }
+  const nextMonth = () => {
+    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))
+    setSelectedDay(1)
+  }
 
   const getEmisOnDay = (day: number) => {
     const targetDate = new Date(year, currentDate.getMonth(), day)
@@ -260,11 +267,11 @@ export default function Calendar() {
   }, 0)
 
   return (
-    <div className="p-6 w-full max-w-6xl mx-auto text-white animate-in fade-in duration-300 pb-32 relative">
+    <div className="p-4 sm:p-6 w-full max-w-6xl mx-auto text-white animate-in fade-in duration-300 pb-32 relative">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-bold flex items-center">
-            <CalendarIcon className="w-8 h-8 mr-3 text-indigo-400" /> Calendar & EMIs
+          <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
+            <CalendarIcon className="w-7 h-7 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-indigo-400" /> Calendar & EMIs
           </h1>
           <p className="text-slate-400 mt-1">Track your recurring payments and P2P obligations</p>
         </div>
@@ -278,34 +285,49 @@ export default function Calendar() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          <div className="lg:col-span-2 bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-md">
+          <div className="lg:col-span-2 bg-white/5 border border-white/10 rounded-2xl sm:rounded-3xl p-3 sm:p-6 backdrop-blur-md">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-slate-200">{monthName} {year}</h2>
+              <h2 className="text-lg sm:text-2xl font-bold text-slate-200">{monthName} {year}</h2>
               <div className="flex space-x-2">
-                <button onClick={prevMonth} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors border border-white/10"><ChevronLeft className="w-5 h-5" /></button>
-                <button onClick={nextMonth} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors border border-white/10"><ChevronRight className="w-5 h-5" /></button>
+                <button type="button" aria-label="Previous month" onClick={prevMonth} className="p-1.5 sm:p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors border border-white/10"><ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" /></button>
+                <button type="button" aria-label="Next month" onClick={nextMonth} className="p-1.5 sm:p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors border border-white/10"><ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" /></button>
               </div>
             </div>
 
-            <div className="grid grid-cols-7 gap-2">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => <div key={day} className="text-center text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{day}</div>)}
-              {Array.from({ length: firstDayOfMonth }, (_, i) => i).map(pad => <div key={`pad-${pad}`} className="h-24 rounded-2xl bg-white/2 border border-white/5 opacity-50" />)}
+            <p className="sm:hidden text-xs text-slate-500 mb-2">Tap a date to see its scheduled payments.</p>
+            <div className="grid grid-cols-7 gap-1 sm:gap-2">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => <div key={day} className="text-center text-[9px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 sm:mb-2">{day}</div>)}
+              {Array.from({ length: firstDayOfMonth }, (_, i) => i).map(pad => <div key={`pad-${pad}`} className="h-10 sm:h-24 rounded-lg sm:rounded-2xl bg-white/2 border border-white/5 opacity-50" />)}
               {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
                 const dayEmis = getEmisOnDay(day)
                 const isToday = day === new Date().getDate() && currentDate.getMonth() === new Date().getMonth() && currentDate.getFullYear() === new Date().getFullYear()
+                const isSelected = selectedDay === day
                 return (
-                  <div key={day} className={`h-24 rounded-2xl p-2 flex flex-col transition-all ${isToday ? 'bg-indigo-500/20 border-indigo-500/50' : 'bg-black/20 border-white/5 hover:bg-white/5'} border`}>
-                    <span className={`text-sm font-bold ${isToday ? 'text-indigo-400' : 'text-slate-400'} mb-1`}>{day}</span>
-                    <div className="flex-1 overflow-y-auto space-y-1 hide-scrollbar">
+                  <button key={day} type="button" aria-pressed={isSelected} aria-label={`${monthName} ${day}${dayEmis.length ? `, ${dayEmis.length} scheduled ${dayEmis.length === 1 ? 'payment' : 'payments'}` : ''}`} onClick={() => setSelectedDay(day)} className={`h-10 sm:h-24 min-w-0 rounded-lg sm:rounded-2xl p-1 sm:p-2 flex flex-col text-left transition-all border ${isSelected ? 'bg-indigo-500/20 border-indigo-400 ring-1 ring-indigo-400/50' : isToday ? 'bg-indigo-500/10 border-indigo-500/40' : 'bg-black/20 border-white/5 hover:bg-white/5'}`}>
+                    <span className={`text-xs sm:text-sm font-bold ${isToday || isSelected ? 'text-indigo-400' : 'text-slate-400'} self-center sm:self-start`}>{day}</span>
+                    {dayEmis.length > 0 && <span className="sm:hidden mt-0.5 mx-auto text-[8px] leading-3 font-bold text-rose-400">{dayEmis.length} due</span>}
+                    <div className="hidden sm:flex flex-1 overflow-y-auto space-y-1 flex-col hide-scrollbar">
                       {dayEmis.map(emi => (
                         <div key={emi.id} className="text-[10px] leading-tight font-semibold bg-rose-500/20 text-rose-300 p-1 rounded-md border border-rose-500/30 truncate" title={`${emi.name}: ₹${emi.amount}`}>
                           {emi.name}
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </button>
                 )
               })}
+            </div>
+            <div className="sm:hidden mt-4 border-t border-white/10 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-sm">{monthName} {selectedDay}</h3>
+                <span className="text-xs text-slate-500">{getEmisOnDay(selectedDay).length} due</span>
+              </div>
+              {getEmisOnDay(selectedDay).length ? <div className="space-y-2">{getEmisOnDay(selectedDay).map(emi => (
+                <div key={emi.id} className="flex items-center justify-between gap-3 rounded-xl bg-rose-500/10 border border-rose-500/20 px-3 py-2.5">
+                  <span className="min-w-0 truncate text-sm font-medium">{emi.name}</span>
+                  <span className="shrink-0 flex items-center text-sm font-bold text-rose-400"><IndianRupee className="w-3.5 h-3.5" />{Number(emi.amount).toLocaleString('en-IN')}</span>
+                </div>
+              ))}</div> : <p className="text-sm text-slate-500">No scheduled payments on this date.</p>}
             </div>
           </div>
 

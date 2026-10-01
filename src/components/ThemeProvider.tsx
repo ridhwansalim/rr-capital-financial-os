@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 interface ThemeContextType {
@@ -19,22 +19,29 @@ const ACCENT_MAP: Record<string, { 400: string, 500: string, 600: string }> = {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [themeMode, setThemeMode] = useState('dark')
-  const [themeAccent, setThemeAccent] = useState('emerald')
+  const [themeMode, setThemeMode] = useState(() => localStorage.getItem('rr_theme_mode') || 'system')
+  const [themeAccent, setThemeAccent] = useState(() => localStorage.getItem('rr_theme_accent') || 'emerald')
+
+  const setTheme = useCallback((mode: string, accent: string) => {
+    setThemeMode(mode)
+    setThemeAccent(accent)
+    localStorage.setItem('rr_theme_mode', mode)
+    localStorage.setItem('rr_theme_accent', accent)
+  }, [])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         supabase.from('profiles').select('theme_mode, theme_accent').eq('id', user.id).single()
-          .then(({ data }) => {
+            .then(({ data }) => {
             if (data) {
-              setThemeMode(data.theme_mode || 'dark')
-              setThemeAccent(data.theme_accent || 'emerald')
+              const mode = ['amoled', 'light'].includes(data.theme_mode) ? data.theme_mode : 'system'
+              setTheme(mode, data.theme_accent || 'emerald')
             }
           })
       }
     })
-  }, [])
+  }, [setTheme])
 
   useEffect(() => {
     const html = document.documentElement
@@ -46,15 +53,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     body.style.transition = transition
     if (rootElement) rootElement.style.transition = transition
 
-    let bgColor = '#0f172a' // Default Dark
-    if (themeMode === 'amoled') bgColor = '#000000'
-    if (themeMode === 'light') bgColor = '#f1f5f9'
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const resolvedMode = themeMode === 'amoled' ? 'amoled'
+      : themeMode === 'light' ? 'light'
+      : media.matches ? 'dark' : 'light'
+    const bgColor = resolvedMode === 'amoled' ? '#000000' : resolvedMode === 'light' ? '#f4f7fb' : '#0f172a'
+
+    html.dataset.theme = resolvedMode
+    html.style.colorScheme = resolvedMode === 'light' ? 'light' : 'dark'
     
     html.style.backgroundColor = bgColor
     body.style.backgroundColor = bgColor
     if (rootElement) rootElement.style.backgroundColor = bgColor
-
-    html.className = themeMode 
 
     // THE MAGIC: Inject the selected RGB values into the global CSS variables
     const accentColors = ACCENT_MAP[themeAccent] || ACCENT_MAP.emerald
@@ -62,10 +72,24 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     html.style.setProperty('--accent-500', accentColors[500])
     html.style.setProperty('--accent-600', accentColors[600])
 
+    if (themeMode === 'system') {
+      media.addEventListener('change', applySystemTheme)
+      return () => media.removeEventListener('change', applySystemTheme)
+    }
+
+    function applySystemTheme() {
+      const mode = media.matches ? 'dark' : 'light'
+      const color = mode === 'dark' ? '#0f172a' : '#f4f7fb'
+      html.dataset.theme = mode
+      html.style.colorScheme = mode
+      html.style.backgroundColor = color
+      body.style.backgroundColor = color
+      if (rootElement) rootElement.style.backgroundColor = color
+    }
   }, [themeMode, themeAccent])
 
   return (
-    <ThemeContext.Provider value={{ themeMode, themeAccent, setTheme: (m, a) => { setThemeMode(m); setThemeAccent(a); } }}>
+    <ThemeContext.Provider value={{ themeMode, themeAccent, setTheme }}>
       {children}
     </ThemeContext.Provider>
   )
