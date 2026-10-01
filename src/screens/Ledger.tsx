@@ -113,13 +113,13 @@ export default function Ledger() {
   })
 
   return (
-    <div className="p-6 w-full max-w-5xl mx-auto text-white animate-in fade-in duration-300 pb-32">
+    <div className="p-4 sm:p-6 w-full max-w-5xl mx-auto text-white animate-in fade-in duration-300 pb-32">
       
       {/* Header */}
       <div className="flex justify-between items-end mb-8">
         <div>
-          <h1 className="text-3xl font-bold flex items-center">
-            <ArrowRightLeft className="w-8 h-8 mr-3 text-indigo-400" />
+          <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
+            <ArrowRightLeft className="w-7 h-7 sm:w-8 sm:h-8 mr-3 text-indigo-400" />
             Transactions
           </h1>
           <p className="text-slate-400 mt-1">Your complete master ledger</p>

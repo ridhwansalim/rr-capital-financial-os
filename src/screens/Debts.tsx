@@ -130,10 +130,10 @@ export default function Debts() {
   }
 
   return (
-    <div className="p-6 w-full max-w-3xl mx-auto text-white animate-in fade-in duration-300 pb-32">
+    <div className="p-4 sm:p-6 w-full max-w-3xl mx-auto text-white animate-in fade-in duration-300 pb-32">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold flex items-center">
-          <Users className="w-8 h-8 mr-3 text-indigo-400" />
+        <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
+          <Users className="w-7 h-7 sm:w-8 sm:h-8 mr-3 text-indigo-400" />
           Debts & IOUs
         </h1>
         <p className="text-slate-400 mt-1">Track money you owe and are owed</p>

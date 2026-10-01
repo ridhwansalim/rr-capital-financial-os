@@ -38,7 +38,7 @@ export default function OfflineQueue() {
     } finally { setBusy(false) }
   }
 
-  return <div className="p-6 max-w-4xl mx-auto text-white pb-32">
+  return <div className="p-4 sm:p-6 w-full max-w-4xl mx-auto text-white pb-32">
     <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
       <div><h1 className="text-3xl font-bold">Offline transactions</h1><p className="text-slate-400 mt-1">Transactions saved on this device until the server confirms them.</p></div>
       <button onClick={() => void retry()} disabled={!online || busy || !items?.length} className="flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 font-semibold"><RefreshCw className={`w-4 h-4 ${busy ? 'animate-spin' : ''}`} />Retry all</button>

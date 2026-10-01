@@ -71,19 +71,19 @@ export default function Accounts() {
   const totalDebt = creditAccounts.reduce((sum, acc) => sum + Math.abs(Number(acc.balance)), 0)
 
   return (
-    <div className="p-6 w-full max-w-5xl mx-auto text-white animate-in fade-in duration-300 pb-32">
+    <div className="p-4 sm:p-6 w-full max-w-5xl mx-auto text-white animate-in fade-in duration-300 pb-32">
       
-      <div className="flex justify-between items-end mb-8">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold flex items-center">
-            <Wallet className="w-8 h-8 mr-3 text-indigo-400" />
+          <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
+            <Wallet className="w-7 h-7 sm:w-8 sm:h-8 mr-3 text-indigo-400" />
             Accounts
           </h1>
           <p className="text-slate-400 mt-1">Manage your balances and credit limits</p>
         </div>
         <button 
           onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center px-4 py-2 bg-indigo-500 hover:bg-indigo-400 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)]"
+          className="flex items-center justify-center w-full sm:w-auto px-4 py-3 sm:py-2 bg-indigo-500 hover:bg-indigo-400 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)]"
         >
           <Plus className="w-4 h-4 mr-2" /> Add Account
         </button>
@@ -120,7 +120,7 @@ export default function Accounts() {
                       {/* NEW EDIT BUTTON */}
                       <button 
                         onClick={() => setEditingAccount(acc)}
-                        className="p-1.5 text-slate-500 hover:text-white hover:bg-white/10 rounded-md transition-all opacity-0 group-hover:opacity-100"
+                        className="p-2 text-slate-500 hover:text-white hover:bg-white/10 rounded-md transition-all sm:opacity-0 sm:group-hover:opacity-100"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
@@ -175,7 +175,7 @@ export default function Accounts() {
                         {/* NEW EDIT BUTTON */}
                         <button 
                           onClick={() => setEditingAccount(acc)}
-                          className="p-2 text-slate-500 hover:text-white hover:bg-white/10 rounded-lg transition-all opacity-0 group-hover:opacity-100 z-20"
+                          className="p-2 text-slate-500 hover:text-white hover:bg-white/10 rounded-lg transition-all sm:opacity-0 sm:group-hover:opacity-100 z-20"
                         >
                           <Pencil className="w-4 h-4" />
                         </button>

@@ -226,20 +226,20 @@ export default function Chittis() {
   }
 
   return (
-    <div className="p-6 w-full max-w-7xl mx-auto text-white animate-in fade-in duration-300 pb-32">
+    <div className="p-4 sm:p-6 w-full max-w-7xl mx-auto text-white animate-in fade-in duration-300 pb-32">
       
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-bold flex items-center">
-            <Landmark className="w-8 h-8 mr-3 text-accent-400" />
+          <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
+            <Landmark className="w-7 h-7 sm:w-8 sm:h-8 mr-3 text-accent-400" />
             Chitti / ROSCA
           </h1>
           <p className="text-slate-400 mt-1">Manage rotating savings and credit associations.</p>
         </div>
         <button 
           onClick={() => setIsNewModalOpen(true)}
-          className="flex items-center justify-center px-6 py-3 bg-accent-500 hover:bg-accent-600 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(var(--accent-500),0.3)]"
+          className="flex w-full md:w-auto items-center justify-center px-6 py-3 bg-accent-500 hover:bg-accent-600 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(var(--accent-500),0.3)]"
         >
           <Plus className="w-5 h-5 mr-2" /> New Plan
         </button>

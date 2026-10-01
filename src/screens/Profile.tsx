@@ -128,13 +128,13 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-6 w-full max-w-4xl mx-auto text-white animate-in fade-in duration-300 pb-32">
+    <div className="p-4 sm:p-6 w-full max-w-4xl mx-auto text-white animate-in fade-in duration-300 pb-32">
       
       {/* Header & Search */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-bold flex items-center">
-            <SettingsIcon className="w-8 h-8 mr-3 text-emerald-400" />
+          <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
+            <SettingsIcon className="w-7 h-7 sm:w-8 sm:h-8 mr-3 text-emerald-400" />
             Settings
           </h1>
           <p className="text-slate-400 mt-1">Manage your identity, integrations, and security.</p>

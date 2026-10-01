@@ -23,7 +23,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: 'Accounts', path: '/accounts', icon: Wallet },
     { name: 'Debts', path: '/debts', icon: Receipt },
     { name: 'Contacts', path: '/contacts', icon: Users },
-    { name: 'Offline Queue', path: '/offline', icon: CloudUpload },
     { name: 'Settings', path: '/settings', icon: Settings },
   ]
 
@@ -39,6 +38,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: 'Accounts', path: '/accounts', icon: Wallet },
     { name: 'Debts', path: '/debts', icon: Receipt },
     { name: 'Contacts', path: '/contacts', icon: Users },
+    { name: 'Offline Queue', path: '/offline', icon: CloudUpload },
     { name: 'Settings', path: '/settings', icon: Settings },
   ]
 
@@ -101,14 +101,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Bottom Sheet Drawer */}
       <div className={`md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isMobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-        <div className={`absolute bottom-20 left-4 right-4 bg-slate-900 border border-white/10 rounded-3xl p-6 shadow-2xl transition-transform duration-300 ${isMobileMenuOpen ? 'translate-y-0 scale-100' : 'translate-y-10 scale-95'}`}>
+        <div className={`absolute bottom-24 left-4 right-4 bg-slate-900 border border-white/10 rounded-3xl p-5 shadow-2xl transition-transform duration-300 ${isMobileMenuOpen ? 'translate-y-0 scale-100' : 'translate-y-10 scale-95'}`}>
           <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
             <h3 className="font-bold text-lg">More Tools</h3>
             <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-white/5 rounded-full text-slate-400 hover:text-white">
               <X className="w-5 h-5" />
             </button>
           </div>
-          <div className="grid grid-cols-4 gap-y-6">
+          <div className="grid grid-cols-3 gap-y-5">
             {mobileDrawerItems.map((item) => {
               const isActive = location.pathname === item.path
               return (
@@ -124,41 +124,46 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </div>
 
-      {/* Mobile Bottom Nav */}
-      {/* FIX: Set z-40 and ensure the whole nav catches touches */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 backdrop-blur-2xl bg-black/20 border-t border-white/10 z-40 flex justify-between items-center px-4 pb-2 pointer-events-auto">
-        
-        <div className="flex w-[40%] justify-around">
-          {mobileNavItems.slice(0, 2).map((item) => {
-            const isActive = location.pathname === item.path
-            return (
-              /* FIX: Added relative, z-50, and pointer-events-auto to force target priority */
-              <Link key={item.name} to={item.path} className={`relative z-50 pointer-events-auto flex flex-col items-center p-2 transition-all ${isActive ? 'text-accent-400 scale-110' : 'text-slate-400 hover:text-white'}`}>
-                <item.icon className="w-6 h-6 mb-1" />
-                <span className="text-[10px] font-medium">{item.name}</span>
-              </Link>
-            )
-          })}
-        </div>
+      {/* Mobile navigation: the central action is a real fifth navbar item. */}
+      <nav style={{ height: 'calc(76px + env(safe-area-inset-bottom))' }} className="md:hidden fixed bottom-0 left-0 right-0 h-[76px] backdrop-blur-2xl bg-slate-950/90 border-t border-white/10 z-40 grid grid-cols-5 items-center px-2 pb-[env(safe-area-inset-bottom)] pointer-events-auto">
+        {mobileNavItems.slice(0, 2).map((item) => {
+          const isActive = location.pathname === item.path
+          return (
+            <Link key={item.name} to={item.path} aria-current={isActive ? 'page' : undefined} className={`relative z-50 flex flex-col items-center justify-center gap-1 py-2 transition-colors ${isActive ? 'text-accent-400' : 'text-slate-400 hover:text-white'}`}>
+              <item.icon className="w-5 h-5" />
+              <span className="text-[10px] font-medium">{item.name}</span>
+            </Link>
+          )
+        })}
 
-        <div className="w-[20%] flex justify-center pointer-events-none"></div>
+        <button type="button" aria-label={isFabOpen ? 'Close add menu' : 'Add transaction or debt'} aria-expanded={isFabOpen} onClick={() => setIsFabOpen(!isFabOpen)} className={`relative z-50 justify-self-center flex items-center justify-center w-12 h-12 rounded-2xl bg-accent-500 text-white shadow-lg shadow-accent-500/25 transition-all duration-200 ${isFabOpen ? 'rotate-45 bg-accent-600' : 'hover:-translate-y-0.5'}`}>
+          <Plus className="w-6 h-6" />
+        </button>
 
-        <div className="flex w-[40%] justify-around">
-          <Link to="/chittis" className={`relative z-50 pointer-events-auto flex flex-col items-center p-2 transition-all ${location.pathname === '/chittis' ? 'text-accent-400 scale-110' : 'text-slate-400 hover:text-white'}`}>
-            <Landmark className="w-6 h-6 mb-1" />
-            <span className="text-[10px] font-medium">Chittis</span>
-          </Link>
-          
-          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className={`relative z-50 pointer-events-auto flex flex-col items-center p-2 transition-all ${isMobileMenuOpen ? 'text-white scale-110' : 'text-slate-400'}`}>
-            <Menu className="w-6 h-6 mb-1" />
-            <span className="text-[10px] font-medium">More</span>
-          </button>
-        </div>
+        <Link to="/chittis" aria-current={location.pathname === '/chittis' ? 'page' : undefined} className={`relative z-50 flex flex-col items-center justify-center gap-1 py-2 transition-colors ${location.pathname === '/chittis' ? 'text-accent-400' : 'text-slate-400 hover:text-white'}`}>
+          <Landmark className="w-5 h-5" />
+          <span className="text-[10px] font-medium">Chittis</span>
+        </Link>
+
+        <button type="button" aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className={`relative z-50 flex flex-col items-center justify-center gap-1 py-2 transition-colors ${isMobileMenuOpen ? 'text-accent-400' : 'text-slate-400 hover:text-white'}`}>
+          <Menu className="w-5 h-5" />
+          <span className="text-[10px] font-medium">More</span>
+        </button>
       </nav>
+
+      {/* The mobile add menu opens above the navbar's centered action. */}
+      <div aria-hidden={!isFabOpen} className={`md:hidden fixed bottom-[88px] left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-3 transition-all duration-200 ${isFabOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'}`}>
+        <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={() => { setIsTxModalOpen(true); setIsFabOpen(false) }} className="flex items-center gap-3 px-4 py-2 rounded-full bg-slate-900 border border-white/15 shadow-xl text-white">
+          <span className="font-medium text-sm">Transaction</span><span className="p-2 bg-indigo-500 rounded-full"><CreditCard className="w-4 h-4" /></span>
+        </button>
+        <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={() => { setIsDebtModalOpen(true); setIsFabOpen(false) }} className="flex items-center gap-3 px-4 py-2 rounded-full bg-slate-900 border border-white/15 shadow-xl text-white">
+          <span className="font-medium text-sm">Add Debt / IOU</span><span className="p-2 bg-emerald-500 rounded-full"><Users className="w-4 h-4" /></span>
+        </button>
+      </div>
 
       {/* Floating Action Button */}
       {/* FIX: Parent container set to pointer-events-none so it doesn't block underlying navbar links */}
-      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 md:bottom-8 md:left-auto md:right-8 md:translate-x-0 z-50 flex flex-col items-center md:items-end space-y-4 pointer-events-none">
+      <div className="hidden md:flex fixed bottom-8 right-8 z-50 flex-col items-end space-y-4 pointer-events-none">
         
         <div aria-hidden={!isFabOpen} className={`flex flex-col items-center md:items-end space-y-3 transition-all duration-300 origin-bottom ${isFabOpen ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-90 translate-y-4 pointer-events-none'}`}>
           <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={() => { setIsTxModalOpen(true); setIsFabOpen(false) }} className="flex items-center space-x-3 px-4 py-2 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] hover:bg-white/20 transition-all w-48 justify-center md:justify-end md:w-auto">
@@ -172,7 +177,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {/* FIX: Enable pointer events exclusively for the + button */}
         <button type="button" aria-label={isFabOpen ? 'Close add menu' : 'Open add menu'} aria-expanded={isFabOpen} onClick={() => setIsFabOpen(!isFabOpen)} className={`pointer-events-auto p-4 rounded-full backdrop-blur-xl border shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] transition-all duration-300 z-50 ${isFabOpen ? 'bg-white/20 border-white/40 rotate-45' : 'bg-white/10 border-white/20 hover:bg-white/20 hover:scale-105'}`}>
           <Plus className="w-7 h-7 text-white" />
         </button>

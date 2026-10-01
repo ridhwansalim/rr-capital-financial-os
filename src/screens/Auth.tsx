@@ -71,7 +71,7 @@ export default function Auth() {
       <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-emerald-500/20 rounded-full blur-3xl" />
       <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl" />
 
-      <div className="w-full max-w-md p-8 rounded-3xl backdrop-blur-2xl bg-white/5 border border-white/10 shadow-2xl relative z-10 animate-in fade-in zoom-in-95 duration-500">
+      <div className="box-border w-[calc(100vw-2rem)] min-w-0 max-w-md p-6 sm:p-8 rounded-3xl backdrop-blur-2xl bg-white/5 border border-white/10 shadow-2xl relative z-10 animate-in fade-in zoom-in-95 duration-500">
         
         <div className="flex flex-col items-center mb-8">
           {/* NEW BRAND LOGO */}

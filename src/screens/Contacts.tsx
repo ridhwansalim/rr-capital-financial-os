@@ -167,10 +167,10 @@ export default function Contacts() {
   }
 
   return (
-    <div className="p-6 w-full max-w-4xl mx-auto text-white animate-in fade-in duration-300 pb-32">
+    <div className="p-4 sm:p-6 w-full max-w-4xl mx-auto text-white animate-in fade-in duration-300 pb-32">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold flex items-center">
-          <Users className="w-8 h-8 mr-3 text-emerald-400" />
+        <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
+          <Users className="w-7 h-7 sm:w-8 sm:h-8 mr-3 text-emerald-400" />
           Shadow Contacts
         </h1>
         <p className="text-slate-400 mt-1">Manage your offline network and map them to real accounts</p>
@@ -226,7 +226,7 @@ export default function Contacts() {
                         <h3 className="font-semibold text-slate-200">{contact.name}</h3>
                         <p className="text-xs text-slate-500">Added {new Date(contact.created_at).toLocaleDateString()}</p>
                       </div>
-                      <div className="opacity-0 group-hover:opacity-100 flex space-x-1 transition-all">
+                      <div className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex space-x-1 transition-all">
                         <button 
                           onClick={() => startEditing(contact)}
                           className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"

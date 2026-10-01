@@ -11,11 +11,11 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
 // RGB values required for Tailwind's <alpha-value> opacity support
 const ACCENT_MAP: Record<string, { 400: string, 500: string, 600: string }> = {
-  emerald: { 400: '52 211 153', 500: '16 185 129', 600: '5 150 105' },
-  blue: { 400: '96 165 250', 500: '59 130 246', 600: '37 99 235' },
-  orange: { 400: '251 146 60', 500: '249 115 22', 600: '234 88 12' },
-  yellow: { 400: '250 204 21', 500: '234 179 8', 600: '202 138 4' },
-  brown: { 400: '168 162 158', 500: '120 113 108', 600: '87 83 78' },
+  emerald: { 400: '52 211 153', 500: '16 185 129', 600: '4 120 87' },
+  blue: { 400: '96 165 250', 500: '59 130 246', 600: '29 78 216' },
+  orange: { 400: '251 146 60', 500: '249 115 22', 600: '194 65 12' },
+  yellow: { 400: '250 204 21', 500: '234 179 8', 600: '161 98 7' },
+  brown: { 400: '168 162 158', 500: '120 113 108', 600: '68 64 60' },
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
