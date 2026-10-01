@@ -23,4 +23,4 @@ Use a Supabase project you control. Review the migrations before applying them t
 
 ## Current rollout status
 
-The RR Capital production database has the hardening migrations applied, and the Telegram link webhook is deployed. The alert notification function and Telegram `setWebhook` registration remain to be completed. Receipt scanning is paused while its external image/key flow is reviewed. The public repository is a source showcase; live-service configuration and credentials are intentionally excluded.
+The RR Capital production database has the hardening migrations applied. The Telegram link webhook and alert function are deployed, while Telegram `setWebhook` registration and the database transaction event hook remain to be completed. Receipt scanning is paused while its external image/key flow is reviewed. The public repository is a source showcase; live-service configuration and credentials are intentionally excluded.

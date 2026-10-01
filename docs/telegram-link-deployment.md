@@ -1,34 +1,39 @@
-# Telegram linking deployment gate
+# Telegram linking deployment
 
 The old webhook accepted `/start <profile UUID>` and could attach an arbitrary
-Telegram chat to that profile. The replacement accepts only a short-lived,
-single-use link token issued to an authenticated RR Capital user. Keep the
-replacement webhook undeployed until all items below can be completed together.
+Telegram chat to that profile. The replacement accepts a short-lived, single-use
+link token issued to an authenticated RR Capital user.
 
-1. Apply `20260930183000_telegram_link_challenge.sql` to the intended Supabase
-   project. Run `supabase/tests/telegram_link_challenge.test.sql` against an
-   isolated copy first. The token table must remain in the unexposed `private`
-   schema; only `service_role` may consume tokens.
-2. Configure `TELEGRAM_WEBHOOK_SECRET` as a random 32–256 character value using
-   Telegram's allowed `A-Z`, `a-z`, `0-9`, `_`, `-` alphabet. Configure the
-   same value as `secret_token` when calling Telegram `setWebhook`. Keep it in
-   the Supabase Edge Function secrets, never in Vite variables or source code.
-   The function returns 503 if this secret is missing.
-3. Deploy `telegram-webhook` with JWT verification disabled, because Telegram
-   does not send a Supabase JWT. The verified secret header and single-use
-   challenge are the webhook's authentication boundaries. Register its exact
-   HTTPS URL with Telegram using `setWebhook` and the configured secret token.
-4. Settings calls `issue_telegram_link_token()` and opens the
-   `@ridhwans_fin_bot` deep link. The token is valid for ten minutes, and
-   issuing another token invalidates the previous one.
-5. Verify rejected requests with no or wrong secret, public UUID `/start`
-   messages, group chats, expired tokens, replayed tokens, and concurrent
-   issuance. Verify a valid private-chat link updates only the issuing user's
-   profile and that an alert reaches that chat. Confirm the bot's webhook
-   secret configuration after deployment; a successful Edge Function deploy
-   alone does not set Telegram's webhook.
+## Deployed state (2026-10-01)
 
-The existing manual Chat ID field still lets a user point their own alerts to
-an entered chat ID. It should be replaced or clearly separated from verified
-linking when the Settings UI is reviewed. No bot token, webhook secret, or
-service-role key belongs in this document or the repository.
+- The `telegram_link_challenge` database migration is applied to RR Capital.
+- `TELEGRAM_BOT_TOKEN` was rotated by the owner and stored as a Supabase Edge
+  Function secret.
+- A cryptographically random `TELEGRAM_WEBHOOK_SECRET` is stored as a Supabase
+  Edge Function secret.
+- The `telegram-webhook` function is deployed with JWT verification disabled.
+  It rejects requests without Telegram's secret header and only accepts
+  one-time tokens in private chats.
+- Telegram's `setWebhook` registration has not yet been completed. Until it is,
+  the bot cannot deliver link confirmations to the function.
+
+## Finish registration and verify
+
+1. Register `https://hnebvwfgsotrknxpgpmv.supabase.co/functions/v1/telegram-webhook`
+   with Telegram's `setWebhook`, using the rotated token for `@ridhwans_fin_bot`
+   and the matching `TELEGRAM_WEBHOOK_SECRET` value as `secret_token`. Enter the
+   bot token only in a local secure prompt. Never put credentials in Git or chat.
+2. Test requests with a missing or wrong secret, `/start <profile UUID>`, a
+   group chat, an expired token, and a replayed token. Each must leave profile
+   links unchanged.
+3. Issue a link token while signed in, open the bot deep link from Settings,
+   and verify only the issuing user's profile receives the private chat ID.
+   Verify issuing a second token invalidates the first.
+4. Verify alert delivery separately. The `send-alert` function is deployed
+   with a separate header secret, but the database transaction event hook is
+   not configured yet. A successful Telegram link alone does not establish
+   transaction notifications.
+
+The Settings screen labels manual Chat ID entry as an advanced option, separate
+from verified linking. No bot token, webhook secret, or service-role key belongs
+in this document or the repository.
