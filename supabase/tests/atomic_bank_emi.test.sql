@@ -83,3 +83,6 @@ BEGIN
   END IF;
 END $$;
 ROLLBACK;
+SELECT plan(1);
+SELECT pass('atomic bank-EMI SQL assertions completed without exception');
+SELECT * FROM finish();

@@ -63,3 +63,6 @@ END $$;
 ROLLBACK;
 SELECT 'PASS: forged owner/account denied, registered loan accepted, retry idempotent' AS result,
  (SELECT count(*) FROM auth.users) AS remaining_users;
+SELECT plan(1);
+SELECT pass('payment-flow SQL assertions completed without exception');
+SELECT * FROM finish();

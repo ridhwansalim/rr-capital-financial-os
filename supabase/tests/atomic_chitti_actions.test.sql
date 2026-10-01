@@ -95,3 +95,6 @@ BEGIN
   END;
 END $$;
 ROLLBACK;
+SELECT plan(1);
+SELECT pass('atomic Chitti SQL assertions completed without exception');
+SELECT * FROM finish();

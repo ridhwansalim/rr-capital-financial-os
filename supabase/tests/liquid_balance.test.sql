@@ -59,3 +59,6 @@ END $$;
 RESET ROLE;
 ROLLBACK;
 SELECT 'PASS: posting RPC blocks overdrafts, allows credit, and the client cannot complete legacy pending rows directly' AS result;
+SELECT plan(1);
+SELECT pass('liquid-balance SQL assertions completed without exception');
+SELECT * FROM finish();

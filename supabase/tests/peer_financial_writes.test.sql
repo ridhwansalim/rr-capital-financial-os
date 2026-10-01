@@ -150,3 +150,6 @@ END $$;
 RESET ROLE;
 ROLLBACK;
 SELECT 'PASS: peer writes are RPC-only, participant checks hold, merges and cancellations preserve linked history' AS result;
+SELECT plan(1);
+SELECT pass('peer financial-write SQL assertions completed without exception');
+SELECT * FROM finish();

@@ -46,3 +46,6 @@ RESET ROLE;
 ROLLBACK;
 SELECT 'PASS: direct ledger writes, foreign-account access, and history deletion denied' AS result,
  (SELECT count(*) FROM auth.users) AS remaining_users;
+SELECT plan(1);
+SELECT pass('ledger-integrity SQL assertions completed without exception');
+SELECT * FROM finish();

@@ -32,3 +32,6 @@ RESET ROLE;
 ROLLBACK;
 SELECT 'PASS: owner-only profiles, cross-user update denied, anonymous reads denied; fixtures rolled back' as result,
  (select count(*) from auth.users) as remaining_users;
+SELECT plan(1);
+SELECT pass('owner-boundary SQL assertions completed without exception');
+SELECT * FROM finish();

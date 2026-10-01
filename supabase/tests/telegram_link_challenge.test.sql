@@ -74,3 +74,6 @@ DO $$ BEGIN
 END $$;
 ROLLBACK;
 SELECT 'PASS: private, authenticated, expiring, single-use Telegram link tokens' AS result;
+SELECT plan(1);
+SELECT pass('Telegram link-challenge SQL assertions completed without exception');
+SELECT * FROM finish();

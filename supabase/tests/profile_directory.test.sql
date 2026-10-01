@@ -32,3 +32,6 @@ END $$;
 RESET ROLE;
 ROLLBACK;
 SELECT 'PASS: authenticated names visible; private profile and anonymous names hidden' AS result;
+SELECT plan(1);
+SELECT pass('profile-directory SQL assertions completed without exception');
+SELECT * FROM finish();

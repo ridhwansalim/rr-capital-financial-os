@@ -112,3 +112,6 @@ DO $$ BEGIN
 END $$;
 ROLLBACK;
 SELECT 'PASS: idempotent transaction and debt link; foreign account/debt and overpayment denied' AS result;
+SELECT plan(1);
+SELECT pass('idempotent-ledger SQL assertions completed without exception');
+SELECT * FROM finish();
