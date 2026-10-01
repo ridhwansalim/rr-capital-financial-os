@@ -42,7 +42,17 @@ serve(async (req) => {
   }
 
   const alertTables = ["obligations", "recurring_emis", "settlements"]
-  if (!alertTables.includes(payload?.table) || payload?.type !== "INSERT" || payload?.record?.status !== "PENDING_APPROVAL") {
+  const table = payload?.table
+  const eventType = payload?.type
+  const status = payload?.record?.status
+  const isNewRequest = eventType === "INSERT" && status === "PENDING_APPROVAL"
+  const responseStatuses: Record<string, string[]> = {
+    obligations: ["ACCEPTED", "DECLINED"],
+    recurring_emis: ["ACTIVE", "DECLINED"],
+    settlements: ["COMPLETED", "DECLINED"]
+  }
+  const isResponse = eventType === "UPDATE" && responseStatuses[table]?.includes(status)
+  if (!alertTables.includes(table) || (!isNewRequest && !isResponse)) {
     return new Response(null, { status: 204 })
   }
 
@@ -66,7 +76,11 @@ serve(async (req) => {
 
     if (!profile?.telegram_chat_id) return new Response(null, { status: 204 })
 
-    const message = "A new request is waiting in RR Capital. Open the app to review it."
+    const message = isNewRequest
+      ? "A new request is waiting in RR Capital. Open the app to review it."
+      : status === "DECLINED"
+        ? "A request you sent was declined. Open RR Capital to review it."
+        : "A request you sent was accepted. Open RR Capital to review it."
     const telegramResponse = await fetch(`https://api.telegram.org/bot${telegramBotToken}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

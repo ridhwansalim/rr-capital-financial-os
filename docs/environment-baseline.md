@@ -1,22 +1,31 @@
 # Environment Baseline
 
-Recorded 2026-09-29 from the local checkout and Supabase project inventory.
+Current environment map, rechecked 2026-10-01. Financial OS v2 and RR Capital are separate Supabase projects with divergent database schemas. RR Capital is the production target; the local browser app still points to v2 for testing.
 
-> Historical baseline: this page records the 2026-09-29 starting state. The user later authorized and verified a full test-data reset in both Supabase projects. As of 2026-10-01, this checkout contains eight local hardening migrations and seven SQL test files in `supabase/`. The newer idempotent posting, Telegram link challenge, and liquid-balance migrations remain local and are not yet verified in production. Do not use the original status table below as a current deployment report.
+| Environment | Supabase project | Project ref | Current state |
+| --- | --- | --- | --- |
+| Local app/test target | Financial OS v2 | `guvkfuxniprtqdsqlqtx` | Active and healthy. Local `.env.local` points here. Its schema is older and materially different from RR Capital. |
+| Production | RR Capital | `hnebvwfgsotrknxpgpmv` | Active and healthy. Supabase CLI link metadata targets this project; the full checked-in migration chain is aligned through `20261002030000`. |
 
-| Environment | Source checkout | Supabase project | Project ref | Status |
-| --- | --- | --- | --- | --- |
-| Local development / v2 test | `E:\RR Financial Manager\financial-os`, branch `master`, HEAD `414170e` (`Stop displaying emails in user search results`) | Financial OS v2 | `guvkfuxniprtqdsqlqtx` | Supabase project inventory reports inactive; `.env.local` and local CLI link metadata both identify this ref. |
-| Production | Same application source lineage; production deployment commit not yet verified | RR Capital | `hnebvwfgsotrknxpgpmv` | Project inventory reports active healthy. Do not change local `.env.local` to this ref. |
+## Data reset and current data
 
-## Source control and secrets
+The owner authorized deleting all test users, profiles, and financial records in both projects. The resets were verified. Financial OS v2 currently has zero Auth users, profiles, contacts, accounts, transactions, obligations, obligation payments, recurring EMIs, Chittis, and storage objects. RR Capital has one owner profile, with zero accounts and zero transactions; do not remove the active owner profile or reset production again.
 
-The source directory has Git metadata and local history. No Git remote is configured, so private remote backup/version control is not yet established. `.env*`, Supabase CLI `.temp/` state, and database backup formats are ignored. Never commit credentials, service-role keys, database dumps, or user data.
+## Schema and migration boundaries
 
-## Database baseline status
+The root `supabase/migrations` chain is the current RR Capital schema and has been applied through `20261002030000`. Financial OS v2 has a divergent legacy schema and its own migration history; do not push the RR Capital migration chain to v2 or use v2 as proof that a production migration is safe. V2-only migration records belong in `supabase/v2-migrations/` and must be applied only to `guvkfuxniprtqdsqlqtx`.
 
-No `supabase/migrations` directory or verified migration history is present in the checkout. Read-only Supabase API calls to list migrations and inspect the Financial OS v2 schema timed out on 2026-09-29. RR Capital has not been inspected or changed in this continuation. A reviewed schema/policies/grants/functions baseline, secure backup, and restore verification remain prerequisites before any production changes.
+RR Capital's CLI link and the local app's `.env.local` intentionally point to different projects. Before any CLI migration or Edge Function deployment, verify the target project ref explicitly. Never print or copy `.env.local`, API keys, service-role credentials, database passwords, Telegram tokens, webhook secrets, recovery snapshots, or user data into logs or Git.
 
-## Safety gate
+## Verified security state
 
-Perry remains disconnected from finance data. Do not deploy migrations or connect Perry until schema and policy behavior is captured, backup restore is verified on a safe target, access-control fixes pass staging tests, and production checks pass. Preserve Financial OS v2 data; do not restore over it without first verifying and preserving its contents.
+- RR Capital migration history matches the checked-in chain through `20261002030000_notify_creator_on_request_response.sql`; `supabase db push --linked --dry-run --skip-vault` reported no pending migration.
+- Financial OS v2 balance views now use invoker security. Its `obligation_payments` table grants authenticated reads only for rows whose parent obligation includes the current user. Supabase's v2 security advisor currently returns no findings.
+- The v2 performance advisor still flags missing foreign-key indexes, auth-policy init-plan work, and multiple permissive transaction policies. The legacy transaction table currently has no rows. Review its old transaction edit policy against the current peer request flow before changing it.
+- RR Capital still has informational private-table RLS notices, a managed `pg_net` placement warning, and the Supabase Pro-plan leaked-password setting. See `database-recovery.md` for verified details and current limits.
+
+## Source control and recovery
+
+The public source repository is `https://github.com/ridhwansalim/rr-capital-financial-os`. `.env*`, Supabase CLI `.temp/` state, and database backup formats are ignored. Keep all credentials, service-role keys, database dumps, and user data out of source control. Local recovery snapshots are retained under restricted ACLs; their contents have not been modified.
+
+A full isolated restore rehearsal remains outstanding. Schema and migration checks do not prove backup recoverability, phone/browser behavior, every Telegram delivery, or that the system is risk-free.
