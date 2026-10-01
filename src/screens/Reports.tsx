@@ -118,7 +118,13 @@ export default function Reports() {
       const stem = `rr-capital-report-${from}-to-${to}`
       if (kind === 'csv') {
         const keys = Object.keys(rows[0] || { Date: '', Type: '', Description: '', Category: '', Amount: 0, Fee: 0, 'Running net': 0 })
-        const quote = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`
+        const quote = (value: unknown) => {
+          const raw = String(value ?? '')
+          // Spreadsheet applications may evaluate untrusted labels/descriptions
+          // as formulas even when they are quoted as CSV fields.
+          const safe = typeof value === 'string' && /^[\u0000-\u0020\u00a0\ufeff]*[=+\-@]/.test(raw) ? `'${raw}` : raw
+          return `"${safe.replace(/"/g, '""')}"`
+        }
         const csv = [keys.map(quote).join(','), ...rows.map(row => keys.map(key => quote(row[key as keyof typeof row])).join(','))].join('\r\n')
         await exportFile(new File([csv], `${stem}.csv`, { type: 'text/csv;charset=utf-8' }))
       } else if (kind === 'xlsx') {
