@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Landmark, Plus, IndianRupee, Calendar, Trophy, ArrowUpRight, ArrowDownRight, Wallet, Loader2, CheckCircle2, History, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useModalBack } from '../lib/useModalBack'
 
 interface Account {
   id: string
@@ -81,7 +82,11 @@ export default function Chittis() {
     }
   }
 
-  const handleCloseModal = () => {
+  const handleCloseModal = (discard = false) => {
+    const dirty = editingChitti
+      ? newName !== editingChitti.name || newPot !== String(editingChitti.total_pot) || newDuration !== String(editingChitti.duration_months) || newStartDate !== editingChitti.start_date.split('T')[0]
+      : Boolean(newName || newPot || newDuration)
+    if (!discard && dirty && !window.confirm('Discard this Chitti plan and close the form?')) return
     setIsNewModalOpen(false)
     setEditingChitti(null)
     setNewName('')
@@ -89,6 +94,13 @@ export default function Chittis() {
     setNewDuration('')
     setNewStartDate(new Date().toISOString().split('T')[0])
   }
+
+  const chittiFormDirty = editingChitti
+    ? newName !== editingChitti.name || newPot !== String(editingChitti.total_pot) || newDuration !== String(editingChitti.duration_months) || newStartDate !== editingChitti.start_date.split('T')[0]
+    : Boolean(newName || newPot || newDuration)
+  useModalBack(isNewModalOpen || !!editingChitti, () => handleCloseModal(true), chittiFormDirty, 'Discard this Chitti plan and close the form?')
+  useModalBack(!!claimModalData, () => setClaimModalData(null), Boolean(claimMonth || claimFee || claimAccountId), 'Discard this Chitti claim?')
+  useModalBack(!!payModalData, () => setPayModalData(null), payDate !== new Date().toISOString().split('T')[0], 'Discard this installment form?')
 
   // --- ACTIONS ---
 
@@ -128,7 +140,7 @@ export default function Chittis() {
         if (error) throw error
       }
 
-      handleCloseModal()
+      handleCloseModal(true)
       fetchData()
     } catch (err) {
       alert("Failed to save Chitti plan.")
@@ -424,7 +436,7 @@ export default function Chittis() {
               )}
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={handleCloseModal} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
+              <button type="button" onClick={() => handleCloseModal()} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
                 <button type="submit" disabled={isSubmitting} className="flex-1 flex justify-center py-3 bg-accent-500 hover:bg-accent-600 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(var(--accent-500),0.3)] disabled:opacity-50">
                   {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : editingChitti ? 'Update Plan' : 'Create Plan'}
                 </button>
@@ -475,7 +487,7 @@ export default function Chittis() {
               )}
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => { claimRequestId.current = null; setClaimModalData(null) }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
+                <button type="button" onClick={() => { if ((claimMonth || claimFee || claimAccountId) && !window.confirm('Discard this Chitti claim?')) return; claimRequestId.current = null; setClaimModalData(null) }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
                 <button type="submit" disabled={isSubmitting} className="flex-1 flex justify-center py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50">
                   {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Log Payout'}
                 </button>
@@ -534,7 +546,7 @@ export default function Chittis() {
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => { payRequestId.current = null; setPayModalData(null) }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
+                <button type="button" onClick={() => { if (payDate !== new Date().toISOString().split('T')[0] && !window.confirm('Discard this installment form?')) return; payRequestId.current = null; setPayModalData(null) }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
                 <button type="submit" disabled={isSubmitting} className="flex-1 flex justify-center py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(244,63,94,0.3)] disabled:opacity-50">
                   {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Log Payment'}
                 </button>

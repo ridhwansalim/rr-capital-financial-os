@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Settings as SettingsIcon, Search, User, Key, Lock, ShieldAlert, RotateCcw, Save, ChevronDown, ChevronUp, Trash2, Loader2, Palette, Bot, Bell, Shield, MessageSquare, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useTheme } from '../components/ThemeProvider'
+import { useModalBack } from '../lib/useModalBack'
 
 // WebAuthn Helper to encode hardware keys
 const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
@@ -9,6 +11,7 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
 }
 
 export default function Settings() {
+  const navigate = useNavigate()
   const telegramBotUsername = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'ridhwans_fin_bot').replace(/^@/, '')
   const { setTheme } = useTheme()
   const [searchQuery, setSearchQuery] = useState('')
@@ -87,6 +90,29 @@ export default function Settings() {
   }, [])
 
   const isProfileModified = JSON.stringify({ ...originalProfile, telegram_chat_id: '' }) !== JSON.stringify({ ...draftProfile, telegram_chat_id: '' })
+
+  useModalBack(isProfileModified, () => navigate(-1), true, 'You have unsaved settings. Leave and discard them?')
+
+  useEffect(() => {
+    if (!isProfileModified) return
+    const guardInternalNavigation = (event: MouseEvent) => {
+      if (!(event.target instanceof Element)) return
+      const anchor = event.target.closest('a[href]') as HTMLAnchorElement | null
+      if (!anchor || anchor.target || anchor.hasAttribute('download')) return
+      const target = new URL(anchor.href, window.location.href)
+      if (target.origin !== window.location.origin) return
+      if (!window.confirm('You have unsaved settings. Leave and discard them?')) {
+        event.preventDefault()
+        event.stopImmediatePropagation()
+        return
+      }
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      navigate(`${target.pathname}${target.search}${target.hash}`)
+    }
+    document.addEventListener('click', guardInternalNavigation, true)
+    return () => document.removeEventListener('click', guardInternalNavigation, true)
+  }, [isProfileModified, navigate])
 
   useEffect(() => {
     if (!isProfileModified) return

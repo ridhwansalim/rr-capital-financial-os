@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, IndianRupee, Loader2, CalendarDays, X, Wallet, Trash2, Search, Users, User, UserPlus, ArrowUpRight, ArrowRightLeft, History } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useModalBack } from '../lib/useModalBack'
 import { format, differenceInMonths } from 'date-fns'
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/dist/style.css'
@@ -50,7 +51,6 @@ export default function Calendar() {
   const [processingFee, setProcessingFee] = useState('')
   const [startDate, setStartDate] = useState<Date | undefined>(new Date())
   const [endDate, setEndDate] = useState<Date | undefined>()
-  
   const [payAccountId, setPayAccountId] = useState('')
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0])
 
@@ -65,6 +65,9 @@ export default function Calendar() {
   const [isStartPopoverOpen, setIsStartPopoverOpen] = useState(false)
   const [isEndPopoverOpen, setIsEndPopoverOpen] = useState(false)
   const popoverRef = useRef<HTMLDivElement>(null)
+  const emiFormDirty = Boolean(newEmi.name || newEmi.amount || principal || processingFee || selectedEntity || newShadowName)
+  useModalBack(isAddModalOpen, () => setIsAddModalOpen(false), emiFormDirty, 'Discard this recurring payment form?')
+  useModalBack(!!payEmiData, () => setPayEmiData(null), Boolean(payAccountId || payDate !== new Date().toISOString().split('T')[0]), 'Discard this payment form?')
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -439,7 +442,7 @@ export default function Calendar() {
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
           <div className="w-full max-w-md p-6 rounded-3xl backdrop-blur-2xl bg-slate-900 border border-white/20 shadow-2xl relative animate-in zoom-in-95 text-white max-h-[90vh] overflow-y-auto" ref={popoverRef}>
-            <button onClick={() => setIsAddModalOpen(false)} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10"><X className="w-5 h-5" /></button>
+            <button onClick={() => { if (!emiFormDirty || window.confirm('Discard this recurring payment form?')) setIsAddModalOpen(false) }} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10"><X className="w-5 h-5" /></button>
             
             <div className="flex items-center justify-center mb-6">
               <div className="p-3 bg-indigo-500/20 rounded-full mr-3 border border-indigo-500/20"><CalendarDays className="w-5 h-5 text-indigo-400" /></div>
@@ -590,7 +593,7 @@ export default function Calendar() {
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => { bankPaymentRequestId.current = null; peerPaymentRequestId.current = null; setPayEmiData(null) }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
+                <button type="button" onClick={() => { if (payAccountId || payDate !== new Date().toISOString().split('T')[0]) { if (!window.confirm('Discard this payment form?')) return } bankPaymentRequestId.current = null; peerPaymentRequestId.current = null; setPayEmiData(null) }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
                 <button type="submit" disabled={isSubmitting} className="flex-1 flex justify-center py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] disabled:opacity-50">
                   {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Log Payment'}
                 </button>

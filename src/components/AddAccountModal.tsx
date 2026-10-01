@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { X, Landmark, Wallet, CreditCard, IndianRupee, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useModalBack } from '../lib/useModalBack'
 
 interface AddAccountModalProps {
   isOpen: boolean
@@ -14,8 +15,10 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
   const [type, setType] = useState<'bank' | 'cash' | 'credit_card'>('bank')
   const [creditLimit, setCreditLimit] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  useModalBack(isOpen, () => { setName(''); setType('bank'); setCreditLimit(''); onClose() }, Boolean(name || creditLimit), 'Discard this account and close the dialog?')
 
-  const handleClose = () => {
+  const handleClose = (discard = false) => {
+    if (!discard && (name || creditLimit) && !window.confirm('Discard this account and close the dialog?')) return
     setName('')
     setType('bank')
     setCreditLimit('')
@@ -41,7 +44,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
       const { error } = await supabase.from('accounts').insert(payload)
       if (error) throw error
 
-      handleClose()
+      handleClose(true)
       onSuccess()
     } catch (error: any) {
       console.error('Error creating account:', error.message)
@@ -58,7 +61,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
       <div className="w-full max-w-md p-6 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl relative animate-in zoom-in-95 duration-200 text-white">
         
         <button 
-          onClick={handleClose} 
+          onClick={() => handleClose()}
           className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10"
         >
           <X className="w-5 h-5" />

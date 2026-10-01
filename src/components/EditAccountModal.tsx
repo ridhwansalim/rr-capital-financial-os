@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { X, IndianRupee, Loader2, Trash2, AlertTriangle, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useModalBack } from '../lib/useModalBack'
 
 interface Account {
   id: string
@@ -22,6 +23,8 @@ export default function EditAccountModal({ isOpen, onClose, onSuccess, account }
   
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
+  const isDirty = Boolean(account && (name !== account.name || creditLimit !== (account.credit_limit ? account.credit_limit.toString() : '')))
+  useModalBack(isOpen, onClose, isDirty, 'Discard your account changes and close the dialog?')
 
   // Pre-fill the form when the modal opens with a specific account
   useEffect(() => {
@@ -32,7 +35,8 @@ export default function EditAccountModal({ isOpen, onClose, onSuccess, account }
     }
   }, [account, isOpen])
 
-  const handleClose = () => {
+  const handleClose = (discard = false) => {
+    if (!discard && isDirty && !window.confirm('Discard your account changes and close the dialog?')) return
     setIsConfirmingDelete(false)
     onClose()
   }
@@ -55,7 +59,7 @@ export default function EditAccountModal({ isOpen, onClose, onSuccess, account }
 
       if (error) throw error
 
-      handleClose()
+      handleClose(true)
       onSuccess()
     } catch (error: any) {
       console.error('Error updating account:', error.message)
@@ -84,7 +88,7 @@ export default function EditAccountModal({ isOpen, onClose, onSuccess, account }
         throw error
       }
 
-      handleClose()
+      handleClose(true)
       onSuccess()
     } catch (error: any) {
       console.error('Error deleting account:', error.message)
@@ -102,7 +106,7 @@ export default function EditAccountModal({ isOpen, onClose, onSuccess, account }
       <div className="w-full max-w-md p-6 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl relative animate-in zoom-in-95 duration-200 text-white">
         
         <button 
-          onClick={handleClose} 
+          onClick={() => handleClose()}
           className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10"
         >
           <X className="w-5 h-5" />

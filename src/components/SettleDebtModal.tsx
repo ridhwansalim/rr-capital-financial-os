@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { X, IndianRupee, Loader2, Wallet, ArrowUpRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useModalBack } from '../lib/useModalBack'
 
 interface SettleDebtModalProps {
   isOpen: boolean
@@ -14,6 +15,12 @@ export default function SettleDebtModal({ isOpen, onClose, obligation }: SettleD
   const [selectedAccount, setSelectedAccount] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const requestId = useRef<string | null>(null)
+  const isDirty = Boolean(amount && obligation && amount !== String(obligation.amount))
+  useModalBack(isOpen, onClose, isDirty, 'Discard this settlement request?')
+  const handleClose = () => {
+    if (isDirty && !window.confirm('Discard this settlement request?')) return
+    onClose()
+  }
 
   useEffect(() => {
     if (isOpen && obligation) {
@@ -73,7 +80,7 @@ export default function SettleDebtModal({ isOpen, onClose, obligation }: SettleD
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
       <div className="w-full max-w-sm p-6 rounded-3xl backdrop-blur-2xl bg-slate-900 border border-white/20 shadow-2xl relative animate-in zoom-in-95 text-white">
-        <button onClick={onClose} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10"><X className="w-5 h-5" /></button>
+        <button onClick={handleClose} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10"><X className="w-5 h-5" /></button>
         
         <div className="flex flex-col items-center mb-6">
           <div className="p-3 bg-emerald-500/20 rounded-full mb-3 border border-emerald-500/20"><ArrowUpRight className="w-6 h-6 text-emerald-400" /></div>
