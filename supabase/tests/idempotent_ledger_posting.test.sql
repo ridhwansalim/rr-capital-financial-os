@@ -27,6 +27,7 @@ DECLARE
   first_id uuid;
   retry_id uuid;
   new_tx_id uuid;
+  new_contact_id uuid;
 BEGIN
   first_id := public.post_ledger_transaction(request_id,a,NULL,20,0,'Payment',posted_at,NULL,NULL,debt);
   retry_id := public.post_ledger_transaction(request_id,a,NULL,20,0,'Payment',posted_at,NULL,NULL,debt);
@@ -40,14 +41,12 @@ BEGIN
   new_tx_id := public.post_ledger_transaction(
     gen_random_uuid(),a,NULL,1,0,'New contact',posted_at,NULL,NULL,NULL,'Queued Contact'
   );
-  UPDATE public.contacts SET name='Renamed Contact'
-    WHERE id=(SELECT contact_id FROM public.transactions WHERE id=new_tx_id);
+  SELECT t.contact_id INTO new_contact_id FROM public.transactions t WHERE t.id=new_tx_id;
+  UPDATE public.contacts SET name='Renamed Contact' WHERE id=new_contact_id;
   -- Contact merging is allowed to change only the label fields on a posted
   -- financial entry. The original request must still be safe to retry.
-  UPDATE public.transactions
-     SET contact_id=NULL,
-         tagged_profile_id='00000000-0000-4000-a000-000000000022'
-   WHERE id=new_tx_id;
+  PERFORM public.merge_shadow_contact(new_contact_id,
+    '00000000-0000-4000-a000-000000000022');
   -- Reuse the exact request ID found on the first posted row.
   retry_id := public.post_ledger_transaction(
     (SELECT client_request_id FROM public.transactions WHERE id=new_tx_id),
@@ -56,7 +55,10 @@ BEGIN
   IF new_tx_id IS DISTINCT FROM retry_id OR
      (SELECT count(*) FROM public.contacts
        WHERE owner_id='00000000-0000-4000-a000-000000000021'
-         AND name='Renamed Contact') <> 1 THEN
+         AND name='Renamed Contact') <> 0 OR
+     NOT EXISTS (SELECT 1 FROM public.transactions
+       WHERE id=new_tx_id AND contact_id IS NULL
+         AND tagged_profile_id='00000000-0000-4000-a000-000000000022') THEN
     RAISE EXCEPTION 'New contact retry duplicated a record';
   END IF;
   BEGIN
@@ -92,13 +94,12 @@ BEGIN
   IF (SELECT count(*) FROM public.transactions WHERE owner_id='00000000-0000-4000-a000-000000000021') <> 3 THEN
     RAISE EXCEPTION 'Rejected calls posted a transaction';
   END IF;
-  INSERT INTO public.transactions(owner_id, initiator_profile_id, from_account_id,
-                                  amount, status, description)
-    VALUES ('00000000-0000-4000-a000-000000000021',
-            '00000000-0000-4000-a000-000000000021',a,1,'COMPLETED','Legacy entry');
   BEGIN
-    UPDATE public.transactions SET amount=2 WHERE description='Legacy entry';
-    RAISE EXCEPTION 'Legacy completed entry was editable';
+    INSERT INTO public.transactions(owner_id, initiator_profile_id, from_account_id,
+                                    amount, status, description)
+      VALUES ('00000000-0000-4000-a000-000000000021',
+              '00000000-0000-4000-a000-000000000021',a,1,'COMPLETED','Legacy entry');
+    RAISE EXCEPTION 'Direct non-idempotent ledger insert succeeded';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
 END $$;

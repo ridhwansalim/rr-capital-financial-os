@@ -33,13 +33,9 @@ DO $$ BEGIN
   VALUES ('00000000-0000-4000-a000-000000000011',
     '00000000-0000-4000-a000-000000000011',
     '10000000-0000-4000-a000-000000000011',-1,'COMPLETED');
-  RAISE EXCEPTION 'Negative amount accepted';
- EXCEPTION WHEN check_violation THEN NULL;
+  RAISE EXCEPTION 'Direct transaction insert was allowed';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
  END;
- INSERT INTO public.transactions(owner_id,initiator_profile_id,from_account_id,amount,status)
- VALUES ('00000000-0000-4000-a000-000000000011',
-   '00000000-0000-4000-a000-000000000011',
-   '10000000-0000-4000-a000-000000000011',10,'COMPLETED');
  BEGIN
   DELETE FROM public.accounts WHERE id='10000000-0000-4000-a000-000000000011';
   RAISE EXCEPTION 'Account with ledger history was deleted';
@@ -48,5 +44,5 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 ROLLBACK;
-SELECT 'PASS: foreign account, forged initiator, negative amount and history deletion denied' AS result,
+SELECT 'PASS: direct ledger writes, foreign-account access, and history deletion denied' AS result,
  (SELECT count(*) FROM auth.users) AS remaining_users;

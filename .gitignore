@@ -27,6 +27,7 @@ dist-ssr
 
 # Supabase CLI local project state
 .temp/
+supabase/.branches/
 
 dev-dist/
 

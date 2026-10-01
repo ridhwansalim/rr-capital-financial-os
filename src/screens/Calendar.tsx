@@ -227,8 +227,13 @@ export default function Calendar() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Cancel this recurring payment?')) return
-    await supabase.from('recurring_emis').delete().eq('id', id)
-    fetchEngineData()
+    try {
+      const { error } = await supabase.rpc('cancel_owned_emi', { p_emi_id: id })
+      if (error) throw error
+      fetchEngineData()
+    } catch (err: any) {
+      alert(`Unable to cancel this recurring payment: ${err.message}`)
+    }
   }
 
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()

@@ -130,29 +130,11 @@ export default function Contacts() {
     setIsProcessing(true)
 
     try {
-      // A. Re-assign all transactions to the real profile
-      await supabase
-        .from('transactions')
-        .update({ tagged_profile_id: profileId, contact_id: null })
-        .eq('contact_id', mergingContact.id)
-
-      // B. Re-assign obligations safely
-      try {
-        await supabase
-          .from('obligations')
-          .update({ profile_id: profileId, contact_id: null })
-          .eq('contact_id', mergingContact.id)
-      } catch (obsError) {
-        console.warn('Obligations update skipped or failed:', obsError)
-      }
-
-      // C. Delete the shadow contact
-      const { error: deleteError } = await supabase
-        .from('contacts')
-        .delete()
-        .eq('id', mergingContact.id)
-
-      if (deleteError) throw deleteError
+      const { error } = await supabase.rpc('merge_shadow_contact', {
+        p_contact_id: mergingContact.id,
+        p_profile_id: profileId
+      })
+      if (error) throw error
 
       alert('Contact mapped and history merged successfully!')
       setMergingContact(null)

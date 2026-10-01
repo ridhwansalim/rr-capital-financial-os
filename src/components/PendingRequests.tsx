@@ -85,8 +85,9 @@ export default function PendingRequests() {
         const { error } = await supabase.rpc('decline_settlement', { p_settlement_id: id, p_reason: reason })
         if (error) throw error
       } else {
-        const table = category === 'debt' ? 'obligations' : 'recurring_emis'
-        const { error } = await supabase.from(table).update({ status: 'DECLINED', decline_reason: reason }).eq('id', id)
+        const rpcName = category === 'debt' ? 'decline_p2p_obligation' : 'decline_p2p_emi'
+        const idParam = category === 'debt' ? 'p_obligation_id' : 'p_emi_id'
+        const { error } = await supabase.rpc(rpcName, { [idParam]: id, p_reason: reason })
         if (error) throw error
       }
       setRequests(requests.filter(req => !(req.id === id && req.req_category === category)))
@@ -130,8 +131,9 @@ export default function PendingRequests() {
         const { error } = await supabase.rpc('dismiss_declined_settlement', { p_settlement_id: id })
         if (error) throw error
       } else {
-        const table = category === 'debt' ? 'obligations' : 'recurring_emis'
-        const { error } = await supabase.from(table).update({ status: 'CANCELED' }).eq('id', id)
+        const rpcName = category === 'debt' ? 'dismiss_declined_obligation' : 'dismiss_declined_emi'
+        const idParam = category === 'debt' ? 'p_obligation_id' : 'p_emi_id'
+        const { error } = await supabase.rpc(rpcName, { [idParam]: id })
         if (error) throw error
       }
       setDeclinedAlerts(declinedAlerts.filter(req => !(req.id === id && req.req_category === category)))
