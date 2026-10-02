@@ -72,8 +72,8 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="w-full max-w-md p-6 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl relative animate-in zoom-in-95 duration-200 text-white">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto overscroll-contain p-3 pb-[calc(5.75rem+env(safe-area-inset-bottom))] bg-black/60 backdrop-blur-md animate-in fade-in duration-200 sm:p-4 sm:pb-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="add-account-title" className="relative my-auto w-full max-w-md max-h-[calc(100vh-7rem)] overflow-y-auto overscroll-contain p-5 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl animate-in zoom-in-95 duration-200 text-white sm:max-h-[calc(100vh-2rem)] sm:p-6">
         
         <button 
           onClick={() => handleClose()}
@@ -82,7 +82,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
           <X className="w-5 h-5" />
         </button>
 
-        <h2 className="text-xl font-bold mb-6 text-center">Add New Account</h2>
+        <h2 id="add-account-title" className="text-xl font-bold mb-6 text-center">Add New Account</h2>
 
         <form onSubmit={handleSubmit} className="flex flex-col space-y-6">
           
