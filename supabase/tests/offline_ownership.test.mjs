@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { cacheForOwner, offlineAccountChoices, visibleOfflineItems } from '../../src/lib/offlineOwnership.ts'
+import { cacheForOwner, canSyncOfflineItem, offlineAccountChoices, visibleOfflineItems } from '../../src/lib/offlineOwnership.ts'
 import { ensureOfflineRequestId } from '../../src/lib/offlineRequestId.ts'
 import { discardFailedOutboxItem } from '../../src/lib/offlineQueueActions.ts'
 
@@ -13,6 +13,14 @@ test('offline queue hides previous owners and already completed records', () => 
   assert.deepEqual(visibleOfflineItems(records, 'family'), [records[1]])
   assert.deepEqual(visibleOfflineItems(records, null), [])
   assert.deepEqual(visibleOfflineItems(undefined, 'ridhu'), [])
+})
+
+test('offline sync stops when the active session does not own the queued item', () => {
+  const item = { owner_id: 'ridhu', sync_status: 'pending' }
+  assert.equal(canSyncOfflineItem(item, 'ridhu'), true)
+  assert.equal(canSyncOfflineItem(item, 'family'), false)
+  assert.equal(canSyncOfflineItem(item, null), false)
+  assert.equal(canSyncOfflineItem({ ...item, sync_status: 'failed' }, 'ridhu'), false)
 })
 
 test('offline account labels are used only for the matching signed-in owner', () => {

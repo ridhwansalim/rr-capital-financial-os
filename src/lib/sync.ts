@@ -2,6 +2,7 @@ import { localDB, type LocalTransaction } from './db'
 import { supabase } from './supabase'
 import { ensureOfflineRequestId } from './offlineRequestId'
 import { discardFailedOutboxItem as discardFailedItem } from './offlineQueueActions'
+import { canSyncOfflineItem } from './offlineOwnership'
 
 let activeSync: Promise<void> | null = null
 
@@ -33,7 +34,13 @@ async function runSync() {
 
     for (const txn of pending) {
       // A shared browser can have pending entries for a different login.
-      if (txn.owner_id !== user.id || txn.id === undefined) continue
+      if (!canSyncOfflineItem(txn, user.id) || txn.id === undefined) continue
+
+      // The account can change while this loop is running in another tab.
+      // Stop before sending anything under a different session; the database
+      // remains the final owner check for the narrow race after this read.
+      const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError || !canSyncOfflineItem(txn, currentSession?.user.id)) return
 
       // Assign legacy IDs atomically: two tabs must not create different IDs
       // for one queued transaction, or the server would correctly treat them
@@ -41,6 +48,9 @@ async function runSync() {
       const claimed = await ensureOfflineRequestId<LocalTransaction>(localDB, txn.id, user.id)
       if (!claimed?.request_id) continue
       const requestId = claimed.request_id
+
+      const { data: { session: sendSession }, error: sendSessionError } = await supabase.auth.getSession()
+      if (sendSessionError || !canSyncOfflineItem(claimed, sendSession?.user.id)) return
 
       try {
         const { error } = await postQueuedTransaction({ ...claimed, request_id: requestId })

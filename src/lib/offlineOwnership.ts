@@ -1,5 +1,12 @@
 type OwnedRecord = { owner_id: string }
 
+export function canSyncOfflineItem<T extends OwnedRecord & { sync_status: string }>(
+  item: T,
+  authenticatedOwnerId: string | null | undefined
+): boolean {
+  return Boolean(authenticatedOwnerId && item.owner_id === authenticatedOwnerId && item.sync_status === 'pending')
+}
+
 export type OfflineAccountChoice = { id: string; name: string; type: string; opening_date?: string }
 
 export function offlineAccountChoices<T extends OfflineAccountChoice>(accounts: T[]): OfflineAccountChoice[] {
