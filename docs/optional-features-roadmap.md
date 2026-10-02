@@ -110,3 +110,11 @@ Ship one phase at a time, with a reviewed migration if persistence changes, owne
 2. Budgets may optionally roll over unused amounts. Monthly reset is the default; rollover is an opt-in setting per envelope.
 3. The financial score is a private, transparent wellness indicator and makes no credit-score claim. Review its factors and weights with synthetic examples before coding.
 4. Later module-specific choices (budget period, goal contribution method, shopping-list details, calculator set, and account due/threshold notices) will be finalized at the start of each phase.
+
+## Production release — 2026-10-02
+
+This release status supersedes earlier local-only notes. The reviewed XPENC-inspired UI and modules were pushed to the public GitHub repository in commit `7a1eb4c2e03502dea613140a07e787b9c2c4fa43` and Vercel reports the matching production deployment READY at `financial-os-orcin-ten.vercel.app`.
+
+RR Capital only (`hnebvwfgsotrknxpgpmv`) received the eight reviewed migrations: profile/category write-boundary hardening; optional flags and budgets; transaction templates; savings goals; shopping lists; account health; and wellness-score exclusions. Its ledger now has 51 applied migrations. Perry migrations and Financial OS v2 were excluded. Postflight confirmed every new feature table has RLS and policies; all newly created feature tables are empty, so each module remains off until its owner enables it in Settings. The score exclusion RPC is invoker-rights and executable only by authenticated users; it derives its scope from the caller.
+
+Verification for this release: clean core-only replay passed 52 migrations, 30 SQL files, and 149 pgTAP assertions; all nine Node suites passed (69 tests); TypeScript/Vite/PWA production build passed; lint exits 0 with existing warnings. Anonymous production browser smoke loaded the invitation-only sign-in page, confirmed a direct `/budgets` request redirects to `/auth`, and confirmed the 390px page has no horizontal overflow or browser console errors. An authenticated production workflow and real-device/PWA refresh check remain outstanding. Build advisories for the >500 KB main chunk and deprecated PWA option remain; leaked-password protection is unavailable on the current Supabase Free plan.
