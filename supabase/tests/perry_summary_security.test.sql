@@ -23,6 +23,12 @@ LANGUAGE plpgsql AS $$ BEGIN
   RETURN false;
 EXCEPTION WHEN unique_violation THEN RETURN true;
 END $$;
+CREATE FUNCTION pg_temp.personal_summary_denied_for_non_owner() RETURNS boolean
+LANGUAGE plpgsql AS $$ BEGIN
+  PERFORM public.personal_summary();
+  RETURN false;
+EXCEPTION WHEN insufficient_privilege THEN RETURN true;
+END $$;
 
 INSERT INTO auth.users(id, email, raw_user_meta_data) VALUES
   ('00000000-0000-4000-a000-000000000081', 'perry-owner@example.invalid', '{}'),
@@ -221,21 +227,22 @@ RESET ROLE;
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-a000-000000000082', true);
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-a000-000000000082","role":"authenticated"}', true);
-SELECT is(public.personal_summary()->'ledger'->>'completed_personal_income_total', '999',
-          'a second authenticated user gets their own summary and never the first owner data');
-SELECT ok(position('synthetic bank' in public.personal_summary()::text) = 0,
-          'a second authenticated user cannot see the first owner account');
+SELECT ok(pg_temp.personal_summary_denied_for_non_owner(),
+          'a different authenticated user is denied by the private owner pin');
+SELECT ok(NOT has_function_privilege('anon','public.personal_summary()','EXECUTE'),
+          'the fixed summary RPC remains unavailable to anonymous callers');
 RESET ROLE;
 
-SELECT ok(position('session_user = ''perry_reader''' in
+SELECT ok(position('private.require_user()' in
               pg_get_functiondef('private.personal_summary()'::regprocedure)) > 0
-      AND position('current_setting(''role'', true) = ''perry_reader''' in
+      AND position('private.assert_perry_owner(v_user)' in
               pg_get_functiondef('private.personal_summary()'::regprocedure)) > 0
+      AND position('owner_id = p_subject' in
+              pg_get_functiondef('private.assert_perry_owner(uuid)'::regprocedure)) > 0
       AND position('owner_id = v_user' in
               pg_get_functiondef('private.personal_summary()'::regprocedure)) > 0
-      AND position('session_user = ''perry_reader''' in
-              pg_get_functiondef('private.assert_perry_owner(uuid)'::regprocedure)) > 0,
-      'Perry identity is selected from the verified auth subject and checked against the pinned owner for direct login and SET ROLE callers');
+      AND NOT has_function_privilege('anon','public.personal_summary()','EXECUTE'),
+      'summary derives auth.uid(), checks the private owner pin, and has a fixed-search-path boundary');
 SELECT ok(NOT has_table_privilege('perry_reader','public.accounts','SELECT')
       AND NOT has_table_privilege('perry_reader','public.transactions','SELECT')
       AND NOT has_table_privilege('perry_reader','public.transaction_categories','SELECT')
@@ -244,27 +251,19 @@ SELECT ok(NOT has_table_privilege('perry_reader','public.accounts','SELECT')
       AND NOT has_table_privilege('perry_reader','public.accounts','DELETE')
       AND NOT has_table_privilege('perry_reader','private.perry_owner_config','SELECT'),
       'Perry role has no direct table reads, writes, or owner-config access');
-SELECT is((SELECT count(*)::integer FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-           WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')
-             AND n.nspname NOT LIKE 'pg_temp_%'
-             AND n.nspname NOT LIKE 'pg_toast_temp_%'
-             AND has_schema_privilege('perry_reader',n.oid,'USAGE')
-             AND has_function_privilege('perry_reader',p.oid,'EXECUTE')), 1,
-          'Perry login can execute only its private summary implementation');
+SELECT ok(NOT (SELECT rolcanlogin FROM pg_roles WHERE rolname='perry_reader')
+      AND NOT has_schema_privilege('perry_reader','private','USAGE'),
+      'legacy Perry database role is disabled and has no private RPC access');
 SELECT ok(NOT pg_has_role('authenticator','perry_reader','MEMBER')
       AND NOT pg_has_role('perry_reader','authenticator','MEMBER')
-      AND has_schema_privilege('anon','public','USAGE')
-      AND has_schema_privilege('authenticated','public','USAGE')
-      AND has_schema_privilege('service_role','public','USAGE')
-      AND NOT has_schema_privilege('perry_reader','public','USAGE')
-      AND has_schema_privilege('perry_reader','private','USAGE')
-      AND has_function_privilege('perry_reader','private.personal_summary()','EXECUTE'),
-      'Perry cannot access the public schema and can call only the fixed private summary RPC');
-SELECT ok((SELECT r.rolcanlogin AND NOT r.rolinherit AND NOT r.rolbypassrls
+      AND has_function_privilege('authenticated','public.personal_summary()','EXECUTE')
+      AND NOT has_function_privilege('anon','public.personal_summary()','EXECUTE'),
+      'user-scoped summary RPC is available only through authenticated Supabase API access');
+SELECT ok((SELECT NOT r.rolcanlogin AND NOT r.rolinherit AND NOT r.rolbypassrls
                    AND a.rolpassword IS NULL
             FROM pg_roles r JOIN pg_authid a USING (oid)
             WHERE r.rolname='perry_reader'),
-          'Perry login is non-inheriting, cannot bypass RLS, and has no source-managed password');
+          'legacy Perry role cannot log in, inherit, bypass RLS, or use a source-managed password');
 
 SELECT ok(to_regprocedure('public.personal_summary(uuid)') IS NULL,
           'Perry summary RPC accepts no caller-supplied subject');

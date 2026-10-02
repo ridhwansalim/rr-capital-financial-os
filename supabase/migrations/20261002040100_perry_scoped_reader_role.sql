@@ -1,35 +1,22 @@
--- A narrowly scoped database login for the server-side Perry broker.
--- Its password is provisioned out of band and exists only in the Edge secret
--- PERRY_DATABASE_URL. The role is not granted to PostgREST's authenticator.
+-- Retain a disabled compatibility role only for reversible migration history.
+-- Perry uses an authenticated user-token RPC and never connects to Postgres.
 DO $$ BEGIN
-  CREATE ROLE perry_reader LOGIN NOINHERIT NOBYPASSRLS PASSWORD NULL;
+  CREATE ROLE perry_reader NOLOGIN NOINHERIT NOBYPASSRLS PASSWORD NULL;
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
-ALTER ROLE perry_reader LOGIN NOINHERIT NOBYPASSRLS PASSWORD NULL;
+ALTER ROLE perry_reader NOLOGIN NOINHERIT NOBYPASSRLS PASSWORD NULL;
 REVOKE perry_reader FROM authenticator;
 
--- The broker calls one RPC in the private schema. Do not grant public-schema
--- USAGE: it contains extension functions that retain PUBLIC EXECUTE grants.
-GRANT USAGE ON SCHEMA private TO perry_reader;
-REVOKE CREATE ON SCHEMA public, private FROM perry_reader;
+-- No direct schema access is granted to the retired database role.
+REVOKE ALL ON SCHEMA public, private FROM perry_reader;
 REVOKE ALL ON ALL TABLES IN SCHEMA public, private FROM perry_reader;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public, private FROM perry_reader;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA public, private FROM perry_reader;
 
--- New private functions must not become callable by the database login via
--- PostgreSQL's default PUBLIC EXECUTE privilege. Public is intentionally
--- inaccessible to perry_reader even where extension functions retain PUBLIC.
+-- New private functions must not become callable through PostgreSQL's default
+-- PUBLIC EXECUTE privilege.
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA private
   REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
-
--- The public schema's default PUBLIC USAGE would otherwise be impossible to
--- revoke for one login. Restrict namespace access to the Supabase API roles;
--- Perry receives no public-schema path even to extension functions.
-REVOKE USAGE ON SCHEMA public FROM PUBLIC;
-GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
--- A role can retain a direct USAGE grant even after PUBLIC access is revoked.
--- Perry must have no namespace path into exposed objects or extension RPCs.
-REVOKE USAGE, CREATE ON SCHEMA public FROM perry_reader;
 
 -- This singleton is provisioned out of band for the verified owner UUID.
 -- The application and broker roles cannot read or change the row directly.
@@ -49,9 +36,7 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public, private, pg_temp
 AS $$
 BEGIN
-  IF (session_user = 'perry_reader'
-      OR pg_catalog.current_setting('role', true) = 'perry_reader')
-     AND NOT EXISTS (
+  IF NOT EXISTS (
        SELECT 1 FROM private.perry_owner_config
         WHERE singleton AND owner_id = p_subject
      ) THEN
@@ -76,18 +61,7 @@ DECLARE
   v_user uuid;
   v_summary jsonb;
 BEGIN
-  IF (session_user = 'perry_reader'
-      OR pg_catalog.current_setting('role', true) = 'perry_reader') THEN
-    v_user := auth.uid();
-    IF v_user IS NULL OR NOT EXISTS (
-      SELECT 1 FROM private.perry_owner_config
-       WHERE singleton AND owner_id = v_user
-    ) THEN
-      RAISE EXCEPTION 'Perry identity is not authorized' USING ERRCODE = '42501';
-    END IF;
-  ELSE
-    v_user := private.require_user();
-  END IF;
+  v_user := private.require_user();
   PERFORM private.assert_perry_owner(v_user);
 
   WITH personal_transactions AS MATERIALIZED (
@@ -174,9 +148,10 @@ $$;
 REVOKE ALL ON FUNCTION private.personal_summary()
   FROM PUBLIC, anon, authenticated, service_role, perry_reader;
 GRANT EXECUTE ON FUNCTION private.personal_summary()
-  TO authenticated, perry_reader;
+  TO authenticated;
 
--- Future functions do not become part of the Perry API by default.
+-- The retired role remains unusable even if a later migration grants an
+-- object accidentally; default privileges prevent future function drift.
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE EXECUTE ON FUNCTIONS FROM perry_reader;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA private

@@ -1,6 +1,5 @@
--- Fixed read-only summary boundary for authenticated users and the Perry
--- database login. For Perry, auth.uid() is set only by the Edge Function after
--- remote Supabase Auth verification, then checked against a private owner pin.
+-- Fixed read-only summary boundary for authenticated users. Identity is always
+-- taken from the verified Supabase JWT and checked against the private owner pin.
 
 CREATE OR REPLACE FUNCTION private.personal_summary()
 RETURNS jsonb
@@ -13,18 +12,7 @@ DECLARE
   v_user uuid;
   v_summary jsonb;
 BEGIN
-  IF (session_user = 'perry_reader'
-      OR pg_catalog.current_setting('role', true) = 'perry_reader') THEN
-    v_user := auth.uid();
-    IF v_user IS NULL OR NOT EXISTS (
-      SELECT 1 FROM private.perry_owner_config
-       WHERE singleton AND owner_id = v_user
-    ) THEN
-      RAISE EXCEPTION 'Perry identity is not authorized' USING ERRCODE = '42501';
-    END IF;
-  ELSE
-    v_user := private.require_user();
-  END IF;
+  v_user := private.require_user();
 
   WITH personal_transactions AS MATERIALIZED (
     SELECT t.id, t.from_account_id, t.to_account_id, t.amount,
@@ -109,7 +97,7 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION private.personal_summary() FROM PUBLIC, anon, authenticated, service_role, perry_reader;
-GRANT EXECUTE ON FUNCTION private.personal_summary() TO authenticated, perry_reader;
+GRANT EXECUTE ON FUNCTION private.personal_summary() TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.personal_summary()
 RETURNS jsonb

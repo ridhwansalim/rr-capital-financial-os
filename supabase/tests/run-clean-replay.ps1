@@ -31,14 +31,15 @@ if (-not $apiSchemas -or $apiSchemas -match '"net"') {
 Write-Output 'PASS `net` schema is not exposed by local Supabase Data API configuration'
 $testFiles = Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.test.sql' | Sort-Object Name
 $migrations = Get-ChildItem -LiteralPath $migrationPath -Filter '*.sql' | Sort-Object Name
+$perryMigrationPattern = '^20261002040(1|2|6)\d{2}_|^20261002041011_'
 if ($CoreOnly) {
   # Perry's optional migrations/tests are deliberately absent from the normal
   # RR Capital release. Prove the financial schema replays alone.
-  $migrations = @($migrations | Where-Object { $_.BaseName -notmatch '^20261002040(1|2|6)\d{2}_' })
+  $migrations = @($migrations | Where-Object { $_.BaseName -notmatch $perryMigrationPattern })
   $testFiles = @($testFiles | Where-Object { $_.Name -ne 'perry_summary_security.test.sql' })
 } elseif ($StagedThenPerry) {
-  $perryMigrations = @($migrations | Where-Object { $_.BaseName -match '^20261002040(1|2|6)\d{2}_' })
-  $coreMigrations = @($migrations | Where-Object { $_.BaseName -notmatch '^20261002040(1|2|6)\d{2}_' })
+  $perryMigrations = @($migrations | Where-Object { $_.BaseName -match $perryMigrationPattern })
+  $coreMigrations = @($migrations | Where-Object { $_.BaseName -notmatch $perryMigrationPattern })
   # Simulate shipping core first, then using a deliberate include-all follow-up
   # to apply only Perry's still-pending historical versions.
   $migrations = @($coreMigrations) + @($perryMigrations)

@@ -1,7 +1,7 @@
 type Dependencies = {
-  databaseReady: boolean
+  endpointReady: boolean
   authenticateUser(accessToken: string): Promise<{ id: string } | null>
-  queryPersonalSummary(verifiedUserId: string): Promise<{ data: unknown; error: { code?: string } | null }>
+  queryPersonalSummary(accessToken: string): Promise<{ data: unknown; error: { code?: string } | null }>
 }
 
 const allowedOrigins = new Set([
@@ -105,7 +105,7 @@ export function createPerrySummaryHandler(dependencies: Dependencies) {
     const authorization = req.headers.get("authorization") ?? ""
     const bearer = /^Bearer ([A-Za-z0-9._~-]{20,4096})$/.exec(authorization)
     if (!bearer) return response({ error: "Authentication required" }, 401, origin)
-    if (!dependencies.databaseReady) {
+    if (!dependencies.endpointReady) {
       return response({ error: "Endpoint is not configured" }, 503, origin)
     }
 
@@ -116,11 +116,11 @@ export function createPerrySummaryHandler(dependencies: Dependencies) {
       if (!user || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(user.id)) {
         return response({ error: "Authentication required" }, 401, origin)
       }
-
-      // The dedicated PostgreSQL login can execute only the owner-pinned
-      // summary RPC. The database also checks auth.uid() against its private
-      // owner allowlist, so another valid app account remains excluded.
-      const { data, error } = await dependencies.queryPersonalSummary(user.id)
+      // Forward the verified user's short-lived token to one fixed PostgREST
+      // RPC. PostgREST derives auth.uid() from that token; Perry supplies no
+      // user ID and never receives a database credential or service key. The
+      // database checks auth.uid() against its private Ridhu owner pin.
+      const { data, error } = await dependencies.queryPersonalSummary(bearer[1])
       if (error?.code === "42501") return response({ error: "Access denied" }, 403, origin)
       const safeSummary = projectSummary(data)
       if (error || !safeSummary) {

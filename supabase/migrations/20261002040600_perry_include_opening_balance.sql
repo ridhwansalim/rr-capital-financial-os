@@ -12,18 +12,7 @@ DECLARE
   v_user uuid;
   v_summary jsonb;
 BEGIN
-  IF (session_user = 'perry_reader'
-      OR pg_catalog.current_setting('role', true) = 'perry_reader') THEN
-    v_user := auth.uid();
-    IF v_user IS NULL OR NOT EXISTS (
-      SELECT 1 FROM private.perry_owner_config
-       WHERE singleton AND owner_id = v_user
-    ) THEN
-      RAISE EXCEPTION 'Perry identity is not authorized' USING ERRCODE = '42501';
-    END IF;
-  ELSE
-    v_user := private.require_user();
-  END IF;
+  v_user := private.require_user();
   PERFORM private.assert_perry_owner(v_user);
 
   WITH personal_transactions AS MATERIALIZED (
