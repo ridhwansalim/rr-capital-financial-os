@@ -5,11 +5,9 @@
 $ErrorActionPreference = 'Stop'
 $expectedProjectRef = 'hnebvwfgsotrknxpgpmv'
 if ($ProjectRef -cne $expectedProjectRef) { throw 'This release bundle is pinned to RR Capital only.' }
-$expectedPending = @(
-  '20261002040960_include_emi_owner_in_profile_labels.sql'
-)
+$expectedPending = @()
 $expectedHashes = @{
-  '20261002040960_include_emi_owner_in_profile_labels.sql' = '2BD12C56FCC04984C6C5E7A695CB936F7FC7A17D76992B6DC6DAD6F1B4121277'
+  '20261002195439_match_obligation_on_ledger_retry.sql' = '2A202E37171F2FF09F88AD43018C7F705D87DEFDA1719505D015EF593C084FDD'
 }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $sourceSupabase = Join-Path $repoRoot 'supabase'
@@ -21,7 +19,8 @@ $excluded = @(
   '20261002040100_perry_scoped_reader_role.sql',
   '20261002040200_readonly_personal_summary.sql',
   '20261002040600_perry_include_opening_balance.sql',
-  '20261002041000_revoke_legacy_p2p_debt_rpc.sql'
+  '20261002041000_revoke_legacy_p2p_debt_rpc.sql',
+  '20261002041011_retire_unsafe_perry_database_login.sql'
 )
 foreach ($name in $expectedPending) {
   $path = Join-Path (Join-Path $sourceSupabase 'migrations') $name
@@ -38,10 +37,27 @@ foreach ($name in $excluded) {
   if (Test-Path -LiteralPath (Join-Path $bundleMigrations $name)) { throw "Excluded migration unexpectedly entered bundle: $name" }
 }
 try {
+  $cachedCli = $null
+  $npmCache = npm config get cache 2>$null
+  $npxRoot = if ($npmCache) { Join-Path $npmCache '_npx' } else { $null }
+  if ($npxRoot -and (Test-Path -LiteralPath $npxRoot)) {
+    foreach ($candidateRoot in (Get-ChildItem -LiteralPath $npxRoot -Directory)) {
+      $candidatePackage = Join-Path $candidateRoot.FullName 'node_modules\supabase\package.json'
+      $candidateShim = Join-Path $candidateRoot.FullName 'node_modules\.bin\supabase.cmd'
+      if ((Test-Path -LiteralPath $candidatePackage) -and (Test-Path -LiteralPath $candidateShim)) {
+        $candidateInfo = Get-Content -LiteralPath $candidatePackage -Raw | ConvertFrom-Json
+        if ($candidateInfo.version -eq '2.119.0') { $cachedCli = $candidateShim; break }
+      }
+    }
+  }
   $oldPreference = $ErrorActionPreference
   try {
     $ErrorActionPreference = 'Continue'
-    $dryOutput = & npx --yes supabase@2.119.0 db push --dry-run --skip-vault --workdir $bundleRoot --project-ref $ProjectRef --output-format json 2>&1
+    if ($cachedCli) {
+      $dryOutput = & $cachedCli db push --dry-run --workdir $bundleRoot --project-ref $ProjectRef 2>&1
+    } else {
+      $dryOutput = & npx --yes supabase@2.119.0 db push --dry-run --workdir $bundleRoot --project-ref $ProjectRef 2>&1
+    }
     $dryCode = $LASTEXITCODE
   } finally { $ErrorActionPreference = $oldPreference }
   if ($dryCode -ne 0) { throw "Hosted dry-run failed (exit $dryCode); command output suppressed." }
@@ -52,18 +68,26 @@ try {
   $expected = @($expectedPending | Sort-Object)
   $nl = [Environment]::NewLine
   if (-not $result.dryRun -or ($actual -join $nl) -cne ($expected -join $nl)) { throw 'Pending migration selection mismatch; apply stopped.' }
-  Write-Output 'PASS: the reviewed EMI profile-label fix alone is selected; Perry and 410 excluded.'
+  Write-Output 'PASS: no core migration is pending; hosted ledger retry obligation-match fix is already recorded.'
   if (-not $Apply) {
-    Write-Output 'DRY RUN ONLY: pass -Apply to execute the reviewed bundle.'
+    Write-Output 'DRY RUN ONLY: no hosted changes made.'
+    return
+  }
+  if ($actual.Count -eq 0) {
+    Write-Output 'No-op: the reviewed migration is already applied; no hosted changes made.'
     return
   }
   try {
     $ErrorActionPreference = 'Continue'
-    $applyOutput = & npx --yes supabase@2.119.0 db push --yes --skip-vault --workdir $bundleRoot --project-ref $ProjectRef 2>&1
+    if ($cachedCli) {
+      $applyOutput = & $cachedCli db push --yes --skip-vault --workdir $bundleRoot --project-ref $ProjectRef 2>&1
+    } else {
+      $applyOutput = & npx --yes supabase@2.119.0 db push --yes --skip-vault --workdir $bundleRoot --project-ref $ProjectRef 2>&1
+    }
     $applyCode = $LASTEXITCODE
   } finally { $ErrorActionPreference = $oldPreference }
   if ($applyCode -ne 0) { throw "Hosted migration apply failed (exit $applyCode); command output suppressed; stop and inspect hosted ledger." }
-  Write-Output 'PASS: reviewed core migrations applied; Vault sync skipped; Perry and 410 excluded.'
+  Write-Output 'PASS: reviewed ledger retry fix applied; Vault sync skipped; Perry and legacy 410 excluded.'
 }
 finally {
   $resolvedTemp = [IO.Path]::GetFullPath($tempRoot).TrimEnd('\') + '\'

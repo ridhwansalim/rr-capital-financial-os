@@ -38,6 +38,16 @@ BEGIN
   IF (SELECT amount FROM public.obligations WHERE id=debt) <> 30 THEN
     RAISE EXCEPTION 'Outstanding debt was reduced incorrectly';
   END IF;
+  BEGIN
+    PERFORM public.post_ledger_transaction(request_id,a,NULL,20,0,'Payment',posted_at,NULL,NULL,NULL);
+    RAISE EXCEPTION 'Retry without its original debt link was accepted';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  BEGIN
+    PERFORM public.post_ledger_transaction(request_id,a,NULL,20,0,'Payment',posted_at,NULL,NULL,other_debt);
+    RAISE EXCEPTION 'Retry with a different debt link was accepted';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
   new_tx_id := public.post_ledger_transaction(
     gen_random_uuid(),a,NULL,1,0,'New contact',posted_at,NULL,NULL,NULL,'Queued Contact'
   );

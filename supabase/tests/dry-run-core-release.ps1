@@ -26,6 +26,7 @@ $supersededTimestampMigrations = @(
 $expectedPending = @()
 $expectedHashes = @{
   '20261002103816_retire_unsafe_perry_database_login_after_live_ledger.sql' = '95528FF9472A0DEF4864553E859E035A4D208A60C7ACF62A96F52D35D9C22CB0'
+  '20261002195439_match_obligation_on_ledger_retry.sql' = '2A202E37171F2FF09F88AD43018C7F705D87DEFDA1719505D015EF593C084FDD'
 }
 
 foreach ($name in $expectedHashes.Keys) {
