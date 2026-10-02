@@ -3,6 +3,7 @@ import { X, ArrowDownRight, ArrowUpRight, ArrowRightLeft, Loader2, IndianRupee, 
 import { supabase } from '../lib/supabase'
 import { localDB, type CachedAccount, type LocalTransaction } from '../lib/db'
 import { postQueuedTransaction } from '../lib/sync'
+import { indiaDateInputToIso, isDateBeforeOpeningDate, openingBalanceForAccountType, toIndiaDateInputValue } from '../lib/financeDate'
 
 interface TransactionModalProps {
   isOpen: boolean
@@ -24,6 +25,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
   const [amount, setAmount] = useState('')
   const [feeAmount, setFeeAmount] = useState('')
   const [description, setDescription] = useState('')
+  const [transactionDate, setTransactionDate] = useState(() => toIndiaDateInputValue())
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedAccount, setSelectedAccount] = useState('')
   const [targetAccount, setTargetAccount] = useState('')
@@ -50,12 +52,19 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
   const [isCreatingAccount, setIsCreatingAccount] = useState(false)
   const [newAccName, setNewAccName] = useState('')
   const [newAccType, setNewAccType] = useState('bank')
+  const [newAccOpeningBalance, setNewAccOpeningBalance] = useState('0')
+  const [newAccOpeningDate, setNewAccOpeningDate] = useState(() => toIndiaDateInputValue())
 
   useEffect(() => {
     if (isOpen) {
       setAccounts([])
       setSelectedAccount('')
       setTargetAccount('')
+      setTransactionDate(toIndiaDateInputValue())
+      setNewAccName('')
+      setNewAccType('bank')
+      setNewAccOpeningBalance('0')
+      setNewAccOpeningDate(toIndiaDateInputValue())
       setMyContacts([])
       setCurrentUserId(null)
       fetchAccounts()
@@ -137,7 +146,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
     return () => clearTimeout(delayDebounceFn)
   }, [searchQuery, selectedEntity, newShadowName, currentUserId])
 
-  // FIX: Fetch balances alongside accounts for Overdraft protection
+  // Load owner-scoped accounts and current balances for display.
   const fetchAccounts = async () => {
     const { data: { session } } = await supabase.auth.getSession()
     const ownerId = session?.user.id
@@ -145,7 +154,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
     try {
       if (!navigator.onLine) throw new Error('Offline')
       const [accResult, balResult] = await Promise.all([
-        supabase.from('accounts').select('id, name, type').eq('owner_id', ownerId).order('name'),
+        supabase.from('accounts').select('id, name, type, opening_date').eq('owner_id', ownerId).order('name'),
         supabase.from('account_balances').select('id, balance')
       ])
       if (accResult.error) throw accResult.error
@@ -175,12 +184,17 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
   }
 
   const handleClose = (discard = false) => {
-    if (!discard && (amount || feeAmount || description || searchQuery || isCreatingAccount) &&
+    if (!discard && (amount || feeAmount || description || searchQuery || isCreatingAccount || newAccName || newAccOpeningBalance !== '0' || newAccOpeningDate !== toIndiaDateInputValue() || transactionDate !== toIndiaDateInputValue()) &&
         !window.confirm('You have unsaved transaction details. Discard them and close?')) return
     setType('expense')
     setAmount('')
     setFeeAmount('')
     setDescription('')
+    setTransactionDate(toIndiaDateInputValue())
+    setNewAccName('')
+    setNewAccType('bank')
+    setNewAccOpeningBalance('0')
+    setNewAccOpeningDate(toIndiaDateInputValue())
     setSearchQuery('')
     setSearchResults([])
     setSelectedEntity(null)
@@ -248,19 +262,19 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
   }
 
   useEffect(() => {
-    if (!isOpen || !(amount || feeAmount || description || searchQuery || isCreatingAccount)) return
+    if (!isOpen || !(amount || feeAmount || description || searchQuery || isCreatingAccount || newAccName || newAccOpeningBalance !== '0' || newAccOpeningDate !== toIndiaDateInputValue() || transactionDate !== toIndiaDateInputValue())) return
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', warnBeforeUnload)
     return () => window.removeEventListener('beforeunload', warnBeforeUnload)
-  }, [isOpen, amount, feeAmount, description, searchQuery, isCreatingAccount])
+  }, [isOpen, amount, feeAmount, description, searchQuery, isCreatingAccount, newAccName, newAccOpeningBalance, newAccOpeningDate, transactionDate])
 
   useEffect(() => {
     if (!isOpen) return
     const closeOnBack = (event: Event) => {
-      if (amount || feeAmount || description || searchQuery || isCreatingAccount) {
+      if (amount || feeAmount || description || searchQuery || isCreatingAccount || transactionDate !== toIndiaDateInputValue()) {
         if (!window.confirm('You have unsaved transaction details. Discard them and close?')) {
           event.preventDefault()
           return
@@ -270,7 +284,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
     }
     window.addEventListener('rr:modal-back', closeOnBack)
     return () => window.removeEventListener('rr:modal-back', closeOnBack)
-  }, [isOpen, amount, feeAmount, description, searchQuery, isCreatingAccount])
+  }, [isOpen, amount, feeAmount, description, searchQuery, isCreatingAccount, newAccName, newAccOpeningBalance, newAccOpeningDate, transactionDate])
 
   const openReceiptScanner = () => {
     if (geminiKeyConfigured !== true) {
@@ -291,7 +305,9 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
       const { data, error: insertError } = await supabase.from('accounts').insert([{
         owner_id: user.id,
         name: newAccName,
-        type: newAccType
+        type: newAccType,
+        opening_balance: openingBalanceForAccountType(newAccOpeningBalance, newAccType),
+        opening_date: newAccOpeningDate
       }]).select().single()
 
       if (insertError) throw insertError
@@ -303,6 +319,9 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
       
       setIsCreatingAccount(false)
       setNewAccName('')
+      setNewAccType('bank')
+      setNewAccOpeningBalance('0')
+      setNewAccOpeningDate(toIndiaDateInputValue())
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -325,13 +344,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
         throw new Error('Enter a positive amount with at most two decimal places.')
       }
 
-      // FIX: OVERDRAFT PREVENTION LOGIC
       const sourceAcc = accounts.find(a => a.id === selectedAccount)
-      if ((type === 'expense' || type === 'transfer') && sourceAcc) {
-        if (sourceAcc.type !== 'credit_card' && sourceAcc.type !== 'credit' && parsedAmount > sourceAcc.balance) {
-          throw new Error(`OVERDRAFT BLOCKED: ${sourceAcc.name} only has ₹${sourceAcc.balance.toLocaleString('en-IN')}.`)
-        }
-      }
 
       let finalContactId: string | null = null
       let finalProfileId: string | null = null
@@ -348,6 +361,16 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
         throw new Error('Enter a valid fee with at most two decimal places.')
       }
       if (!sourceAcc) throw new Error('Choose an account before posting.')
+      if (isDateBeforeOpeningDate(transactionDate, sourceAcc.opening_date)) {
+        throw new Error(sourceAcc.name + ' started on ' + sourceAcc.opening_date + '; choose that date or later.')
+      }
+      if (type === 'transfer') {
+        const destinationAccount = accounts.find(account => account.id === targetAccount)
+        if (!destinationAccount) throw new Error('Choose a destination account before posting.')
+        if (isDateBeforeOpeningDate(transactionDate, destinationAccount.opening_date)) {
+          throw new Error(destinationAccount.name + ' started on ' + destinationAccount.opening_date + '; choose that date or later.')
+        }
+      }
       if (type === 'transfer' && selectedAccount === targetAccount) {
         throw new Error('Choose two different accounts for a transfer.')
       }
@@ -361,7 +384,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
         fee_amount: appliedFee,
         description,
         sync_status: 'pending',
-        created_at: new Date().toISOString(),
+        created_at: indiaDateInputToIso(transactionDate),
         tagged_profile_id: finalProfileId,
         contact_id: finalContactId,
         new_contact_name: newShadowName.trim() || null
@@ -396,7 +419,10 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
       if (navigator.onLine && window.location.pathname === '/') window.location.reload()
 
     } catch (err: any) {
-      setError(err.message)
+      const message = typeof err?.message === 'string' ? err.message : 'Could not save this transaction.'
+      setError(message.includes('Transaction would make liquid account history negative')
+        ? 'This transaction would take the account below zero on that date. Check the opening balance and earlier entries.'
+        : message)
     } finally {
       setIsSubmitting(false)
     }
@@ -443,6 +469,15 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
                 <option value="credit" className="text-slate-900">Credit Card</option>
               </select>
             </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-400 uppercase">{newAccType === 'credit' ? 'Outstanding balance' : 'Starting balance'}</label>
+              <input type="number" min="0" max="9999999999.99" step="0.01" required value={newAccOpeningBalance} onChange={event => setNewAccOpeningBalance(event.target.value)} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-400 uppercase">Start tracking from</label>
+              <input type="date" max={toIndiaDateInputValue()} required value={newAccOpeningDate} onChange={event => setNewAccOpeningDate(event.target.value)} className="w-full mt-1 color-scheme-dark bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50" />
+              <p className="mt-1 text-[11px] text-slate-500">Earlier ledger entries will be blocked for this account.</p>
+            </div>
             <div className="flex gap-3 mt-6">
               <button type="button" onClick={() => {
                 setIsCreatingAccount(false)
@@ -456,16 +491,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
         ) : (
           /* MAIN TRANSACTION FORM */
           <>
-            <div className="mb-6 flex flex-col items-center gap-2">
-              <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" className="hidden" ref={fileInputRef} onChange={e => { const file = e.target.files?.[0]; if (file) void processFile(file) }} />
-              <button type="button" onClick={openReceiptScanner} disabled={isAiScanning || isSubmitting || geminiKeyConfigured === null} className="flex items-center px-4 py-2 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-xl text-sm font-bold hover:bg-indigo-500/30 transition-all disabled:opacity-50">
-                {isAiScanning ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Scanning receipt...</> : <><Camera className="w-4 h-4 mr-2" /> Scan receipt</>}
-              </button>
-              {showGeminiKeyPrompt && <div role="dialog" aria-modal="true" className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-5"><div className="max-w-sm rounded-2xl border border-white/15 bg-slate-900 p-5 text-white shadow-2xl"><h3 className="text-lg font-bold">Add your Gemini API key</h3><p className="mt-2 text-sm text-slate-300">Receipt scanning uses your personal Gemini key. Add it in Settings before selecting a receipt; your image is sent only when you start a scan.</p><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setShowGeminiKeyPrompt(false)} className="rounded-xl px-4 py-2 text-sm text-slate-300 hover:bg-white/10">Later</button><button type="button" onClick={() => { setShowGeminiKeyPrompt(false); handleClose(true); window.location.assign('/settings') }} className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold">Open Settings</button></div></div></div>}
-              <p className="text-xs text-white/45 text-center">Receipt images are sent to Google Gemini. Review the fields before saving.</p>
-            </div>
-
-            <form onSubmit={handleSubmit} className="flex flex-col space-y-5">
+            <form onSubmit={handleSubmit} className="flex flex-col space-y-4">
               
               <div className="flex p-1 bg-black/20 rounded-xl backdrop-blur-sm border border-white/10">
                 {(['expense', 'income', 'transfer'] as const).map((t) => (
@@ -489,15 +515,11 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
                     <input type="number" step="0.01" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className={`bg-transparent border-none outline-none text-center w-full max-w-[200px] placeholder:text-white/20 appearance-none ${type === 'income' ? 'text-emerald-400' : type === 'expense' ? 'text-rose-400' : 'text-white'}`} required disabled={isSubmitting} />
                   </div>
                 </div>
+              </div>
 
-                {showFeeInput && (
-                  <div className="flex flex-col items-center justify-center space-y-1 py-3 bg-rose-500/10 rounded-2xl border border-rose-500/20 animate-in slide-in-from-top-2">
-                    <span className="text-rose-400/80 text-xs font-semibold uppercase tracking-wider">Gateway Processing Fee (₹)</span>
-                    <div className="flex items-center justify-center text-2xl font-black">
-                      <input type="number" step="0.01" placeholder="0.00" value={feeAmount} onChange={(e) => setFeeAmount(e.target.value)} className="bg-transparent border-none outline-none text-center w-full max-w-[150px] text-rose-400 placeholder:text-rose-400/30 appearance-none" disabled={isSubmitting} />
-                    </div>
-                  </div>
-                )}
+              <div className="flex flex-col space-y-1">
+                <label htmlFor="transaction-occurrence-date" className="text-xs font-semibold tracking-wide text-white/50 uppercase">Occurrence date</label>
+                <input id="transaction-occurrence-date" type="date" value={transactionDate} onChange={event => setTransactionDate(event.target.value)} required disabled={isSubmitting} className="w-full color-scheme-dark bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50" />
               </div>
 
               <div className="flex flex-col space-y-1">
@@ -530,6 +552,25 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
                 )}
               </div>
 
+              <details className="rounded-xl border border-white/10 bg-black/10 p-3">
+                <summary className="cursor-pointer select-none text-sm font-semibold text-indigo-300">Advanced options</summary>
+                <div className="mt-4 space-y-4">
+                  <div className="flex flex-col items-center gap-2">
+                    <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" className="hidden" ref={fileInputRef} onChange={e => { const file = e.target.files?.[0]; if (file) void processFile(file) }} />
+                    <button type="button" onClick={openReceiptScanner} disabled={isAiScanning || isSubmitting || geminiKeyConfigured === null} className="flex items-center px-4 py-2 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-xl text-sm font-bold hover:bg-indigo-500/30 transition-all disabled:opacity-50">
+                      {isAiScanning ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Scanning receipt...</> : <><Camera className="w-4 h-4 mr-2" /> Scan receipt</>}
+                    </button>
+                    {showGeminiKeyPrompt && <div role="dialog" aria-modal="true" className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-5"><div className="max-w-sm rounded-2xl border border-white/15 bg-slate-900 p-5 text-white shadow-2xl"><h3 className="text-lg font-bold">Add your Gemini API key</h3><p className="mt-2 text-sm text-slate-300">Receipt scanning uses your personal Gemini key. Add it in Settings before selecting a receipt; your image is sent only when you start a scan.</p><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setShowGeminiKeyPrompt(false)} className="rounded-xl px-4 py-2 text-sm text-slate-300 hover:bg-white/10">Later</button><button type="button" onClick={() => { setShowGeminiKeyPrompt(false); handleClose(true); window.location.assign('/settings') }} className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold">Open Settings</button></div></div></div>}
+                    <p className="text-xs text-white/45 text-center">Receipt images are sent to Google Gemini. Review the fields before saving.</p>
+                  </div>
+                  {showFeeInput && (
+                    <div className="flex flex-col items-center justify-center space-y-1 py-3 bg-rose-500/10 rounded-2xl border border-rose-500/20">
+                      <label htmlFor="transaction-fee" className="text-rose-400/80 text-xs font-semibold uppercase tracking-wider">Gateway processing fee (₹)</label>
+                      <div className="flex items-center justify-center text-2xl font-black">
+                        <input id="transaction-fee" type="number" min="0" step="0.01" placeholder="0.00" value={feeAmount} onChange={(e) => setFeeAmount(e.target.value)} className="bg-transparent border-none outline-none text-center w-full max-w-[150px] text-rose-400 placeholder:text-rose-400/30 appearance-none" disabled={isSubmitting} />
+                      </div>
+                    </div>
+                  )}
               <div className="flex flex-col space-y-1 relative">
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Tag Contact (Optional)</label>
                 <div className="relative">
@@ -598,6 +639,9 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
                   </div>
                 )}
               </div>
+
+                </div>
+              </details>
 
               <button type="submit" disabled={isSubmitting} className="w-full flex items-center justify-center py-4 mt-2 rounded-xl bg-white text-slate-900 font-bold text-lg hover:bg-slate-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)] disabled:opacity-50">
                 {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Log Transaction'}

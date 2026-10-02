@@ -3,8 +3,7 @@ import { Wallet, ArrowRightLeft, TrendingUp, IndianRupee, User, CalendarDays, Sh
 import { supabase } from '../lib/supabase'
 import PendingRequests from '../components/PendingRequests'
 import { Link } from 'react-router-dom'
-
-const localDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+import { formatIndiaDate, indiaDateExclusiveEndToIso, indiaDateStartToIso, toIndiaDateInputValue } from '../lib/financeDate'
 
 export default function Dashboard() {
   const [netWorth, setNetWorth] = useState(0)
@@ -15,8 +14,8 @@ export default function Dashboard() {
   
   const [accounts, setAccounts] = useState<any[]>([])
   const [recentTx, setRecentTx] = useState<any[]>([])
-  const [rangeStart, setRangeStart] = useState(localDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)))
-  const [rangeEnd, setRangeEnd] = useState(localDate(new Date()))
+  const [rangeStart, setRangeStart] = useState(() => `${toIndiaDateInputValue().slice(0, 7)}-01`)
+  const [rangeEnd, setRangeEnd] = useState(() => toIndiaDateInputValue())
   const [cashFlowDays, setCashFlowDays] = useState<{ day: string; income: number; expense: number }[]>([])
 
   useEffect(() => {
@@ -56,21 +55,22 @@ export default function Dashboard() {
       // Unified Math Engine for EMIs and Chittis
       try {
         let totalOutflow = 0
-        const today = new Date()
-        const viewDate = new Date(today.getFullYear(), today.getMonth(), 1)
+        const today = toIndiaDateInputValue()
+        const [todayYear, todayMonth] = today.split('-').map(Number)
+        const viewMonth = todayYear * 12 + todayMonth - 1
 
         // 1. Fetch Standard EMIs
         const { data: emiData } = await supabase.from('recurring_emis').select('amount, start_date, end_date')
         if (emiData) {
           totalOutflow += emiData.reduce((sum, emi) => {
-            const startDate = new Date(emi.start_date)
-            const emiStartMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
-            if (viewDate < emiStartMonth) return sum
+            const [startYear, startMonth] = emi.start_date.split('-').map(Number)
+            const emiStartMonth = startYear * 12 + startMonth - 1
+            if (viewMonth < emiStartMonth) return sum
             
             if (emi.end_date) {
-              const endDate = new Date(emi.end_date)
-              const emiEndMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1)
-              if (viewDate > emiEndMonth) return sum
+              const [endYear, endMonth] = emi.end_date.split('-').map(Number)
+              const emiEndMonth = endYear * 12 + endMonth - 1
+              if (viewMonth > emiEndMonth) return sum
             }
             return sum + Number(emi.amount)
           }, 0)
@@ -80,11 +80,11 @@ export default function Dashboard() {
         const { data: chittiData } = await supabase.from('chittis').select('monthly_installment, start_date, duration_months').eq('status', 'ACTIVE')
         if (chittiData) {
            chittiData.forEach(chitti => {
-             const startDate = new Date(chitti.start_date)
-             const emiStartMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1)
-             const emiEndMonth = new Date(startDate.getFullYear(), startDate.getMonth() + chitti.duration_months - 1, 1)
+             const [startYear, startMonth] = chitti.start_date.split('-').map(Number)
+             const emiStartMonth = startYear * 12 + startMonth - 1
+             const emiEndMonth = emiStartMonth + chitti.duration_months - 1
 
-             if (viewDate >= emiStartMonth && viewDate <= emiEndMonth) {
+             if (viewMonth >= emiStartMonth && viewMonth <= emiEndMonth) {
                 totalOutflow += Number(chitti.monthly_installment)
              }
            })
@@ -96,8 +96,6 @@ export default function Dashboard() {
       }
 
       try {
-        const startAt = new Date(`${rangeStart}T00:00:00`)
-        const endAt = new Date(new Date(`${rangeEnd}T00:00:00`).getTime() + 86400000)
         if (rangeStart > rangeEnd) throw new Error('Invalid dashboard date range')
         const monthTx: { amount: number; fee_amount: number | null; from_account_id: string | null; to_account_id: string | null; created_at: string }[] = []
         for (let offset = 0; ; offset += 1000) {
@@ -105,8 +103,8 @@ export default function Dashboard() {
             .from('transactions')
             .select('amount, fee_amount, from_account_id, to_account_id, created_at')
             .eq('status', 'COMPLETED')
-            .gte('created_at', startAt.toISOString())
-            .lt('created_at', endAt.toISOString())
+            .gte('created_at', indiaDateStartToIso(rangeStart))
+            .lt('created_at', indiaDateExclusiveEndToIso(rangeEnd))
             .order('created_at', { ascending: true })
             .order('id', { ascending: true })
             .range(offset, offset + 999)
@@ -119,7 +117,7 @@ export default function Dashboard() {
           setMonthExpenses(monthTx.reduce((sum, tx) => sum + (!tx.to_account_id ? Number(tx.amount) : 0) + Number(tx.fee_amount || 0), 0))
           const byDay = new Map<string, { day: string; income: number; expense: number }>()
           monthTx.forEach(tx => {
-            const day = localDate(new Date(tx.created_at))
+            const day = toIndiaDateInputValue(new Date(tx.created_at))
             const row = byDay.get(day) || { day, income: 0, expense: 0 }
             if (!tx.from_account_id) row.income += Number(tx.amount)
             if (!tx.to_account_id) row.expense += Number(tx.amount)
@@ -179,12 +177,13 @@ export default function Dashboard() {
 
   const safeToSpend = liquidCash - upcomingOutflow
   const monthNet = monthIncome - monthExpenses
-  const selectedPeriod = `${new Date(`${rangeStart}T00:00:00`).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} – ${new Date(`${rangeEnd}T00:00:00`).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}`
+  const selectedPeriod = `${formatIndiaDate(rangeStart, { month: 'short', day: 'numeric' })} – ${formatIndiaDate(rangeEnd, { month: 'short', day: 'numeric', year: 'numeric' })}`
   const maxFlowBar = Math.max(1, ...cashFlowDays.flatMap(day => [day.income, day.expense]))
   const setQuickRange = (days: number | 'month' | 'year') => {
-    const end = new Date()
-    const start = days === 'month' ? new Date(end.getFullYear(), end.getMonth(), 1) : days === 'year' ? new Date(end.getFullYear(), 0, 1) : new Date(end.getFullYear(), end.getMonth(), end.getDate() - days + 1)
-    setRangeStart(localDate(start)); setRangeEnd(localDate(end))
+    const end = toIndiaDateInputValue()
+    const [year, month, day] = end.split('-').map(Number)
+    const start = days === 'month' ? `${end.slice(0, 7)}-01` : days === 'year' ? `${year}-01-01` : new Date(Date.UTC(year, month - 1, day - days + 1)).toISOString().slice(0, 10)
+    setRangeStart(start); setRangeEnd(end)
   }
 
   return (
@@ -300,7 +299,7 @@ export default function Dashboard() {
             <div><h3 className="font-bold flex items-center text-slate-100"><ChartNoAxesCombined className="w-4 h-4 mr-2 text-indigo-300" /> Cash flow</h3><p className="text-xs text-slate-500 mt-1">Income and expenses for the selected period</p></div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{[['7 days', 7], ['30 days', 30], ['This month', 'month'], ['This year', 'year']].map(([label, value]) => <button key={label} onClick={() => setQuickRange(value as number | 'month' | 'year')} className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2 text-xs text-slate-300">{label}</button>)}</div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-end gap-3 mb-4"><label className="text-xs text-slate-500">From<input type="date" value={rangeStart} max={rangeEnd} onChange={e => setRangeStart(e.target.value)} className="mt-1 block w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white" /></label><span className="hidden sm:block text-slate-500 pb-2">through</span><label className="text-xs text-slate-500">To<input type="date" value={rangeEnd} min={rangeStart} max={localDate(new Date())} onChange={e => setRangeEnd(e.target.value)} className="mt-1 block w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white" /></label></div>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-end gap-3 mb-4"><label className="text-xs text-slate-500">From<input type="date" value={rangeStart} max={rangeEnd} onChange={e => setRangeStart(e.target.value)} className="mt-1 block w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white" /></label><span className="hidden sm:block text-slate-500 pb-2">through</span><label className="text-xs text-slate-500">To<input type="date" value={rangeEnd} min={rangeStart} max={toIndiaDateInputValue()} onChange={e => setRangeEnd(e.target.value)} className="mt-1 block w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white" /></label></div>
           <div className="flex items-center gap-4 text-xs text-slate-400 mb-2"><span className="flex items-center gap-1.5"><i className="w-2 h-2 rounded-full bg-emerald-400" />Income</span><span className="flex items-center gap-1.5"><i className="w-2 h-2 rounded-full bg-rose-400" />Expenses</span><span className="ml-auto">{selectedPeriod}</span></div>
           {cashFlowDays.length ? <div className="flex h-36 items-end gap-1 overflow-x-auto rounded-2xl bg-black/10 p-3">{cashFlowDays.map(day => <div key={day.day} title={`${day.day} · Income ${day.income.toLocaleString('en-IN')} · Expenses ${day.expense.toLocaleString('en-IN')}`} className="min-w-3 flex-1 h-full flex items-end justify-center gap-0.5"><div className="w-1/2 min-w-1 rounded-t bg-emerald-400/80" style={{ height: `${Math.max(2, day.income / maxFlowBar * 100)}%` }} /><div className="w-1/2 min-w-1 rounded-t bg-rose-400/80" style={{ height: `${Math.max(2, day.expense / maxFlowBar * 100)}%` }} /></div>)}</div> : <div className="grid place-items-center h-36 rounded-2xl bg-black/10 text-sm text-slate-500">No cash flow for these dates.</div>}
           <div className="mt-4 flex justify-between items-center"><span className="text-xs text-slate-500">Transfers are excluded from totals.</span><Link to="/reports" className="text-sm font-semibold text-indigo-300 hover:text-indigo-200">Open detailed reports →</Link></div>
@@ -318,7 +317,7 @@ export default function Dashboard() {
                   <div>
                     <p className="text-sm font-medium text-slate-200 line-clamp-1">{tx.description}</p>
                     <div className="flex items-center space-x-2 mt-1">
-                      <p className="text-xs text-slate-500">{new Date(tx.created_at).toLocaleDateString()}</p>
+                      <p className="text-xs text-slate-500">{formatIndiaDate(tx.created_at)}</p>
                       {tx.taggedName && (
                         <span className="flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                           <User className="w-3 h-3 mr-1" /> {tx.taggedName}

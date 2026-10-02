@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Landmark, Plus, IndianRupee, Calendar, Trophy, ArrowUpRight, ArrowDownRight, Wallet, Loader2, CheckCircle2, History, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useModalBack } from '../lib/useModalBack'
+import { formatIndiaDate, indiaDateInputToIso, toIndiaDateInputValue } from '../lib/financeDate'
+import InstallmentHistoryModal from '../components/InstallmentHistoryModal'
 
 interface Account {
   id: string
@@ -33,6 +35,7 @@ export default function Chittis() {
   const [editingChitti, setEditingChitti] = useState<Chitti | null>(null)
   const [claimModalData, setClaimModalData] = useState<Chitti | null>(null)
   const [payModalData, setPayModalData] = useState<Chitti | null>(null)
+  const [historyModalData, setHistoryModalData] = useState<Chitti | null>(null)
   const claimRequestId = useRef<string | null>(null)
   const payRequestId = useRef<string | null>(null)
 
@@ -40,7 +43,7 @@ export default function Chittis() {
   const [newName, setNewName] = useState('')
   const [newPot, setNewPot] = useState('')
   const [newDuration, setNewDuration] = useState('')
-  const [newStartDate, setNewStartDate] = useState(new Date().toISOString().split('T')[0])
+  const [newStartDate, setNewStartDate] = useState(() => toIndiaDateInputValue())
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Claim Pot Form
@@ -50,7 +53,9 @@ export default function Chittis() {
 
   // Pay Installment Form
   const [payAccountId, setPayAccountId] = useState('')
-  const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]) // NEW: Date selector
+  const [payDate, setPayDate] = useState(() => toIndiaDateInputValue())
+  const [payMonth, setPayMonth] = useState('')
+  const [payChoices, setPayChoices] = useState<Array<{ installment_number: number; due_date: string; status: string }>>([])
 
   useEffect(() => {
     fetchData()
@@ -92,7 +97,7 @@ export default function Chittis() {
     setNewName('')
     setNewPot('')
     setNewDuration('')
-    setNewStartDate(new Date().toISOString().split('T')[0])
+    setNewStartDate(toIndiaDateInputValue())
   }
 
   const chittiFormDirty = editingChitti
@@ -100,7 +105,7 @@ export default function Chittis() {
     : Boolean(newName || newPot || newDuration)
   useModalBack(isNewModalOpen || !!editingChitti, () => handleCloseModal(true), chittiFormDirty, 'Discard this Chitti plan and close the form?')
   useModalBack(!!claimModalData, () => setClaimModalData(null), Boolean(claimMonth || claimFee || claimAccountId), 'Discard this Chitti claim?')
-  useModalBack(!!payModalData, () => setPayModalData(null), payDate !== new Date().toISOString().split('T')[0], 'Discard this installment form?')
+  useModalBack(!!payModalData, () => setPayModalData(null), payDate !== toIndiaDateInputValue(), 'Discard this installment form?')
 
   // --- ACTIONS ---
 
@@ -186,8 +191,9 @@ export default function Chittis() {
 
     try {
       // Ensure timezone safety by forcing midday
-      const secureDate = new Date(`${payDate}T12:00:00`).toISOString()
-      const currentMonthPaying = (payModalData.months_paid || 0) + 1
+      const secureDate = indiaDateInputToIso(payDate)
+      const currentMonthPaying = Number(payMonth)
+      if (!Number.isInteger(currentMonthPaying) || currentMonthPaying < 1) throw new Error('Choose an unpaid installment.')
       payRequestId.current ||= crypto.randomUUID()
       const { error } = await supabase.rpc('pay_chitti_installment', {
         p_request_id: payRequestId.current,
@@ -201,7 +207,7 @@ export default function Chittis() {
       payRequestId.current = null
       setPayModalData(null)
       setPayAccountId('')
-      setPayDate(new Date().toISOString().split('T')[0])
+      setPayDate(toIndiaDateInputValue())
       fetchData()
     } catch (err: any) {
       console.error(err)
@@ -209,6 +215,26 @@ export default function Chittis() {
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const openPayInstallment = async (chitti: Chitti) => {
+    setPayChoices([])
+    setPayMonth('')
+    setPayModalData(chitti)
+    payRequestId.current = crypto.randomUUID()
+    const { data, error } = await supabase.rpc('list_installment_occurrences', {
+      p_schedule_kind: 'CHITTI', p_schedule_id: chitti.id
+    })
+    if (error) {
+      alert(`Could not load this payment schedule: ${error.message}`)
+      setPayModalData(null)
+      return
+    }
+    const choices = (data || []) as Array<{ installment_number: number; due_date: string; status: string }>
+    setPayChoices(choices)
+    const firstUnpaid = choices.find(item => item.status !== 'PAID'
+      && (item.status !== 'UNCONFIRMED' || item.due_date >= toIndiaDateInputValue()))
+    setPayMonth(firstUnpaid ? String(firstUnpaid.installment_number) : '')
   }
 
   const handleDeleteChitti = async (id: string) => {
@@ -338,7 +364,7 @@ export default function Chittis() {
                 <div>
                   <p className="text-xs text-slate-400 mb-1">Start Date</p>
                   <p className="font-bold flex items-center text-sm">
-                    {new Date(chitti.start_date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
+                    {formatIndiaDate(chitti.start_date, { month: 'short', year: 'numeric' })}
                   </p>
                 </div>
               </div>
@@ -350,12 +376,13 @@ export default function Chittis() {
                   style={{ width: `${(monthsPaid / chitti.duration_months) * 100}%` }}
                 />
               </div>
+              <button type="button" onClick={() => setHistoryModalData(chitti)} className="mb-3 text-xs font-semibold text-indigo-300 hover:text-indigo-200 underline underline-offset-4">Review installment history</button>
 
               {/* Actions */}
               <div className="flex gap-3 pt-4 border-t border-white/10">
                 {!isCompleted ? (
                   <button 
-                    onClick={() => { payRequestId.current = crypto.randomUUID(); setPayModalData(chitti) }}
+                    onClick={() => void openPayInstallment(chitti)}
                     className="flex-1 flex items-center justify-center py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-bold transition-all border border-white/10"
                   >
                     <ArrowUpRight className="w-4 h-4 mr-1.5 text-rose-400" /> Pay
@@ -507,14 +534,23 @@ export default function Chittis() {
             <p className="text-sm text-slate-400 mb-6">Logging monthly payment of <strong className="text-white">₹{Number(payModalData.monthly_installment).toLocaleString('en-IN')}</strong> for {payModalData.name}.</p>
             
             <form onSubmit={handlePayInstallment} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-slate-400 uppercase">Installment to pay</label>
+                <select required value={payMonth} onChange={event => { if (event.target.value !== payMonth) payRequestId.current = crypto.randomUUID(); setPayMonth(event.target.value) }} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-rose-500/50">
+                  <option value="" disabled>Select installment...</option>
+                  {payChoices.filter(item => item.status !== 'PAID'
+                    && (item.status !== 'UNCONFIRMED' || item.due_date >= toIndiaDateInputValue()))
+                    .map(item => <option key={item.installment_number} value={item.installment_number}>Month {item.installment_number} · due {formatIndiaDate(item.due_date)}</option>)}
+                </select>
+              </div>
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold text-slate-400 uppercase">Payment Date</label>
                   <input 
-                    type="date" required 
+                    type="date" required max={toIndiaDateInputValue()}
                     value={payDate} 
-                    onChange={e => setPayDate(e.target.value)} 
+                    onChange={e => { if (e.target.value !== payDate) payRequestId.current = crypto.randomUUID(); setPayDate(e.target.value) }}
                     className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-rose-500/50" 
                   />
                 </div>
@@ -522,7 +558,7 @@ export default function Chittis() {
                   <label className="text-xs font-semibold text-slate-400 uppercase">Pay From Account</label>
                   <div className="relative mt-1">
                     <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                    <select required value={payAccountId} onChange={e => setPayAccountId(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white outline-none focus:border-rose-500/50 appearance-none">
+                    <select required value={payAccountId} onChange={e => { if (e.target.value !== payAccountId) payRequestId.current = crypto.randomUUID(); setPayAccountId(e.target.value) }} className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white outline-none focus:border-rose-500/50 appearance-none">
                       <option value="" disabled>Select source...</option>
                       {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
                     </select>
@@ -534,19 +570,18 @@ export default function Chittis() {
               <div className="p-4 mt-2 bg-amber-500/10 border border-amber-500/20 rounded-xl">
                 <div className="flex justify-between items-end mb-2">
                   <p className="text-sm text-amber-200">You are paying for:</p>
-                  <p className="text-xl font-black text-amber-400">Month {(payModalData.months_paid || 0) + 1}</p>
+                  <p className="text-xl font-black text-amber-400">Month {payMonth || '—'}</p>
                 </div>
                 <div className="border-t border-amber-500/20 pt-2 flex justify-between items-center text-xs">
                   <span className="text-slate-400">Remaining after this payment:</span>
                   <span className="font-bold text-white">
-                    {payModalData.duration_months - ((payModalData.months_paid || 0) + 1)} Months 
-                    (₹{((payModalData.duration_months - ((payModalData.months_paid || 0) + 1)) * payModalData.monthly_installment).toLocaleString('en-IN', { maximumFractionDigits: 0 })})
+                    {Math.max(0, payChoices.filter(item => item.status !== 'PAID').length - (payMonth ? 1 : 0))} installments after this
                   </span>
                 </div>
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => { if (payDate !== new Date().toISOString().split('T')[0] && !window.confirm('Discard this installment form?')) return; payRequestId.current = null; setPayModalData(null) }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
+                <button type="button" onClick={() => { if (payDate !== toIndiaDateInputValue() && !window.confirm('Discard this installment form?')) return; payRequestId.current = null; setPayModalData(null) }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
                 <button type="submit" disabled={isSubmitting} className="flex-1 flex justify-center py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(244,63,94,0.3)] disabled:opacity-50">
                   {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Log Payment'}
                 </button>
@@ -555,6 +590,15 @@ export default function Chittis() {
           </div>
         </div>
       )}
+
+      <InstallmentHistoryModal
+        isOpen={Boolean(historyModalData)}
+        scheduleKind="CHITTI"
+        scheduleId={historyModalData?.id || ''}
+        title={historyModalData?.name || 'Chitti'}
+        onClose={() => setHistoryModalData(null)}
+        onChanged={fetchData}
+      />
 
     </div>
   )

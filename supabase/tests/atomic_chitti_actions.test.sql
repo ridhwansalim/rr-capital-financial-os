@@ -9,8 +9,8 @@ INSERT INTO public.accounts(id,owner_id,name,type) VALUES
   ('10000000-0000-4000-a000-000000000052','00000000-0000-4000-a000-000000000052','Other','bank');
 INSERT INTO public.chittis(id,owner_id,name,total_pot,duration_months,monthly_installment,start_date)
 VALUES
-  ('20000000-0000-4000-a000-000000000051','00000000-0000-4000-a000-000000000051','My plan',120,12,10,current_date),
-  ('20000000-0000-4000-a000-000000000052','00000000-0000-4000-a000-000000000052','Other plan',120,12,10,current_date);
+  ('20000000-0000-4000-a000-000000000051','00000000-0000-4000-a000-000000000051','My plan',120,12,10,(statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date),
+  ('20000000-0000-4000-a000-000000000052','00000000-0000-4000-a000-000000000052','Other plan',120,12,10,(statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date);
 SELECT set_config('request.jwt.claim.sub','00000000-0000-4000-a000-000000000051',true);
 SET LOCAL ROLE authenticated;
 DO $$
@@ -66,8 +66,8 @@ BEGIN
   EXCEPTION WHEN invalid_parameter_value THEN NULL;
   END;
   BEGIN
-    PERFORM public.pay_chitti_installment(gen_random_uuid(),plan_id,account_id,2,posted_at);
-    RAISE EXCEPTION 'Skipped installment month';
+    PERFORM public.pay_chitti_installment(gen_random_uuid(),plan_id,account_id,13,posted_at);
+    RAISE EXCEPTION 'Out-of-range installment succeeded';
   EXCEPTION WHEN invalid_parameter_value THEN NULL;
   END;
   first_id := public.pay_chitti_installment(pay_request,plan_id,account_id,1,posted_at);

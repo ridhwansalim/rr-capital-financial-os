@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Users, IndianRupee, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { formatIndiaDate } from '../lib/financeDate'
 
 interface Transaction {
   id: string
@@ -191,7 +192,7 @@ export default function Debts() {
                       <div key={tx.id} className="flex justify-between items-center px-4 py-3 bg-white/5 rounded-xl">
                         <div>
                           <p className="text-sm font-medium text-slate-300">{tx.description}</p>
-                          <p className="text-xs text-slate-500">{new Date(tx.created_at).toLocaleDateString()}</p>
+                          <p className="text-xs text-slate-500">{formatIndiaDate(tx.created_at)}</p>
                         </div>
                         <span className={`text-sm font-bold ${tx.type === 'lent' ? 'text-emerald-400' : 'text-rose-400'}`}>
                           {tx.type === 'lent' ? '+' : '-'}₹{tx.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}

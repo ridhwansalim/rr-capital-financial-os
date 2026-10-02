@@ -7,6 +7,9 @@ INSERT INTO public.accounts(id,owner_id,name,type) VALUES
   ('10000000-0000-4000-a000-000000000061','00000000-0000-4000-a000-000000000061','A','bank'),
   ('10000000-0000-4000-a000-000000000062','00000000-0000-4000-a000-000000000062','B','bank'),
   ('10000000-0000-4000-a000-000000000063','00000000-0000-4000-a000-000000000061','C','bank');
+INSERT INTO public.accounts(id,owner_id,name,type,opening_balance,opening_date) VALUES
+  ('10000000-0000-4000-a000-000000000064','00000000-0000-4000-a000-000000000061',
+   'Historical correction bank','bank',0,'2024-01-01');
 INSERT INTO public.transaction_categories(id,owner_id,name,color) VALUES
   ('30000000-0000-4000-a000-000000000061','00000000-0000-4000-a000-000000000061','Salary','#34d399'),
   ('30000000-0000-4000-a000-000000000062','00000000-0000-4000-a000-000000000062','Private','#fb7185');
@@ -18,6 +21,14 @@ INSERT INTO public.transactions(id,owner_id,initiator_profile_id,to_account_id,a
 VALUES ('20000000-0000-4000-a000-000000000062','00000000-0000-4000-a000-000000000061',
         '00000000-0000-4000-a000-000000000061','10000000-0000-4000-a000-000000000063',10,
         'Debt advance','COMPLETED',now());
+INSERT INTO public.transactions(id,owner_id,initiator_profile_id,to_account_id,amount,description,status,created_at)
+VALUES ('20000000-0000-4000-a000-000000000063','00000000-0000-4000-a000-000000000061',
+        '00000000-0000-4000-a000-000000000061','10000000-0000-4000-a000-000000000064',100,
+        'Historical income','COMPLETED','2024-01-02 12:00:00+05:30');
+INSERT INTO public.transactions(id,owner_id,initiator_profile_id,from_account_id,amount,description,status,created_at)
+VALUES ('20000000-0000-4000-a000-000000000064','00000000-0000-4000-a000-000000000061',
+        '00000000-0000-4000-a000-000000000061','10000000-0000-4000-a000-000000000064',80,
+        'Later expense','COMPLETED','2024-01-03 12:00:00+05:30');
 INSERT INTO public.obligations(id,owner_id,type,amount,total_amount,status,related_transaction_id)
 VALUES ('50000000-0000-4000-a000-000000000061','00000000-0000-4000-a000-000000000061',
         'lent',10,10,'ACCEPTED','20000000-0000-4000-a000-000000000062');
@@ -67,10 +78,30 @@ BEGIN
     RAISE EXCEPTION 'Foreign category was accepted';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
+  BEGIN
+    PERFORM public.correct_ledger_transaction(
+      '40000000-0000-4000-a000-000000000063',
+      '20000000-0000-4000-a000-000000000063',
+      50,'Incorrectly reduced historical income','2024-01-02 12:00:00+05:30',
+      'Synthetic historical balance regression'
+    );
+    RAISE EXCEPTION 'Correction that overdraws later history was accepted';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL;
+  END;
+  IF (SELECT status FROM public.transactions WHERE id='20000000-0000-4000-a000-000000000063') <> 'COMPLETED'
+     OR (SELECT count(*) FROM public.transactions
+          WHERE owner_id='00000000-0000-4000-a000-000000000061'
+            AND (from_account_id='10000000-0000-4000-a000-000000000064'
+              OR to_account_id='10000000-0000-4000-a000-000000000064')) <> 2
+     OR (SELECT balance FROM public.account_balances
+          WHERE id='10000000-0000-4000-a000-000000000064') <> 20 THEN
+    RAISE EXCEPTION 'Rejected historical correction partially changed transaction or balance state';
+  END IF;
 END $$;
 RESET ROLE;
 ROLLBACK;
 SELECT 'PASS: category ownership, audit-safe edit/void, retry idempotency, and balances' AS result;
-SELECT plan(1);
+SELECT plan(2);
 SELECT pass('category and correction SQL assertions completed without exception');
+SELECT pass('corrections that create a later historical overdraft roll back atomically');
 SELECT * FROM finish();

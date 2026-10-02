@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Settings as SettingsIcon, Search, User, Key, Lock, ShieldAlert, RotateCcw, Save, ChevronDown, ChevronUp, Trash2, Loader2, Palette, Bot, Bell, Shield, MessageSquare, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { formatIndiaDate } from '../lib/financeDate'
 import { useTheme } from '../components/ThemeProvider'
 import { useModalBack } from '../lib/useModalBack'
 import { hasAppPinConfigured, migrateLegacyAppPin, removeAppPin, storeAppPin } from '../lib/appPin'
@@ -720,7 +721,7 @@ export default function Settings() {
                             {device.name.toLowerCase().includes('phone') ? <Smartphone className="w-4 h-4 text-slate-400 mr-3" /> : <Laptop className="w-4 h-4 text-slate-400 mr-3" />}
                             <div>
                               <p className="text-sm font-semibold text-white">{device.name}</p>
-                              <p className="text-[10px] text-slate-500">Added {new Date(device.added_at).toLocaleDateString()}</p>
+                              <p className="text-[10px] text-slate-500">Added {formatIndiaDate(device.added_at)}</p>
                             </div>
                           </div>
                           <button onClick={() => removeDevice(device.id)} className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors">

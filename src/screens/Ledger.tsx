@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { ArrowRightLeft, Search, Filter, Loader2, IndianRupee, User, Wallet, ArrowDownRight, ArrowUpRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { formatIndiaDate } from '../lib/financeDate'
 
 interface Transaction {
   id: string
@@ -191,7 +192,7 @@ export default function Ledger() {
                   <h3 className="font-semibold text-slate-200 text-base">{tx.description}</h3>
                   <div className="flex flex-wrap items-center gap-2 mt-1">
                     <span className="text-xs text-slate-500">
-                      {new Date(tx.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {formatIndiaDate(tx.created_at)}
                     </span>
                     <span className="text-slate-700 text-xs">•</span>
                     <span className="flex items-center text-xs text-slate-400 font-medium">

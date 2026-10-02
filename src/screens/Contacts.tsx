@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Users, User, Pencil, Loader2, Check, X, Link2, Trash2, Search, UserCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { formatIndiaDate } from '../lib/financeDate'
 
 interface ShadowContact {
   id: string
@@ -206,7 +207,7 @@ export default function Contacts() {
                     <div className="flex-1 flex justify-between items-center">
                       <div>
                         <h3 className="font-semibold text-slate-200">{contact.name}</h3>
-                        <p className="text-xs text-slate-500">Added {new Date(contact.created_at).toLocaleDateString()}</p>
+                        <p className="text-xs text-slate-500">Added {formatIndiaDate(contact.created_at)}</p>
                       </div>
                       <div className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex space-x-1 transition-all">
                         <button 

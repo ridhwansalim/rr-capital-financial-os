@@ -10,9 +10,9 @@ INSERT INTO public.accounts(id,owner_id,name,type) VALUES
 INSERT INTO public.recurring_emis
   (id,owner_id,name,amount,start_date,end_date,type,status,counterparty_profile_id,initiator_account_id)
 VALUES
-  ('20000000-0000-4000-a000-000000000061','00000000-0000-4000-a000-000000000061','Personal',10,current_date,(current_date+interval '2 months')::date,'personal','ACTIVE',NULL,'10000000-0000-4000-a000-000000000061'),
-  ('20000000-0000-4000-a000-000000000062','00000000-0000-4000-a000-000000000061','Lent',10,current_date,(current_date+interval '2 months')::date,'lent','ACTIVE','00000000-0000-4000-a000-000000000062','10000000-0000-4000-a000-000000000061'),
-  ('20000000-0000-4000-a000-000000000063','00000000-0000-4000-a000-000000000061','Borrowed',10,current_date,(current_date+interval '2 months')::date,'borrowed','ACTIVE','00000000-0000-4000-a000-000000000062','10000000-0000-4000-a000-000000000061');
+  ('20000000-0000-4000-a000-000000000061','00000000-0000-4000-a000-000000000061','Personal',10,(statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date,((statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date+interval '2 months')::date,'personal','ACTIVE',NULL,'10000000-0000-4000-a000-000000000061'),
+  ('20000000-0000-4000-a000-000000000062','00000000-0000-4000-a000-000000000061','Lent',10,(statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date,((statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date+interval '2 months')::date,'lent','ACTIVE','00000000-0000-4000-a000-000000000062','10000000-0000-4000-a000-000000000061'),
+  ('20000000-0000-4000-a000-000000000063','00000000-0000-4000-a000-000000000061','Borrowed',10,(statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date,((statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date+interval '2 months')::date,'borrowed','ACTIVE','00000000-0000-4000-a000-000000000062','10000000-0000-4000-a000-000000000061');
 INSERT INTO public.transactions(owner_id,initiator_profile_id,to_account_id,amount,status)
 VALUES
   ('00000000-0000-4000-a000-000000000061','00000000-0000-4000-a000-000000000061','10000000-0000-4000-a000-000000000061',100,'COMPLETED'),

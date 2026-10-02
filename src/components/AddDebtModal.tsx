@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { X, Search, UserPlus, IndianRupee, User, Users, Loader2, Wallet } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { indiaDateInputToIso, isDateBeforeOpeningDate, toIndiaDateInputValue } from '../lib/financeDate'
 
 interface AddDebtModalProps {
   isOpen: boolean
@@ -18,12 +19,14 @@ interface Account {
   id: string
   name: string
   balance: number
+  opening_date?: string
 }
 
 export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
   const [type, setType] = useState<'lent' | 'borrowed'>('lent')
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
+  const [transactionDate, setTransactionDate] = useState(() => toIndiaDateInputValue())
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   
   const [searchQuery, setSearchQuery] = useState('')
@@ -37,9 +40,14 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [selectedAccount, setSelectedAccount] = useState('') 
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const requestId = useRef<string | null>(null)
+  const requestFingerprint = useRef<string | null>(null)
 
   useEffect(() => {
-    if (isOpen) fetchInitialData()
+    if (isOpen) {
+      setTransactionDate(toIndiaDateInputValue())
+      fetchInitialData()
+    }
   }, [isOpen])
 
   const fetchInitialData = async () => {
@@ -104,23 +112,26 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
   }, [searchQuery, selectedEntity, newShadowName, currentUserId])
 
   const handleClose = (discard = false) => {
-    if (!discard && (amount || description || searchQuery || newShadowName) &&
+    if (!discard && (amount || description || searchQuery || newShadowName || transactionDate !== toIndiaDateInputValue()) &&
         !window.confirm('You have unsaved debt details. Discard them and close?')) return
     setType('lent')
     setAmount('')
     setDescription('')
+    setTransactionDate(toIndiaDateInputValue())
     setSearchQuery('')
     setSearchResults([])
     setSelectedEntity(null)
     setNewShadowName('')
     setSelectedAccount('')
+    requestId.current = null
+    requestFingerprint.current = null
     onClose()
   }
 
   useEffect(() => {
     if (!isOpen) return
     const closeOnBack = (event: Event) => {
-      if (amount || description || searchQuery || newShadowName) {
+      if (amount || description || searchQuery || newShadowName || transactionDate !== toIndiaDateInputValue()) {
         if (!window.confirm('You have unsaved debt details. Discard them and close?')) {
           event.preventDefault()
           return
@@ -130,7 +141,7 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
     }
     window.addEventListener('rr:modal-back', closeOnBack)
     return () => window.removeEventListener('rr:modal-back', closeOnBack)
-  }, [isOpen, amount, description, searchQuery, newShadowName])
+  }, [isOpen, amount, description, searchQuery, newShadowName, transactionDate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -141,29 +152,39 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
       if (!user) throw new Error('Not authenticated')
 
       const parsedAmount = parseFloat(amount)
-      let finalShadowContactId = null
+      const account = accounts.find(item => item.id === selectedAccount)
+      if (!account) throw new Error('Choose an account before saving this debt.')
+      if (isDateBeforeOpeningDate(transactionDate, account.opening_date)) {
+        throw new Error(account.name + ' started on ' + account.opening_date + '; choose that date or later.')
+      }
       let finalProfileId = null
+      let finalShadowContactId = null
 
       if (selectedEntity) {
         if (selectedEntity.type === 'profile') finalProfileId = selectedEntity.id
         if (selectedEntity.type === 'contact') finalShadowContactId = selectedEntity.id
-      } else if (newShadowName) {
-        const { data: newContact, error: insertError } = await supabase
-          .from('contacts').insert({ owner_id: user.id, name: newShadowName }).select('id').single()
-        if (insertError) throw insertError
-        finalShadowContactId = newContact.id
       }
 
-      const { error: rpcError } = await supabase.rpc('process_p2p_transaction', {
+      const requestPayload = {
         p_owner_id: user.id,
         p_counterparty_profile_id: finalProfileId,
         p_shadow_contact_id: finalShadowContactId,
         p_account_id: selectedAccount,
         p_amount: parsedAmount,
         p_description: description,
-        p_is_emi: false, // <-- REVERTED: Hardcoded to false for this modal
+        p_is_emi: false,
         p_type: type,
-        p_transaction_date: new Date().toISOString()
+        p_transaction_date: indiaDateInputToIso(transactionDate),
+        p_new_shadow_contact_name: newShadowName.trim() || null
+      }
+      const fingerprint = JSON.stringify(requestPayload)
+      if (!requestId.current || requestFingerprint.current !== fingerprint) {
+        requestId.current = crypto.randomUUID()
+        requestFingerprint.current = fingerprint
+      }
+      const { error: rpcError } = await supabase.rpc('process_p2p_transaction', {
+        p_request_id: requestId.current,
+        ...requestPayload
       })
       
       if (rpcError) throw rpcError
@@ -192,7 +213,7 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
           <Users className="w-5 h-5 mr-2 text-emerald-400" /> Track P2P Debt
         </h2>
 
-        <form onSubmit={handleSubmit} className="flex flex-col space-y-6">
+        <form onSubmit={handleSubmit} className="flex flex-col space-y-4">
           
           <div className="flex p-1 bg-black/20 rounded-xl backdrop-blur-sm border border-white/10">
             {(['lent', 'borrowed'] as const).map((t) => (
@@ -207,11 +228,18 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
             ))}
           </div>
 
-          <div className="flex flex-col items-center justify-center space-y-2 py-4 bg-black/20 rounded-2xl border border-white/5">
-            <span className="text-white/50 text-sm font-medium uppercase tracking-wider">Amount</span>
-            <div className="flex items-center justify-center text-5xl font-black">
-              <IndianRupee className="w-10 h-10 text-white/50 mr-1" />
-              <input type="number" step="0.01" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="bg-transparent border-none outline-none text-center w-full max-w-[200px] placeholder:text-white/20 appearance-none text-emerald-400" required disabled={isSubmitting} />
+          <div className="grid grid-cols-1 min-[360px]:grid-cols-[minmax(0,1fr)_minmax(132px,0.85fr)] gap-3 items-stretch">
+            <div className="flex min-w-0 flex-col items-center justify-center space-y-1 py-3 bg-black/20 rounded-2xl border border-white/5">
+              <label htmlFor="debt-amount" className="text-white/50 text-xs font-medium uppercase tracking-wider">Amount</label>
+              <div className="flex min-w-0 items-center justify-center text-4xl font-black">
+                <IndianRupee className="w-7 h-7 shrink-0 text-white/50 mr-1" />
+                <input id="debt-amount" type="number" step="0.01" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} className="min-w-0 bg-transparent border-none outline-none text-center w-full max-w-[200px] placeholder:text-white/20 appearance-none text-emerald-400" required disabled={isSubmitting} />
+              </div>
+            </div>
+            <div className="flex min-w-0 flex-col justify-center space-y-1 rounded-2xl border border-white/5 bg-black/20 px-3 py-2">
+              <label htmlFor="debt-occurrence-date" className="text-[10px] font-semibold tracking-wide text-white/50 uppercase">Occurred on</label>
+              <input id="debt-occurrence-date" aria-describedby="debt-occurrence-help" type="date" required value={transactionDate} max={toIndiaDateInputValue()} onChange={event => setTransactionDate(event.target.value)} disabled={isSubmitting} className="min-w-0 w-full color-scheme-dark bg-transparent text-sm text-white outline-none" />
+              <span id="debt-occurrence-help" className="sr-only">The day the money was lent or borrowed.</span>
             </div>
           </div>
 

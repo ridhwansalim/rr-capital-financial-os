@@ -5,6 +5,7 @@ export interface CachedAccount {
   name: string
   type: string
   balance: number
+  opening_date?: string
 }
 
 export interface CachedContact {

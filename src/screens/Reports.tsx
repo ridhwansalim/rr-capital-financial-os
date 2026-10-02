@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Download, FileSpreadsheet, FileText, Loader2, Share2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { strToU8, zipSync } from 'fflate'
+import { formatIndiaDate, formatIndiaDateInputValue, indiaDateExclusiveEndToIso, indiaDateInputToIso, indiaDateStartToIso, toIndiaDateInputValue } from '../lib/financeDate'
 
 type Tx = { id: string; amount: number; fee_amount: number; description: string | null; created_at: string; from_account_id: string | null; to_account_id: string | null; category_id: string | null }
 type Category = { id: string; name: string; color: string }
 type ReportTx = Tx & { category: string; color: string; kind: 'income' | 'expense' | 'transfer'; running: number }
 const COLORS = ['#34d399', '#fb7185', '#818cf8', '#fbbf24', '#38bdf8', '#c084fc', '#fb923c', '#a3e635']
-const localDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 const money = (value: number) => `₹${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
 function Donut({ data, total }: { data: { name: string; amount: number; color: string }[]; total: number }) {
@@ -33,9 +32,9 @@ async function exportFile(file: File) {
 }
 
 export default function Reports() {
-  const today = new Date()
-  const [from, setFrom] = useState(localDate(new Date(today.getFullYear(), today.getMonth(), 1)))
-  const [to, setTo] = useState(localDate(today))
+  const today = toIndiaDateInputValue()
+  const [from, setFrom] = useState(`${today.slice(0, 7)}-01`)
+  const [to, setTo] = useState(today)
   const [transactions, setTransactions] = useState<ReportTx[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
@@ -50,13 +49,13 @@ export default function Reports() {
     try {
       const [{ data: categoryRows, error: categoryError }, { data: first, error: firstError }] = await Promise.all([
         supabase.from('transaction_categories').select('id, name, color').order('name'),
-        supabase.from('transactions').select('id, amount, fee_amount, description, created_at, from_account_id, to_account_id, category_id').eq('status', 'COMPLETED').gte('created_at', new Date(`${from}T00:00:00`).toISOString()).lt('created_at', new Date(new Date(`${to}T00:00:00`).getTime() + 86400000).toISOString()).order('created_at', { ascending: true }).order('id', { ascending: true }).range(0, 999),
+        supabase.from('transactions').select('id, amount, fee_amount, description, created_at, from_account_id, to_account_id, category_id').eq('status', 'COMPLETED').gte('created_at', indiaDateStartToIso(from)).lt('created_at', indiaDateExclusiveEndToIso(to)).order('created_at', { ascending: true }).order('id', { ascending: true }).range(0, 999),
       ])
       if (categoryError) throw categoryError
       if (firstError) throw firstError
       const raw: Tx[] = [...(first || [])] as Tx[]
       for (let start = 1000; (first || []).length === 1000; start += 1000) {
-        const { data, error: pageError } = await supabase.from('transactions').select('id, amount, fee_amount, description, created_at, from_account_id, to_account_id, category_id').eq('status', 'COMPLETED').gte('created_at', new Date(`${from}T00:00:00`).toISOString()).lt('created_at', new Date(new Date(`${to}T00:00:00`).getTime() + 86400000).toISOString()).order('created_at', { ascending: true }).order('id', { ascending: true }).range(start, start + 999)
+        const { data, error: pageError } = await supabase.from('transactions').select('id, amount, fee_amount, description, created_at, from_account_id, to_account_id, category_id').eq('status', 'COMPLETED').gte('created_at', indiaDateStartToIso(from)).lt('created_at', indiaDateExclusiveEndToIso(to)).order('created_at', { ascending: true }).order('id', { ascending: true }).range(start, start + 999)
         if (pageError) throw pageError
         raw.push(...(data || []) as Tx[])
         if ((data || []).length < 1000) break
@@ -92,8 +91,12 @@ export default function Reports() {
   }, [transactions])
 
   const setRange = (days: number | 'month' | 'year') => {
-    const end = new Date(); const start = days === 'month' ? new Date(end.getFullYear(), end.getMonth(), 1) : days === 'year' ? new Date(end.getFullYear(), 0, 1) : new Date(end.getFullYear(), end.getMonth(), end.getDate() - days + 1)
-    setFrom(localDate(start)); setTo(localDate(end))
+    const end = toIndiaDateInputValue()
+    const [year, month, day] = end.split('-').map(Number)
+    const start = days === 'month' ? `${end.slice(0, 7)}-01`
+      : days === 'year' ? `${year}-01-01`
+        : new Date(Date.UTC(year, month - 1, day - days + 1)).toISOString().slice(0, 10)
+    setFrom(start); setTo(end)
   }
 
   const assignCategory = async (tx: ReportTx, categoryId: string) => {
@@ -114,7 +117,7 @@ export default function Reports() {
   const runExport = async (kind: 'csv' | 'xlsx' | 'pdf') => {
     setBusy(true)
     try {
-      const rows = transactions.map(tx => ({ Date: new Date(tx.created_at).toLocaleDateString('en-IN'), Type: tx.kind, Description: tx.description || '', Category: tx.category, Amount: tx.kind === 'expense' ? -tx.amount : tx.kind === 'income' ? tx.amount : 0, Fee: tx.fee_amount, 'Running net': tx.running }))
+      const rows = transactions.map(tx => ({ Date: formatIndiaDate(tx.created_at), Type: tx.kind, Description: tx.description || '', Category: tx.category, Amount: tx.kind === 'expense' ? -tx.amount : tx.kind === 'income' ? tx.amount : 0, Fee: tx.fee_amount, 'Running net': tx.running }))
       const stem = `rr-capital-report-${from}-to-${to}`
       if (kind === 'csv') {
         const keys = Object.keys(rows[0] || { Date: '', Type: '', Description: '', Category: '', Amount: 0, Fee: 0, 'Running net': 0 })
@@ -128,7 +131,7 @@ export default function Reports() {
         const csv = [keys.map(quote).join(','), ...rows.map(row => keys.map(key => quote(row[key as keyof typeof row])).join(','))].join('\r\n')
         await exportFile(new File([csv], `${stem}.csv`, { type: 'text/csv;charset=utf-8' }))
       } else if (kind === 'xlsx') {
-        const binary = makeXlsx(rows)
+        const binary = await makeXlsx(rows)
         await exportFile(new File([binary], `${stem}.xlsx`, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
       } else {
         const { jsPDF } = await import('jspdf')
@@ -145,7 +148,7 @@ export default function Reports() {
     <header><p className="text-xs uppercase tracking-[0.2em] text-indigo-300">Analysis</p><h1 className="text-3xl font-bold mt-1">Reports</h1><p className="text-slate-400 mt-1">Review cash flow and export your selected period.</p></header>
     <section className="rounded-3xl border border-white/10 bg-white/5 p-4 sm:p-5 space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{[['7 days', 7], ['30 days', 30], ['This month', 'month'], ['This year', 'year']].map(([label, value]) => <button key={label} onClick={() => setRange(value as number | 'month' | 'year')} className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2 text-sm">{label}</button>)}</div>
-      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-3 items-end"><label className="text-xs text-slate-400">From<input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)} className="mt-1 block w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white" /></label><span className="hidden sm:block text-slate-500 pb-2">through</span><label className="text-xs text-slate-400">To<input type="date" value={to} min={from} max={localDate(new Date())} onChange={e => setTo(e.target.value)} className="mt-1 block w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white" /></label></div>
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] gap-3 items-end"><label className="text-xs text-slate-400">From<input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)} className="mt-1 block w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white" /></label><span className="hidden sm:block text-slate-500 pb-2">through</span><label className="text-xs text-slate-400">To<input type="date" value={to} min={from} max={toIndiaDateInputValue()} onChange={e => setTo(e.target.value)} className="mt-1 block w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white" /></label></div>
       <div className="flex flex-wrap gap-2">{(['csv', 'xlsx', 'pdf'] as const).map(kind => <button disabled={busy || loading} key={kind} onClick={() => void runExport(kind)} className="inline-flex items-center gap-2 rounded-xl bg-indigo-500/15 border border-indigo-400/20 px-3 py-2 text-sm text-indigo-200 disabled:opacity-40">{kind === 'csv' ? <Download className="w-4 h-4" /> : kind === 'xlsx' ? <FileSpreadsheet className="w-4 h-4" /> : <FileText className="w-4 h-4" />}{kind.toUpperCase()}<Share2 className="w-3 h-3 opacity-60" /></button>)}</div>
     </section>
     {error && <p role="alert" className="rounded-xl border border-rose-400/20 bg-rose-500/10 p-3 text-sm text-rose-200">{error}</p>}
@@ -155,14 +158,15 @@ export default function Reports() {
         <div className="rounded-3xl border border-white/10 bg-white/5 p-5"><h2 className="font-semibold">Expenses by category</h2><div className="mt-3 flex flex-col sm:flex-row items-center gap-4"><Donut data={grouped} total={expenseTotal} /><div className="flex-1 w-full space-y-2">{grouped.length ? grouped.map(item => <div key={item.name} className="flex justify-between items-center gap-3 text-sm"><span className="flex items-center gap-2 min-w-0"><i className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} /> <span className="truncate">{item.name}</span></span><span>{money(item.amount)}</span></div>) : <p className="text-sm text-slate-500">No expenses in this date range.</p>}</div></div></div>
         <div className="rounded-3xl border border-white/10 bg-white/5 p-5"><h2 className="font-semibold">Running cash flow</h2><p className="text-xs text-slate-500 mt-1">Income minus expenses; transfers are excluded.</p><RunningChart rows={transactions} /></div>
       </section>
-      <section className="rounded-3xl border border-white/10 bg-white/5 overflow-hidden"><div className="p-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3"><div><h2 className="font-semibold">{entryFilter === 'expenses' ? 'Expense list' : 'All transactions'}</h2><p className="text-xs text-slate-500 mt-1">{entryFilter === 'expenses' ? `${expenses.length} expense entries in this date range` : `${transactions.length} entries in this date range`} · debt/EMI-linked entries must be changed in their original workflow</p></div><div className="grid grid-cols-2 rounded-xl border border-white/10 bg-black/10 p-1"><button onClick={() => setEntryFilter('expenses')} className={`rounded-lg px-3 py-1.5 text-xs ${entryFilter === 'expenses' ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-400'}`}>Expenses</button><button onClick={() => setEntryFilter('all')} className={`rounded-lg px-3 py-1.5 text-xs ${entryFilter === 'all' ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-400'}`}>All entries</button></div></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-xs text-slate-500 border-y border-white/10"><tr>{['Date', 'Description', 'Category', 'Amount', 'Running', 'Actions'].map(h => <th key={h} className="text-left font-medium p-3">{h}</th>)}</tr></thead><tbody>{visibleEntries.map(tx => <tr key={tx.id} className="border-b border-white/5"><td className="p-3 whitespace-nowrap">{new Date(tx.created_at).toLocaleDateString('en-IN')}</td><td className="p-3 min-w-48"><span className="capitalize text-slate-500 text-xs">{tx.kind}</span><br />{tx.description || (tx.kind === 'transfer' ? 'Transfer' : tx.kind)}</td><td className="p-3"><select aria-label={`Category for ${tx.description || tx.kind}`} value={tx.category_id || ''} onChange={e => void assignCategory(tx, e.target.value)} className="max-w-40 rounded-lg bg-slate-900 border border-white/10 px-2 py-1"><option value="">Uncategorized</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></td><td className={`p-3 whitespace-nowrap ${tx.kind === 'income' ? 'text-emerald-300' : tx.kind === 'expense' ? 'text-rose-300' : 'text-slate-300'}`}>{tx.kind === 'expense' ? '-' : tx.kind === 'income' ? '+' : ''}{money(tx.amount)}{tx.fee_amount > 0 && <span className="block text-[10px] text-slate-500">+ {money(tx.fee_amount)} fee</span>}</td><td className="p-3 whitespace-nowrap">{money(tx.running)}</td><td className="p-3"><div className="flex gap-2"><button onClick={() => setEditing(tx)} className="rounded-lg px-2.5 py-1.5 border border-white/10 text-xs hover:bg-white/10">Edit</button><button onClick={() => void voidEntry(tx)} className="rounded-lg px-2.5 py-1.5 border border-rose-400/20 text-xs text-rose-300 hover:bg-rose-500/10">Void</button></div></td></tr>)}</tbody></table></div>{!visibleEntries.length && <div className="text-center py-12 text-slate-500">No {entryFilter} for this date range.</div>}</section>
+      <section className="rounded-3xl border border-white/10 bg-white/5 overflow-hidden"><div className="p-5 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3"><div><h2 className="font-semibold">{entryFilter === 'expenses' ? 'Expense list' : 'All transactions'}</h2><p className="text-xs text-slate-500 mt-1">{entryFilter === 'expenses' ? `${expenses.length} expense entries in this date range` : `${transactions.length} entries in this date range`} · debt/EMI-linked entries must be changed in their original workflow</p></div><div className="grid grid-cols-2 rounded-xl border border-white/10 bg-black/10 p-1"><button onClick={() => setEntryFilter('expenses')} className={`rounded-lg px-3 py-1.5 text-xs ${entryFilter === 'expenses' ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-400'}`}>Expenses</button><button onClick={() => setEntryFilter('all')} className={`rounded-lg px-3 py-1.5 text-xs ${entryFilter === 'all' ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-400'}`}>All entries</button></div></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-xs text-slate-500 border-y border-white/10"><tr>{['Date', 'Description', 'Category', 'Amount', 'Running', 'Actions'].map(h => <th key={h} className="text-left font-medium p-3">{h}</th>)}</tr></thead><tbody>{visibleEntries.map(tx => <tr key={tx.id} className="border-b border-white/5"><td className="p-3 whitespace-nowrap">{formatIndiaDate(tx.created_at)}</td><td className="p-3 min-w-48"><span className="capitalize text-slate-500 text-xs">{tx.kind}</span><br />{tx.description || (tx.kind === 'transfer' ? 'Transfer' : tx.kind)}</td><td className="p-3"><select aria-label={`Category for ${tx.description || tx.kind}`} value={tx.category_id || ''} onChange={e => void assignCategory(tx, e.target.value)} className="max-w-40 rounded-lg bg-slate-900 border border-white/10 px-2 py-1"><option value="">Uncategorized</option>{categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}</select></td><td className={`p-3 whitespace-nowrap ${tx.kind === 'income' ? 'text-emerald-300' : tx.kind === 'expense' ? 'text-rose-300' : 'text-slate-300'}`}>{tx.kind === 'expense' ? '-' : tx.kind === 'income' ? '+' : ''}{money(tx.amount)}{tx.fee_amount > 0 && <span className="block text-[10px] text-slate-500">+ {money(tx.fee_amount)} fee</span>}</td><td className="p-3 whitespace-nowrap">{money(tx.running)}</td><td className="p-3"><div className="flex gap-2"><button onClick={() => setEditing(tx)} className="rounded-lg px-2.5 py-1.5 border border-white/10 text-xs hover:bg-white/10">Edit</button><button onClick={() => void voidEntry(tx)} className="rounded-lg px-2.5 py-1.5 border border-rose-400/20 text-xs text-rose-300 hover:bg-rose-500/10">Void</button></div></td></tr>)}</tbody></table></div>{!visibleEntries.length && <div className="text-center py-12 text-slate-500">No {entryFilter} for this date range.</div>}</section>
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"><h2 className="font-semibold text-sm">Manage categories</h2><CategoryManager categories={categories} onSaved={load} /></section>
     </>}
     {editing && <CorrectionDialog transaction={editing} onCancel={() => setEditing(null)} onSaved={() => { setEditing(null); void load() }} />}
   </div>
 }
 
-function makeXlsx(rows: Record<string, string | number>[]) {
+async function makeXlsx(rows: Record<string, string | number>[]) {
+  const { strToU8, zipSync } = await import('fflate')
   const keys = Object.keys(rows[0] || { Date: '', Type: '', Description: '', Category: '', Amount: 0, Fee: 0, 'Running net': 0 })
   const xml = (value: unknown) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
   const columnName = (index: number) => { let name = ''; for (let n = index + 1; n; n = Math.floor((n - 1) / 26)) name = String.fromCharCode(65 + ((n - 1) % 26)) + name; return name }
@@ -200,7 +204,7 @@ function CategoryManager({ categories, onSaved }: { categories: Category[]; onSa
 function CorrectionDialog({ transaction, onCancel, onSaved }: { transaction: ReportTx; onCancel: () => void; onSaved: () => void }) {
   const [amount, setAmount] = useState(String(transaction.amount))
   const [description, setDescription] = useState(transaction.description || '')
-  const [date, setDate] = useState(() => { const instant = new Date(transaction.created_at); return new Date(instant.getTime() - instant.getTimezoneOffset() * 60000).toISOString().slice(0, 16) })
+  const [date, setDate] = useState(() => formatIndiaDateInputValue(transaction.created_at))
   const [reason, setReason] = useState('Corrected data entry')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -211,10 +215,10 @@ function CorrectionDialog({ transaction, onCancel, onSaved }: { transaction: Rep
     setSaving(true); setError('')
     const { error: correctionError } = await supabase.rpc('correct_ledger_transaction', {
       p_request_id: crypto.randomUUID(), p_transaction_id: transaction.id,
-      p_amount: value, p_description: description.trim(), p_created_at: new Date(date).toISOString(), p_reason: reason.trim(),
+      p_amount: value, p_description: description.trim(), p_created_at: indiaDateInputToIso(date), p_reason: reason.trim(),
     })
     if (correctionError) { setError(correctionError.message.includes('original workflow') ? correctionError.message : 'This entry could not be corrected. It may already be linked to another financial workflow or the correction would violate balance rules.'); setSaving(false); return }
     onSaved()
   }
-  return <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm grid place-items-center p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onCancel() }}><form onSubmit={save} className="w-full max-w-lg rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl space-y-4" role="dialog" aria-modal="true" aria-labelledby="correct-entry-title"><div><p className="text-xs uppercase tracking-widest text-indigo-300">Audit-safe correction</p><h2 id="correct-entry-title" className="text-xl font-bold mt-1">Edit entry</h2><p className="text-xs text-slate-400 mt-1">The old row is preserved as voided and a corrected entry is posted.</p></div><label className="block text-sm text-slate-300">Description<input autoFocus maxLength={500} value={description} onChange={event => setDescription(event.target.value)} className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2" /></label><div className="grid grid-cols-2 gap-3"><label className="block text-sm text-slate-300">Amount<input type="number" min="0.01" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2" /></label><label className="block text-sm text-slate-300">Date and time<input type="datetime-local" value={date} onChange={event => setDate(event.target.value)} className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2" /></label></div><label className="block text-sm text-slate-300">Correction reason<input required maxLength={200} value={reason} onChange={event => setReason(event.target.value)} className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2" /></label>{error && <p role="alert" className="text-sm text-rose-300">{error}</p>}<div className="flex justify-end gap-2"><button type="button" onClick={onCancel} className="rounded-xl border border-white/10 px-4 py-2 text-sm">Cancel</button><button disabled={saving} className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold disabled:opacity-50">{saving ? 'Saving…' : 'Save correction'}</button></div></form></div>
+  return <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm grid place-items-center p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onCancel() }}><form onSubmit={save} className="w-full max-w-lg rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl space-y-4" role="dialog" aria-modal="true" aria-labelledby="correct-entry-title"><div><p className="text-xs uppercase tracking-widest text-indigo-300">Audit-safe correction</p><h2 id="correct-entry-title" className="text-xl font-bold mt-1">Edit entry</h2><p className="text-xs text-slate-400 mt-1">The old row is preserved as voided and a corrected entry is posted.</p></div><label className="block text-sm text-slate-300">Description<input autoFocus maxLength={500} value={description} onChange={event => setDescription(event.target.value)} className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2" /></label><div className="grid grid-cols-2 gap-3"><label className="block text-sm text-slate-300">Amount<input type="number" min="0.01" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2" /></label><label className="block text-sm text-slate-300">Occurrence date<input type="date" required value={date} onChange={event => setDate(event.target.value)} className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2" /></label></div><label className="block text-sm text-slate-300">Correction reason<input required maxLength={200} value={reason} onChange={event => setReason(event.target.value)} className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2" /></label>{error && <p role="alert" className="text-sm text-rose-300">{error}</p>}<div className="flex justify-end gap-2"><button type="button" onClick={onCancel} className="rounded-xl border border-white/10 px-4 py-2 text-sm">Cancel</button><button disabled={saving} className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold disabled:opacity-50">{saving ? 'Saving…' : 'Save correction'}</button></div></form></div>
 }

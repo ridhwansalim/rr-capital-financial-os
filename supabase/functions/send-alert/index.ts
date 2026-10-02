@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { readBoundedJson } from "../_shared/boundedJson.ts"
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -34,12 +35,13 @@ serve(async (req) => {
     return new Response("Unauthorized", { status: 401 })
   }
 
-  let payload: any
-  try {
-    payload = await req.json()
-  } catch {
-    return new Response("Invalid JSON", { status: 400 })
+  const parsed = await readBoundedJson(req, 1_000_000)
+  if (!parsed.ok) {
+    return new Response(parsed.status === 413 ? "Payload too large" : "Invalid JSON", {
+      status: parsed.status,
+    })
   }
+  const payload: any = parsed.value
 
   const alertTables = ["obligations", "recurring_emis", "settlements"]
   const table = payload?.table

@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { X, IndianRupee, Loader2, Wallet, ArrowUpRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useModalBack } from '../lib/useModalBack'
+import { isDateBeforeOpeningDate, toIndiaDateInputValue } from '../lib/financeDate'
 
 interface SettleDebtModalProps {
   isOpen: boolean
@@ -13,42 +14,67 @@ export default function SettleDebtModal({ isOpen, onClose, obligation }: SettleD
   const [amount, setAmount] = useState('')
   const [accounts, setAccounts] = useState<any[]>([])
   const [selectedAccount, setSelectedAccount] = useState('')
+  const [accountsLoading, setAccountsLoading] = useState(false)
+  const [accountsError, setAccountsError] = useState('')
+  const [formError, setFormError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [transactionDate, setTransactionDate] = useState(() => toIndiaDateInputValue())
   const requestId = useRef<string | null>(null)
-  const isDirty = Boolean(amount && obligation && amount !== String(obligation.amount))
+  const today = toIndiaDateInputValue()
+  const isDirty = Boolean((amount && obligation && amount !== String(obligation.amount)) || transactionDate !== today)
   useModalBack(isOpen, onClose, isDirty, 'Discard this settlement request?')
   const handleClose = () => {
     if (isDirty && !window.confirm('Discard this settlement request?')) return
     onClose()
   }
 
-  useEffect(() => {
-    if (isOpen && obligation) {
-      requestId.current = crypto.randomUUID()
-      // Default to the remaining balance
-      setAmount(obligation.amount?.toString() || '')
-      fetchAccounts()
-    }
-  }, [isOpen, obligation])
-
-  const fetchAccounts = async () => {
-    const { data: accData } = await supabase.from('accounts').select('*').order('name')
-    const { data: balData } = await supabase.from('account_balances').select('*')
-    
-    if (accData) {
-      const merged = accData.map(acc => {
-        const matched = balData?.find(b => b.id === acc.id)
-        return { ...acc, balance: matched ? Number(matched.balance) : 0 }
-      })
+  const fetchAccounts = useCallback(async () => {
+    setAccountsLoading(true)
+    setAccountsError('')
+    try {
+      const [{ data: accData, error: accountError }, { data: balData, error: balanceError }] = await Promise.all([
+        supabase.from('accounts').select('id, name, type, opening_date').order('name'),
+        supabase.from('account_balances').select('id, balance'),
+      ])
+      if (accountError || balanceError) throw new Error('Account query failed')
+      const balances = new Map((balData || []).map(balance => [balance.id, Number(balance.balance)]))
+      const merged = (accData || []).map(account => ({ ...account, balance: balances.get(account.id) ?? 0 }))
       setAccounts(merged)
-      if (merged.length > 0) setSelectedAccount(merged[0].id)
+      setSelectedAccount(merged[0]?.id || '')
+      if (!merged.length) setAccountsError('Add an account before requesting a settlement.')
+    } catch {
+      setAccounts([])
+      setSelectedAccount('')
+      setAccountsError('Accounts could not be loaded. Check your connection and try again.')
+    } finally {
+      setAccountsLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!isOpen || !obligation) return
+    requestId.current = crypto.randomUUID()
+    setAmount(obligation.amount?.toString() || '')
+    setTransactionDate(toIndiaDateInputValue())
+    setFormError('')
+    void fetchAccounts()
+  }, [isOpen, obligation, fetchAccounts])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedAccount) return alert("Please select an account to pay from.")
+    if (accountsLoading || !accounts.length || !selectedAccount) return alert('Choose a loaded account before requesting settlement.')
+    const account = accounts.find(item => item.id === selectedAccount)
+    if (!account) return alert('Choose a valid payment account.')
+    if (transactionDate > toIndiaDateInputValue()) {
+      setFormError('Settlement date cannot be in the future.')
+      return
+    }
+    if (isDateBeforeOpeningDate(transactionDate, account.opening_date)) {
+      setFormError(`${account.name} started on ${account.opening_date}; choose that date or later.`)
+      return
+    }
     setIsSubmitting(true)
+    setFormError('')
     
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -60,7 +86,8 @@ export default function SettleDebtModal({ isOpen, onClose, obligation }: SettleD
         p_obligation_id: obligation.id,
         p_source_account_id: selectedAccount,
         p_amount: parseFloat(amount),
-        p_expected_month: null
+        p_expected_month: null,
+        p_transaction_date: transactionDate
       })
       
       if (error) throw error
@@ -69,7 +96,7 @@ export default function SettleDebtModal({ isOpen, onClose, obligation }: SettleD
       alert("Payment request sent! Waiting for receiver to accept.")
       onClose()
     } catch (err: any) {
-      alert(`Payment failed: ${err.message}`)
+      setFormError(err?.message || 'Settlement request could not be sent.')
     } finally {
       setIsSubmitting(false)
     }
@@ -93,22 +120,31 @@ export default function SettleDebtModal({ isOpen, onClose, obligation }: SettleD
             <span className="text-white/50 text-xs font-bold uppercase tracking-wider">Amount to Pay</span>
             <div className="flex items-center justify-center text-4xl font-black">
               <IndianRupee className="w-8 h-8 text-white/50 mr-1" />
-              <input type="number" step="0.01" max={obligation.amount} required value={amount} onChange={(e) => setAmount(e.target.value)} className="bg-transparent border-none outline-none text-center w-full max-w-[150px] placeholder:text-white/20 appearance-none text-emerald-400" disabled={isSubmitting} />
+              <input type="number" step="0.01" max={obligation.amount} required value={amount} onChange={(e) => { if (e.target.value !== amount) requestId.current = null; setAmount(e.target.value) }} className="bg-transparent border-none outline-none text-center w-full max-w-[150px] placeholder:text-white/20 appearance-none text-emerald-400" disabled={isSubmitting} />
             </div>
             <p className="text-[10px] text-slate-500">Remaining Balance: ₹{obligation.amount}</p>
+          </div>
+
+          <div className="flex flex-col space-y-1">
+            <label htmlFor="settlement-occurrence-date" className="text-xs font-semibold tracking-wide text-white/50 uppercase">Occurred on</label>
+            <input id="settlement-occurrence-date" type="date" max={today} required value={transactionDate} onChange={event => { if (event.target.value !== transactionDate) requestId.current = null; setTransactionDate(event.target.value); setFormError('') }} className="w-full color-scheme-dark bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-emerald-500/50" disabled={isSubmitting} />
+            <p className="text-[10px] text-slate-500">The approved repayment is recorded on this date for both people.</p>
           </div>
 
           <div className="flex flex-col space-y-1">
             <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Pay From</label>
             <div className="relative mt-1">
               <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-              <select required value={selectedAccount} onChange={(e) => setSelectedAccount(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white outline-none focus:border-emerald-500/50 appearance-none" disabled={isSubmitting}>
+              <select required value={selectedAccount} onChange={(e) => { if (e.target.value !== selectedAccount) requestId.current = null; setSelectedAccount(e.target.value); setFormError('') }} className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white outline-none focus:border-emerald-500/50 appearance-none" disabled={isSubmitting || accountsLoading || !accounts.length}>
                 {accounts.map(acc => <option key={acc.id} value={acc.id} className="text-slate-900">{acc.name} (₹{acc.balance})</option>)}
+                {!accounts.length && <option value="" className="text-slate-900">{accountsLoading ? 'Loading accounts…' : 'No accounts available'}</option>}
               </select>
             </div>
           </div>
 
-          <button type="submit" disabled={isSubmitting} className="w-full flex items-center justify-center py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50">
+          {formError && <p role="alert" className="text-xs text-rose-300">{formError}</p>}
+          {accountsError && <p role="alert" className="text-xs text-amber-300">{accountsError}</p>}
+          <button type="submit" disabled={isSubmitting || accountsLoading || !accounts.length || !selectedAccount} className="w-full flex items-center justify-center py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50">
             {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Send to Escrow'}
           </button>
         </form>

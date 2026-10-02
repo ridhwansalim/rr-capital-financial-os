@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, IndianRupee, Loader2, CalendarDays, X, Wallet, Trash2, Search, Users, User, UserPlus, ArrowUpRight, ArrowRightLeft, History } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useModalBack } from '../lib/useModalBack'
-import { format, differenceInMonths } from 'date-fns'
+import { formatIndiaDate, indiaDateInputToIso, monthlyInstallmentDate, toIndiaDateInputValue } from '../lib/financeDate'
+import InstallmentHistoryModal from '../components/InstallmentHistoryModal'
+import { format } from 'date-fns'
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/dist/style.css'
 
@@ -30,17 +32,24 @@ interface SearchEntity {
   type: 'profile' | 'contact'
 }
 
+const monthIndex = (value: string) => {
+  const [year, month] = value.split('-').map(Number)
+  return year * 12 + month - 1
+}
+
 export default function Calendar() {
   const [emis, setEmis] = useState<EMI[]>([])
   const [accounts, setAccounts] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   
-  const [currentDate, setCurrentDate] = useState(new Date())
-  const [selectedDay, setSelectedDay] = useState(() => new Date().getDate())
+  const [currentDate, setCurrentDate] = useState(() => new Date(`${toIndiaDateInputValue()}T12:00:00`))
+  const [selectedDay, setSelectedDay] = useState(() => Number(toIndiaDateInputValue().slice(-2)))
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [payEmiData, setPayEmiData] = useState<{emi: EMI, role: 'p2p' | 'bank', currentMonth: number} | null>(null)
+  const [historyEmi, setHistoryEmi] = useState<EMI | null>(null)
+  const [bankInstallments, setBankInstallments] = useState<Array<{ installment_number: number; due_date: string; status: string }>>([])
   const bankPaymentRequestId = useRef<string | null>(null)
   const peerPaymentRequestId = useRef<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -49,10 +58,10 @@ export default function Calendar() {
   const [newEmi, setNewEmi] = useState({ name: '', amount: '', account_id: '' })
   const [principal, setPrincipal] = useState('')
   const [processingFee, setProcessingFee] = useState('')
-  const [startDate, setStartDate] = useState<Date | undefined>(new Date())
+  const [startDate, setStartDate] = useState<Date | undefined>(() => new Date(`${toIndiaDateInputValue()}T12:00:00`))
   const [endDate, setEndDate] = useState<Date | undefined>()
   const [payAccountId, setPayAccountId] = useState('')
-  const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0])
+  const [payDate, setPayDate] = useState(() => toIndiaDateInputValue())
 
   const [searchQuery, setSearchQuery] = useState('')
   const [isSearching, setIsSearching] = useState(false)
@@ -67,7 +76,7 @@ export default function Calendar() {
   const popoverRef = useRef<HTMLDivElement>(null)
   const emiFormDirty = Boolean(newEmi.name || newEmi.amount || principal || processingFee || selectedEntity || newShadowName)
   useModalBack(isAddModalOpen, () => setIsAddModalOpen(false), emiFormDirty, 'Discard this recurring payment form?')
-  useModalBack(!!payEmiData, () => setPayEmiData(null), Boolean(payAccountId || payDate !== new Date().toISOString().split('T')[0]), 'Discard this payment form?')
+  useModalBack(!!payEmiData, () => setPayEmiData(null), Boolean(payAccountId || payDate !== toIndiaDateInputValue()), 'Discard this payment form?')
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -179,7 +188,7 @@ export default function Calendar() {
 
       setIsAddModalOpen(false)
       setNewEmi({ name: '', amount: '', account_id: accounts[0]?.id || '' })
-      setPrincipal(''); setProcessingFee(''); setStartDate(new Date()); setEndDate(undefined); setSelectedEntity(null); setNewShadowName(''); setSearchQuery('')
+      setPrincipal(''); setProcessingFee(''); setStartDate(new Date(`${toIndiaDateInputValue()}T12:00:00`)); setEndDate(undefined); setSelectedEntity(null); setNewShadowName(''); setSearchQuery('')
       fetchEngineData()
     } catch (error: any) { alert(error.message) } finally { setIsSubmitting(false) }
   }
@@ -193,7 +202,7 @@ export default function Calendar() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error("Not authenticated")
 
-      const secureDate = new Date(`${payDate}T12:00:00`).toISOString()
+      const secureDate = indiaDateInputToIso(payDate)
       const { emi, role, currentMonth } = payEmiData
 
       if (role === 'p2p' && emi.related_obligation_id) {
@@ -203,7 +212,8 @@ export default function Calendar() {
           p_obligation_id: emi.related_obligation_id,
           p_source_account_id: payAccountId,
           p_amount: Number(emi.amount),
-          p_expected_month: currentMonth
+          p_expected_month: currentMonth,
+          p_transaction_date: payDate
         })
         if (escrowError) throw escrowError
         peerPaymentRequestId.current = null
@@ -223,7 +233,7 @@ export default function Calendar() {
         throw new Error('This peer payment has no linked debt. Refresh the EMI and check its setup before paying.')
       }
 
-      setPayEmiData(null); setPayAccountId(''); setPayDate(new Date().toISOString().split('T')[0])
+      setPayEmiData(null); setPayAccountId(''); setPayDate(toIndiaDateInputValue())
       fetchEngineData()
     } catch (err: any) { alert(err.message) } finally { setIsSubmitting(false) }
   }
@@ -239,10 +249,32 @@ export default function Calendar() {
     }
   }
 
+  const openEmiPayment = async (emi: EMI, role: 'p2p' | 'bank', nextMonth: number) => {
+    bankPaymentRequestId.current = crypto.randomUUID()
+    peerPaymentRequestId.current = crypto.randomUUID()
+    setBankInstallments([])
+    setPayEmiData({ emi, role, currentMonth: nextMonth })
+    if (emi.type !== 'personal' || role !== 'bank') return
+    const { data, error } = await supabase.rpc('list_installment_occurrences', {
+      p_schedule_kind: 'BANK_EMI', p_schedule_id: emi.id
+    })
+    if (error) {
+      alert(`Could not load this payment schedule: ${error.message}`)
+      setPayEmiData(null)
+      return
+    }
+    const choices = (data || []) as Array<{ installment_number: number; due_date: string; status: string }>
+    setBankInstallments(choices)
+    const firstUnpaid = choices.find(item => item.status !== 'PAID'
+      && (item.status !== 'UNCONFIRMED' || item.due_date >= toIndiaDateInputValue()))
+    if (firstUnpaid) setPayEmiData({ emi, role, currentMonth: firstUnpaid.installment_number })
+  }
+
   const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()
   const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay()
   const monthName = currentDate.toLocaleString('default', { month: 'long' })
   const year = currentDate.getFullYear()
+  const today = toIndiaDateInputValue()
 
   const prevMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))
@@ -254,23 +286,23 @@ export default function Calendar() {
   }
 
   const getEmisOnDay = (day: number) => {
-    const targetDate = new Date(year, currentDate.getMonth(), day)
+    const targetDate = `${year}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
     return emis.filter(emi => {
       if (emi.status !== 'ACTIVE') return false
-      const dbStartDate = new Date(emi.start_date)
-      if (dbStartDate.getDate() !== day) return false
-      if (targetDate < new Date(dbStartDate.getFullYear(), dbStartDate.getMonth(), dbStartDate.getDate())) return false
-      if (emi.end_date && targetDate > new Date(new Date(emi.end_date).getFullYear(), new Date(emi.end_date).getMonth(), new Date(emi.end_date).getDate())) return false
-      return true
+      const monthOffset = monthIndex(`${year}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-01`) - monthIndex(emi.start_date)
+      if (monthOffset < 0) return false
+      const dueDate = monthlyInstallmentDate(emi.start_date, monthOffset + 1)
+      return dueDate === targetDate && (!emi.end_date || dueDate <= emi.end_date)
     })
   }
 
   const totalMonthlyObligation = emis.reduce((sum, emi) => {
     if (emi.status !== 'ACTIVE') return sum
-    const viewDate = new Date(year, currentDate.getMonth(), 1)
-    const emiStartMonth = new Date(new Date(emi.start_date).getFullYear(), new Date(emi.start_date).getMonth(), 1)
-    if (viewDate < emiStartMonth) return sum
-    if (emi.end_date && viewDate > new Date(new Date(emi.end_date).getFullYear(), new Date(emi.end_date).getMonth(), 1)) return sum
+    const monthOffset = monthIndex(`${year}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-01`) - monthIndex(emi.start_date)
+    if (monthOffset < 0) return sum
+    const dueDate = monthlyInstallmentDate(emi.start_date, monthOffset + 1)
+    const displayedMonth = `${year}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-`
+    if (!dueDate.startsWith(displayedMonth) || (emi.end_date && dueDate > emi.end_date)) return sum
     return sum + Number(emi.amount)
   }, 0)
 
@@ -308,7 +340,7 @@ export default function Calendar() {
               {Array.from({ length: firstDayOfMonth }, (_, i) => i).map(pad => <div key={`pad-${pad}`} className="h-10 sm:h-24 rounded-lg sm:rounded-2xl bg-white/2 border border-white/5 opacity-50" />)}
               {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
                 const dayEmis = getEmisOnDay(day)
-                const isToday = day === new Date().getDate() && currentDate.getMonth() === new Date().getMonth() && currentDate.getFullYear() === new Date().getFullYear()
+                const isToday = `${year}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` === today
                 const isSelected = selectedDay === day
                 return (
                   <button key={day} type="button" aria-pressed={isSelected} aria-label={`${monthName} ${day}${dayEmis.length ? `, ${dayEmis.length} scheduled ${dayEmis.length === 1 ? 'payment' : 'payments'}` : ''}`} onClick={() => setSelectedDay(day)} className={`h-10 sm:h-24 min-w-0 rounded-lg sm:rounded-2xl p-1 sm:p-2 flex flex-col text-left transition-all border ${isSelected ? 'bg-indigo-500/20 border-indigo-400 ring-1 ring-indigo-400/50' : isToday ? 'bg-indigo-500/10 border-indigo-500/40' : 'bg-black/20 border-white/5 hover:bg-white/5'}`}>
@@ -356,8 +388,8 @@ export default function Calendar() {
               
               <div className="space-y-4">
                 {emis.filter(e => e.status === 'ACTIVE').map(emi => {
-                  const day = new Date(emi.start_date).getDate()
-                  const totalMonths = emi.end_date ? differenceInMonths(new Date(emi.end_date), new Date(emi.start_date)) + 1 : 1
+                  const day = Number(emi.start_date.slice(-2))
+                  const totalMonths = emi.end_date ? monthIndex(emi.end_date) - monthIndex(emi.start_date) + 1 : 1
 
                   // SMART PROGRESS LOGIC DECOUPLED
                   const isOwner = currentUserId === emi.owner_id
@@ -415,7 +447,7 @@ export default function Calendar() {
                       <div className="flex gap-2 pt-3 border-t border-white/10">
                         {/* THE FIX: Button relies only on your personal task progress */}
                         {!isMyTaskCompleted ? (
-                          <button onClick={() => { bankPaymentRequestId.current = crypto.randomUUID(); peerPaymentRequestId.current = crypto.randomUUID(); setPayEmiData({emi, role: myRole, currentMonth: myProgress + 1}) }} className="flex-1 flex items-center justify-center py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-bold transition-all border border-white/10">
+                          <button onClick={() => void openEmiPayment(emi, myRole, myProgress + 1)} className="flex-1 flex items-center justify-center py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-xs font-bold transition-all border border-white/10">
                             {myRole === 'bank' ? <ArrowUpRight className="w-3 h-3 mr-1.5 text-rose-400" /> : <ArrowRightLeft className="w-3 h-3 mr-1.5 text-amber-400" />}
                             {myRole === 'bank' ? 'Pay Bank' : 'Pay Peer'}
                           </button>
@@ -424,6 +456,7 @@ export default function Calendar() {
                              {myRole === 'bank' ? 'Bank Paid Off' : 'Peer Paid Off'}
                            </div>
                         )}
+                        {emi.type === 'personal' && myRole === 'bank' && <button type="button" onClick={() => setHistoryEmi(emi)} className="px-2 py-2 text-[10px] font-semibold text-indigo-300 hover:text-indigo-200">History</button>}
                         <button onClick={() => handleDelete(emi.id)} className="p-2 bg-white/5 hover:bg-rose-500/20 hover:text-rose-400 rounded-lg text-slate-500 transition-colors">
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -568,16 +601,26 @@ export default function Calendar() {
             <p className="text-sm text-slate-400 mb-6">Logging monthly payment of <strong className="text-white">₹{Number(payEmiData.emi.amount).toLocaleString('en-IN')}</strong> for {payEmiData.emi.name}.</p>
             
             <form onSubmit={handlePayInstallment} className="space-y-4">
+              {payEmiData.emi.type === 'personal' && payEmiData.role === 'bank' && (
+                <div>
+                  <label className="text-xs font-semibold text-slate-400 uppercase">Installment to pay</label>
+                  <select required value={payEmiData.currentMonth} onChange={event => { bankPaymentRequestId.current = crypto.randomUUID(); setPayEmiData({ ...payEmiData, currentMonth: Number(event.target.value) }) }} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50">
+                    {bankInstallments.filter(item => item.status !== 'PAID'
+                      && (item.status !== 'UNCONFIRMED' || item.due_date >= toIndiaDateInputValue()))
+                      .map(item => <option key={item.installment_number} value={item.installment_number}>Month {item.installment_number} · due {formatIndiaDate(item.due_date)}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold text-slate-400 uppercase">Payment Date</label>
-                  <input type="date" required value={payDate} onChange={e => setPayDate(e.target.value)} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50" />
+                  <input type="date" required max={toIndiaDateInputValue()} value={payDate} onChange={e => { bankPaymentRequestId.current = crypto.randomUUID(); peerPaymentRequestId.current = crypto.randomUUID(); setPayDate(e.target.value) }} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50" />
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-slate-400 uppercase">Pay From</label>
                   <div className="relative mt-1">
                     <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                    <select required value={payAccountId} onChange={e => setPayAccountId(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white outline-none focus:border-indigo-500/50 appearance-none">
+                    <select required value={payAccountId} onChange={e => { bankPaymentRequestId.current = crypto.randomUUID(); peerPaymentRequestId.current = crypto.randomUUID(); setPayAccountId(e.target.value) }} className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white outline-none focus:border-indigo-500/50 appearance-none">
                       <option value="" disabled>Select source...</option>
                       {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.name}</option>)}
                     </select>
@@ -593,7 +636,7 @@ export default function Calendar() {
               </div>
 
               <div className="flex gap-3 mt-6">
-                <button type="button" onClick={() => { if (payAccountId || payDate !== new Date().toISOString().split('T')[0]) { if (!window.confirm('Discard this payment form?')) return } bankPaymentRequestId.current = null; peerPaymentRequestId.current = null; setPayEmiData(null) }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
+                <button type="button" onClick={() => { if (payAccountId || payDate !== toIndiaDateInputValue()) { if (!window.confirm('Discard this payment form?')) return } bankPaymentRequestId.current = null; peerPaymentRequestId.current = null; setPayEmiData(null) }} className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-colors">Cancel</button>
                 <button type="submit" disabled={isSubmitting} className="flex-1 flex justify-center py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] disabled:opacity-50">
                   {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Log Payment'}
                 </button>
@@ -602,6 +645,14 @@ export default function Calendar() {
           </div>
         </div>
       )}
+      <InstallmentHistoryModal
+        isOpen={Boolean(historyEmi)}
+        scheduleKind="BANK_EMI"
+        scheduleId={historyEmi?.id || ''}
+        title={historyEmi?.name || 'EMI'}
+        onClose={() => setHistoryEmi(null)}
+        onChanged={fetchEngineData}
+      />
     </div>
   )
 }

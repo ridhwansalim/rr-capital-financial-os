@@ -81,6 +81,20 @@ export async function retryOutboxItem(id: number, ownerId: string): Promise<void
   await syncOutbox()
 }
 
+export async function retryOutboxItems(ids: number[], ownerId: string): Promise<void> {
+  if (activeSync) await activeSync
+  const uniqueIds = [...new Set(ids.filter(Number.isSafeInteger))]
+  await localDB.transaction('rw', localDB.outbox, async () => {
+    for (const id of uniqueIds) {
+      const item = await localDB.outbox.get(id)
+      if (item?.owner_id === ownerId) {
+        await localDB.outbox.update(id, { sync_status: 'pending', last_error: null })
+      }
+    }
+  })
+  await syncOutbox()
+}
+
 window.addEventListener('online', () => { void syncOutbox() })
 window.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') void syncOutbox()

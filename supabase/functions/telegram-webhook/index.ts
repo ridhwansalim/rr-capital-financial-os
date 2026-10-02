@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { readBoundedJson } from "../_shared/boundedJson.ts"
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -46,22 +47,31 @@ async function sendTelegramMessage(chatId: number, text: string): Promise<boolea
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: corsHeaders })
-  let update: any
-  try {
-    update = await req.json()
-  } catch {
-    return new Response('Invalid request', { status: 400, headers: corsHeaders })
+
+  const authorization = req.headers.get('authorization') || ''
+  const bearer = /^Bearer\s+([\x21-\x7e]+)$/i.exec(authorization)
+  const isTelegramUpdate = !authorization && !!webhookSecret &&
+    equalSecret(req.headers.get('X-Telegram-Bot-Api-Secret-Token'), webhookSecret)
+  if (!isTelegramUpdate) {
+    if (!bearer || !anonKey) return new Response('Sign in required', { status: 401, headers: corsHeaders })
+    const authClient = createClient(supabaseUrl, anonKey)
+    const { data: { user }, error: authError } = await authClient.auth.getUser(bearer[1])
+    if (authError || !user) return new Response('Sign in required', { status: 401, headers: corsHeaders })
   }
+
+  const parsed = await readBoundedJson(req, isTelegramUpdate ? 1_000_000 : 2_048)
+  if (!parsed.ok) {
+    return new Response(parsed.status === 413 ? 'Payload too large' : 'Invalid request', {
+      status: parsed.status,
+      headers: corsHeaders,
+    })
+  }
+  const update: any = parsed.value
 
   // Authenticated setup repairs Telegram's remote webhook registration without
   // ever returning or exposing either server-side credential to the browser.
   if (update?.action === 'configure') {
-    const authorization = req.headers.get('authorization') || ''
-    const accessToken = authorization.startsWith('Bearer ') ? authorization.slice(7) : ''
-    if (!accessToken || !anonKey) return new Response('Sign in required', { status: 401, headers: corsHeaders })
-    const authClient = createClient(supabaseUrl, anonKey)
-    const { data: { user }, error: authError } = await authClient.auth.getUser(accessToken)
-    if (authError || !user) return new Response('Sign in required', { status: 401, headers: corsHeaders })
+    if (isTelegramUpdate) return new Response('Sign in required', { status: 401, headers: corsHeaders })
     if (!telegramBotToken || !webhookSecret || webhookSecret.length < 32) {
       return Response.json({ error: 'Telegram server configuration is incomplete.' }, { status: 503, headers: corsHeaders })
     }
@@ -102,11 +112,8 @@ serve(async (req) => {
   if (!webhookSecret || webhookSecret.length < 32) {
     return new Response('Webhook unavailable', { status: 503 })
   }
-  if (!equalSecret(req.headers.get('X-Telegram-Bot-Api-Secret-Token'), webhookSecret)) {
+  if (!isTelegramUpdate) {
     return new Response('Forbidden', { status: 403 })
-  }
-  if (Number(req.headers.get('content-length') || 0) > 1_000_000) {
-    return new Response('Payload too large', { status: 413 })
   }
 
   try {

@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:dates": "node --experimental-strip-types supabase/tests/finance_date.test.mjs",
+    "test:offline": "node --experimental-strip-types supabase/tests/offline_ownership.test.mjs",
+    "test:edge-inputs": "node --experimental-strip-types supabase/tests/bounded_json.test.mjs",
+    "test:perry": "node --experimental-strip-types supabase/functions/perry-summary/handler.test.mjs",
+    "test:perry:login": "powershell -NoProfile -ExecutionPolicy Bypass -File supabase/tests/perry_reader_login.test.ps1"
   },
   "dependencies": {
     "@radix-ui/react-popover": "^1.1.23",

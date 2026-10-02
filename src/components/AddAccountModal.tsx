@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+﻿import React, { useState } from 'react'
 import { X, Landmark, Wallet, CreditCard, IndianRupee, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useModalBack } from '../lib/useModalBack'
+import { openingBalanceForAccountType, toIndiaDateInputValue } from '../lib/financeDate'
 
 interface AddAccountModalProps {
   isOpen: boolean
@@ -14,14 +15,24 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
   // FIXED: The database expects exactly 'credit_card', not 'credit'
   const [type, setType] = useState<'bank' | 'cash' | 'credit_card'>('bank')
   const [creditLimit, setCreditLimit] = useState('')
+  const [openingBalance, setOpeningBalance] = useState('0')
+  const [openingDate, setOpeningDate] = useState(() => toIndiaDateInputValue())
   const [isSubmitting, setIsSubmitting] = useState(false)
-  useModalBack(isOpen, () => { setName(''); setType('bank'); setCreditLimit(''); onClose() }, Boolean(name || creditLimit), 'Discard this account and close the dialog?')
+  const isDirty = Boolean(name || creditLimit || openingBalance !== '0' || openingDate !== toIndiaDateInputValue())
 
-  const handleClose = (discard = false) => {
-    if (!discard && (name || creditLimit) && !window.confirm('Discard this account and close the dialog?')) return
+  const resetForm = () => {
     setName('')
     setType('bank')
     setCreditLimit('')
+    setOpeningBalance('0')
+    setOpeningDate(toIndiaDateInputValue())
+  }
+
+  useModalBack(isOpen, () => { resetForm(); onClose() }, isDirty, 'Discard this account and close the dialog?')
+
+  const handleClose = (discard = false) => {
+    if (!discard && isDirty && !window.confirm('Discard this account and close the dialog?')) return
+    resetForm()
     onClose()
   }
 
@@ -38,7 +49,9 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
         type,
         owner_id: user.id,
         // Match the check for the new exact string
-        credit_limit: type === 'credit_card' ? parseFloat(creditLimit || '0') : 0
+        credit_limit: type === 'credit_card' ? parseFloat(creditLimit || '0') : 0,
+        opening_balance: openingBalanceForAccountType(openingBalance, type),
+        opening_date: openingDate
       }
 
       const { error } = await supabase.from('accounts').insert(payload)
@@ -122,6 +135,21 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
               </div>
             </div>
           )}
+
+          <div className="flex flex-col space-y-1">
+            <label htmlFor="account-opening-balance" className="text-xs font-semibold tracking-wide text-white/50 uppercase">{type === 'credit_card' ? 'Outstanding balance' : 'Starting balance'}</label>
+            <div className="relative">
+              <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+              <input id="account-opening-balance" type="number" min="0" max="9999999999.99" step="0.01" value={openingBalance} onChange={event => setOpeningBalance(event.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl pl-9 pr-4 py-3 text-white outline-none focus:border-indigo-500/50 transition-colors appearance-none" required disabled={isSubmitting} />
+            </div>
+            <p className="text-[11px] text-white/40">{type === 'credit_card' ? 'Enter the amount currently owed; it will reduce the available balance.' : 'Balance held at the start of the selected date.'}</p>
+          </div>
+
+          <div className="flex flex-col space-y-1">
+            <label htmlFor="account-opening-date" className="text-xs font-semibold tracking-wide text-white/50 uppercase">Start tracking from</label>
+            <input id="account-opening-date" type="date" max={toIndiaDateInputValue()} value={openingDate} onChange={event => setOpeningDate(event.target.value)} className="w-full color-scheme-dark bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50" required disabled={isSubmitting} />
+            <p className="text-[11px] text-white/40">Transactions dated earlier than this day cannot be added to this account.</p>
+          </div>
 
           <button 
             type="submit"
