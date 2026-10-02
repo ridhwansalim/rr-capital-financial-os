@@ -72,8 +72,8 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto overscroll-contain p-3 pb-[calc(5.75rem+env(safe-area-inset-bottom))] bg-black/60 backdrop-blur-md animate-in fade-in duration-200 sm:p-4 sm:pb-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="add-account-title" className="relative my-auto w-full max-w-md max-h-[calc(100vh-7rem)] overflow-y-auto overscroll-contain p-5 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl animate-in zoom-in-95 duration-200 text-white sm:max-h-[calc(100vh-2rem)] sm:p-6">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 pb-[calc(5.75rem+env(safe-area-inset-bottom))] bg-black/60 backdrop-blur-md animate-in fade-in duration-200 sm:p-4 sm:pb-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="add-account-title" className="relative w-full max-w-md max-h-[calc(100vh-7rem)] overflow-hidden p-4 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl animate-in zoom-in-95 duration-200 text-white sm:max-h-[calc(100vh-2rem)] sm:p-6">
         
         <button 
           onClick={() => handleClose()}
@@ -82,12 +82,12 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
           <X className="w-5 h-5" />
         </button>
 
-        <h2 id="add-account-title" className="text-xl font-bold mb-6 text-center">Add New Account</h2>
+        <h2 id="add-account-title" className="text-xl font-bold mb-4 text-center sm:mb-6">Add New Account</h2>
 
-        <form onSubmit={handleSubmit} className="flex flex-col space-y-6">
+        <form onSubmit={handleSubmit} className="flex flex-col space-y-3 sm:space-y-6">
           
           {/* Choose the account family first, then its specific kind. */}
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             <div className="grid grid-cols-2 gap-2">
               {([
                 { id: 'liquid', title: 'Liquid', detail: 'Money you hold', icon: Wallet },
@@ -101,7 +101,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
                     setType(id === 'liquid' ? 'bank' : 'credit_card')
                   }}
                   aria-pressed={accountGroup === id}
-                  className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${accountGroup === id ? 'border-indigo-400/60 bg-indigo-400/15 text-white' : 'border-white/10 bg-black/20 text-white/60 hover:bg-white/5'}`}
+                  className={`flex items-center gap-2 rounded-xl border px-2.5 py-2.5 text-left transition-colors sm:gap-3 sm:px-3 sm:py-3 ${accountGroup === id ? 'border-indigo-400/60 bg-indigo-400/15 text-white' : 'border-white/10 bg-black/20 text-white/60 hover:bg-white/5'}`}
                 >
                   <Icon className={`h-5 w-5 shrink-0 ${accountGroup === id ? 'text-indigo-300' : ''}`} />
                   <span className="min-w-0">
@@ -116,7 +116,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
               <select
                 value={type}
                 onChange={event => setType(event.target.value as typeof type)}
-                className="w-full appearance-none rounded-xl border border-white/10 bg-black/25 px-4 py-3 pr-10 text-sm text-white outline-none focus:border-indigo-400/60"
+                className="w-full appearance-none rounded-xl border border-white/10 bg-black/25 px-4 py-2.5 pr-10 text-sm text-white outline-none focus:border-indigo-400/60 sm:py-3"
               >
                 {accountGroup === 'liquid' ? <>
                   <option value="bank" className="text-slate-900">Bank account</option>
@@ -143,43 +143,35 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
             />
           </div>
 
-          {(type === 'credit_card' || type === 'pay_later') && (
-            <div className="flex flex-col space-y-1">
-              <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Total Credit Limit</label>
+          <div className={type === 'credit_card' || type === 'pay_later' ? 'grid grid-cols-2 gap-2' : ''}>
+            {(type === 'credit_card' || type === 'pay_later') && (
+              <div className="flex min-w-0 flex-col space-y-1">
+                <label className="text-[10px] font-semibold tracking-wide text-white/50 uppercase sm:text-xs">Credit Limit</label>
+                <div className="relative">
+                  <IndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/40" />
+                  <input type="number" placeholder="100000" value={creditLimit} onChange={event => setCreditLimit(event.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl pl-7 pr-2 py-2.5 text-white placeholder:text-white/20 outline-none focus:border-indigo-500/50 transition-colors appearance-none sm:py-3" required disabled={isSubmitting} />
+                </div>
+              </div>
+            )}
+
+            <div className="flex min-w-0 flex-col space-y-1">
+              <label htmlFor="account-opening-balance" className="text-[10px] font-semibold tracking-wide text-white/50 uppercase sm:text-xs">{type === 'credit_card' || type === 'pay_later' ? 'Outstanding' : 'Starting balance'}</label>
               <div className="relative">
-                <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-                <input 
-                  type="number"
-                  placeholder="100000"
-                  value={creditLimit}
-                  onChange={(e) => setCreditLimit(e.target.value)}
-                  className="w-full bg-black/20 border border-white/10 rounded-xl pl-9 pr-4 py-3 text-white placeholder:text-white/20 outline-none focus:border-indigo-500/50 transition-colors appearance-none"
-                  required
-                  disabled={isSubmitting}
-                />
+                <IndianRupee className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/40" />
+                <input id="account-opening-balance" type="number" min="0" max="9999999999.99" step="0.01" value={openingBalance} onChange={event => setOpeningBalance(event.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl pl-7 pr-2 py-2.5 text-white outline-none focus:border-indigo-500/50 transition-colors appearance-none sm:py-3" required disabled={isSubmitting} />
               </div>
             </div>
-          )}
-
-          <div className="flex flex-col space-y-1">
-            <label htmlFor="account-opening-balance" className="text-xs font-semibold tracking-wide text-white/50 uppercase">{type === 'credit_card' || type === 'pay_later' ? 'Outstanding balance' : 'Starting balance'}</label>
-            <div className="relative">
-              <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-              <input id="account-opening-balance" type="number" min="0" max="9999999999.99" step="0.01" value={openingBalance} onChange={event => setOpeningBalance(event.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl pl-9 pr-4 py-3 text-white outline-none focus:border-indigo-500/50 transition-colors appearance-none" required disabled={isSubmitting} />
-            </div>
-            <p className="text-[11px] text-white/40">{type === 'credit_card' || type === 'pay_later' ? 'Enter the amount currently owed; it will reduce the available balance.' : 'Balance held at the start of the selected date.'}</p>
           </div>
 
           <div className="flex flex-col space-y-1">
             <label htmlFor="account-opening-date" className="text-xs font-semibold tracking-wide text-white/50 uppercase">Start tracking from</label>
             <input id="account-opening-date" type="date" max={toIndiaDateInputValue()} value={openingDate} onChange={event => setOpeningDate(event.target.value)} className="w-full color-scheme-dark bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50" required disabled={isSubmitting} />
-            <p className="text-[11px] text-white/40">Transactions dated earlier than this day cannot be added to this account.</p>
           </div>
 
           <button 
             type="submit"
             disabled={isSubmitting}
-            className="w-full flex items-center justify-center py-4 mt-2 rounded-xl bg-white text-slate-900 font-bold text-lg hover:bg-slate-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)] disabled:opacity-50"
+            className="w-full flex items-center justify-center py-3 mt-1 rounded-xl bg-white text-slate-900 font-bold text-base hover:bg-slate-200 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)] disabled:opacity-50 sm:py-4 sm:text-lg"
           >
             {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Create Account'}
           </button>
