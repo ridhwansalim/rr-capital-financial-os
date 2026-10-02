@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { cacheForOwner, visibleOfflineItems } from '../../src/lib/offlineOwnership.ts'
+import { ensureOfflineRequestId } from '../../src/lib/offlineRequestId.ts'
 
 test('offline queue hides previous owners and already completed records', () => {
   const records = [
@@ -18,4 +19,33 @@ test('offline account labels are used only for the matching signed-in owner', ()
   assert.equal(cacheForOwner(cache, 'ridhu'), cache)
   assert.equal(cacheForOwner(cache, 'family'), undefined)
   assert.equal(cacheForOwner(cache, null), undefined)
+})
+
+test('concurrent tabs atomically persist and reuse one legacy outbox request ID', async () => {
+  const records = new Map([[7, { id: 7, owner_id: 'ridhu', amount: 125 }]])
+  let tail = Promise.resolve()
+  const outbox = {
+    async get(id) { return records.get(id) },
+    async update(id, changes) { records.set(id, { ...records.get(id), ...changes }) }
+  }
+  const database = {
+    outbox,
+    async transaction(_mode, _table, callback) {
+      const prior = tail
+      let release
+      tail = new Promise(resolve => { release = resolve })
+      await prior
+      try { return await callback() } finally { release() }
+    }
+  }
+  let generated = 0
+  const makeId = () => `request-${++generated}`
+  const [first, second] = await Promise.all([
+    ensureOfflineRequestId(database, 7, 'ridhu', makeId),
+    ensureOfflineRequestId(database, 7, 'ridhu', makeId)
+  ])
+  assert.equal(generated, 1)
+  assert.equal(first.request_id, second.request_id)
+  assert.equal(records.get(7).request_id, first.request_id)
+  assert.equal(await ensureOfflineRequestId(database, 7, 'family', makeId), undefined)
 })

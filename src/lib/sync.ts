@@ -1,5 +1,6 @@
 import { localDB, type LocalTransaction } from './db'
 import { supabase } from './supabase'
+import { ensureOfflineRequestId } from './offlineRequestId'
 
 let activeSync: Promise<void> | null = null
 
@@ -33,15 +34,15 @@ async function runSync() {
       // A shared browser can have pending entries for a different login.
       if (txn.owner_id !== user.id || txn.id === undefined) continue
 
-      // Older local records predate request IDs. Persist one before the first
-      // network request so an ambiguous success has the same ID on retry.
-      const requestId = txn.request_id || crypto.randomUUID()
-      if (!txn.request_id) {
-        await localDB.outbox.update(txn.id, { request_id: requestId })
-      }
+      // Assign legacy IDs atomically: two tabs must not create different IDs
+      // for one queued transaction, or the server would correctly treat them
+      // as two distinct requests.
+      const claimed = await ensureOfflineRequestId<LocalTransaction>(localDB, txn.id, user.id)
+      if (!claimed?.request_id) continue
+      const requestId = claimed.request_id
 
       try {
-        const { error } = await postQueuedTransaction({ ...txn, request_id: requestId })
+        const { error } = await postQueuedTransaction({ ...claimed, request_id: requestId })
         if (error) {
           // Validation and permission failures need user attention. Keep
           // transport/server failures pending so reconnection retries them.
