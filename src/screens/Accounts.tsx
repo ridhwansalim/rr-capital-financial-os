@@ -29,11 +29,17 @@ export default function Accounts() {
   const fetchAccounts = useCallback(async () => {
     setIsLoading(true)
     try {
-      const { data: accData, error: accError } = await supabase
-        .from('accounts')
-        .select('id, name, type, credit_limit')
-        .order('name')
+      // Fetch the account list, current balances and optional health settings in
+      // parallel. Previously each extra summary waited for the preceding request.
+      const [accountResult, balanceResult, healthResult] = await Promise.all([
+        supabase.from('accounts').select('id, name, type, credit_limit').order('name'),
+        supabase.from('account_balances').select('id, balance'),
+        flags.account_health
+          ? supabase.from('account_health_settings').select('account_id, minimum_balance, statement_day, due_day, show_notices')
+          : Promise.resolve({ data: null, error: null }),
+      ])
 
+      const { data: accData, error: accError } = accountResult
       if (accError) throw accError
       if (!accData || accData.length === 0) {
         setAccounts([])
@@ -41,14 +47,8 @@ export default function Accounts() {
         return
       }
 
-      let balData: any[] = []
-      try {
-        const { data, error } = await supabase.from('account_balances').select('id, balance')
-        if (error) throw error
-        if (data) balData = data
-      } catch (viewError) {
-        console.warn('View error (balances skipped):', viewError)
-      }
+      const balData = balanceResult.error ? [] : (balanceResult.data || [])
+      if (balanceResult.error) console.warn('View error (balances skipped):', balanceResult.error)
 
       const merged = accData.map(acc => {
         const matchedBalance = balData.find(b => b.id === acc.id)
@@ -61,11 +61,10 @@ export default function Accounts() {
       
       setAccounts(merged)
       if (flags.account_health) {
-        const { data: settings, error: settingsError } = await supabase.from('account_health_settings')
-          .select('account_id, minimum_balance, statement_day, due_day, show_notices')
-          .in('account_id', merged.map(account => account.id))
-        if (settingsError) throw settingsError
-        setHealthSettings(Object.fromEntries((settings || []).map(row => [row.account_id, row as AccountHealthSetting])))
+        if (healthResult.error) throw healthResult.error
+        const accountIds = new Set(merged.map(account => account.id))
+        const settings = (healthResult.data || []).filter(row => accountIds.has(row.account_id))
+        setHealthSettings(Object.fromEntries(settings.map(row => [row.account_id, row as AccountHealthSetting])))
       } else {
         setHealthSettings({})
       }
@@ -88,7 +87,7 @@ export default function Accounts() {
   const totalDebt = creditAccounts.reduce((sum, acc) => sum + Math.abs(Number(acc.balance)), 0)
 
   return (
-    <div className="p-4 sm:p-6 w-full max-w-5xl mx-auto text-white animate-in fade-in duration-300 pb-32">
+    <div className="page-shell w-full max-w-5xl mx-auto animate-in fade-in duration-300 pb-32">
       
       <PageHeader title="Accounts" description="Manage your balances and credit limits" icon={<Wallet className="text-indigo-400" />} action={<button
           onClick={() => setIsAddModalOpen(true)}
@@ -115,7 +114,7 @@ export default function Accounts() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {liquidAccounts.map(acc => (
-                <div key={acc.id} className="p-5 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-md hover:bg-white/10 transition-colors group">
+                <div key={acc.id} className="surface-panel p-5 rounded-2xl transition-colors group">
                   <div className="flex items-center justify-between mb-4">
                     <div className="p-3 rounded-full bg-indigo-500/20">
                   {acc.type === 'bank' ? <Landmark className="w-5 h-5 text-indigo-400" /> : <Wallet className="w-5 h-5 text-emerald-400" />}
@@ -128,6 +127,8 @@ export default function Accounts() {
                       {/* NEW EDIT BUTTON */}
                       <button 
                         onClick={() => setEditingAccount(acc)}
+                        aria-label={`Edit ${acc.name}`}
+                        title={`Edit ${acc.name}`}
                         className="p-2 text-slate-500 hover:text-white hover:bg-white/10 rounded-md transition-all sm:opacity-0 sm:group-hover:opacity-100"
                       >
                         <Pencil className="w-4 h-4" />
@@ -170,7 +171,7 @@ export default function Accounts() {
                 if (utilization > 85) barColor = 'bg-rose-500'
 
                 return (
-                  <div key={acc.id} className="p-5 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-md relative overflow-hidden group">
+                  <div key={acc.id} className="surface-panel p-5 rounded-2xl relative overflow-hidden group">
                     <CreditCard className="absolute -right-6 -bottom-6 w-32 h-32 text-white/5 -rotate-12 pointer-events-none" />
                     
                     <div className="relative z-10">
@@ -184,6 +185,8 @@ export default function Accounts() {
                         {/* NEW EDIT BUTTON */}
                         <button 
                           onClick={() => setEditingAccount(acc)}
+                          aria-label={`Edit ${acc.name}`}
+                          title={`Edit ${acc.name}`}
                           className="p-2 text-slate-500 hover:text-white hover:bg-white/10 rounded-lg transition-all sm:opacity-0 sm:group-hover:opacity-100 z-20"
                         >
                           <Pencil className="w-4 h-4" />

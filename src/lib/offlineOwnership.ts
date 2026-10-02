@@ -24,6 +24,13 @@ export function visibleOfflineItems<T extends OwnedRecord & { sync_status: strin
   return items.filter(item => item.owner_id === ownerId && item.sync_status !== 'synced')
 }
 
+export function countOutstandingOfflineItems<T extends OwnedRecord & { sync_status: string }>(
+  items: T[] | undefined | null,
+  ownerId: string | null
+): number {
+  return visibleOfflineItems(items, ownerId).length
+}
+
 export function cacheForOwner<T extends OwnedRecord>(cache: T | undefined, ownerId: string | null): T | undefined {
   return ownerId && cache?.owner_id === ownerId ? cache : undefined
 }

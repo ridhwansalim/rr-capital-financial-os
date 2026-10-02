@@ -1,86 +1,127 @@
-import React, { useState, useEffect } from 'react'
-import { ArrowRightLeft, TrendingUp, IndianRupee, User, CalendarDays, ShieldCheck, AlertTriangle, Landmark, ChartNoAxesCombined } from 'lucide-react'
+import React, { Suspense, useState, useEffect } from 'react'
+import { ArrowRightLeft, TrendingUp, CalendarDays, Landmark, Eye, EyeOff, ArrowDownLeft, ArrowUpRight, Wallet, CreditCard, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import PendingRequests from '../components/PendingRequests'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { formatIndiaDate, indiaDateExclusiveEndToIso, indiaDateStartToIso, toIndiaDateInputValue } from '../lib/financeDate'
 import { buildReportPath } from '../lib/reportNavigation'
 import PageHeader from '../components/PageHeader'
+import { buildCashFlowBuckets, type CashFlowBucket } from '../lib/dashboardCashFlow'
+
+const DashboardClassic = React.lazy(() => import('./DashboardClassic'))
 
 export default function Dashboard() {
+  const location = useLocation()
+  if (new URLSearchParams(location.search).get('layout') === 'classic') {
+    return <Suspense fallback={<div className="page-shell">Opening the previous dashboard…</div>}><DashboardClassic /></Suspense>
+  }
+  return <DashboardEditorial />
+}
+
+function DashboardEditorial() {
   const navigate = useNavigate()
   const [netWorth, setNetWorth] = useState(0)
   const [liquidCash, setLiquidCash] = useState(0)
   const [upcomingOutflow, setUpcomingOutflow] = useState(0)
+  const [nextMonthOutflow, setNextMonthOutflow] = useState(0)
   const [monthIncome, setMonthIncome] = useState(0)
   const [monthExpenses, setMonthExpenses] = useState(0)
   
   const [accounts, setAccounts] = useState<any[]>([])
+  const [activeEmis, setActiveEmis] = useState<any[]>([])
+  const [activeChittis, setActiveChittis] = useState<any[]>([])
+  const [accountsLoaded, setAccountsLoaded] = useState(false)
   const [recentTx, setRecentTx] = useState<any[]>([])
+  const [accountTab, setAccountTab] = useState<'all' | 'liquid' | 'credit' | 'chitti'>('all')
+  const [transactionTab, setTransactionTab] = useState<'all' | 'income' | 'expense' | 'transfer'>('all')
+  const [showMoreActivity, setShowMoreActivity] = useState(false)
+  const [privacyMode, setPrivacyMode] = useState(false)
   const [rangeStart, setRangeStart] = useState(() => `${toIndiaDateInputValue().slice(0, 7)}-01`)
   const [rangeEnd, setRangeEnd] = useState(() => toIndiaDateInputValue())
-  const [cashFlowDays, setCashFlowDays] = useState<{ day: string; income: number; expense: number }[]>([])
+  const [cashFlowDays, setCashFlowDays] = useState<CashFlowBucket[]>([])
+  const [cashFlowGranularity, setCashFlowGranularity] = useState<'day' | 'month'>('day')
+  const [emiOutflow, setEmiOutflow] = useState(0)
+  const [chittiOutflow, setChittiOutflow] = useState(0)
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      const ownerId = session?.user.id
+      if (!ownerId) { setAccountsLoaded(true); return }
       let balData: any[] = []
+      let accData: any[] = []
+      let emiData: any[] = []
+      let chittiData: any[] = []
+
+      // These summaries are independent. Fetch them in one network wave instead
+      // of making mobile clients wait through four sequential database round trips.
       try {
-        const { data } = await supabase.from('account_balances').select('*')
-        if (data) {
-          balData = data
-          const total = data.reduce((sum, acc) => sum + Number(acc.balance), 0)
-          setNetWorth(total)
-        }
+        const [balanceResult, accountResult, emiResult, chittiResult] = await Promise.all([
+          supabase.from('account_balances').select('id, balance'),
+          supabase.from('accounts').select('id, name, type, credit_limit'),
+          supabase.from('recurring_emis').select('name, amount, start_date, end_date, status').eq('status', 'ACTIVE'),
+          supabase.from('chittis').select('id, name, monthly_installment, start_date, duration_months, months_paid, payout_received, received_month_number').eq('status', 'ACTIVE'),
+        ])
+        if (balanceResult.error) console.warn('Could not fetch balances:', balanceResult.error)
+        if (accountResult.error) console.warn('Could not fetch accounts:', accountResult.error)
+        if (emiResult.error) console.warn('Could not fetch recurring commitments:', emiResult.error)
+        if (chittiResult.error) console.warn('Could not fetch active chittis:', chittiResult.error)
+        balData = balanceResult.data || []
+        accData = accountResult.data || []
+        emiData = emiResult.data || []
+        chittiData = chittiResult.data || []
+        setActiveEmis(emiData)
+        setActiveChittis(chittiData)
+        setNetWorth(balData.reduce((sum, acc) => sum + Number(acc.balance), 0))
       } catch (err) {
-        console.warn('Could not fetch balances:', err)
+        console.warn('Could not fetch dashboard account and commitment summaries:', err)
       }
 
       let currentLiquid = 0
       try {
-        const { data: accData } = await supabase.from('accounts').select('id, name, type')
-        if (accData) {
-          const merged = accData.map(acc => {
-            const matched = balData.find(b => b.id === acc.id)
-            const balance = matched ? Number(matched.balance) : 0
-            
-            if (['bank', 'cash', 'wallet'].includes(acc.type)) {
-              currentLiquid += balance
-            }
-            return { ...acc, balance }
-          })
-          setAccounts(merged)
-          setLiquidCash(currentLiquid)
-        }
+        const balancesById = new Map(balData.map(balance => [balance.id, Number(balance.balance)]))
+        const merged = accData.map(acc => {
+          const balance = balancesById.get(acc.id) ?? 0
+          if (['bank', 'cash', 'wallet'].includes(acc.type)) currentLiquid += balance
+          return { ...acc, balance }
+        })
+        setAccounts(merged)
+        setLiquidCash(currentLiquid)
       } catch (err) {
         console.warn('Could not fetch accounts:', err)
+      } finally {
+        setAccountsLoaded(true)
       }
 
       // Unified Math Engine for EMIs and Chittis
       try {
-        let totalOutflow = 0
         const today = toIndiaDateInputValue()
         const [todayYear, todayMonth] = today.split('-').map(Number)
         const viewMonth = todayYear * 12 + todayMonth - 1
+        const nextMonth = viewMonth + 1
+        let totalEmiOutflow = 0
+        let totalChittiOutflow = 0
+        let projectedOutflow = 0
 
         // 1. Fetch Standard EMIs
-        const { data: emiData } = await supabase.from('recurring_emis').select('amount, start_date, end_date')
         if (emiData) {
-          totalOutflow += emiData.reduce((sum, emi) => {
+          const emiOutflowForMonth = (monthIndex: number) => emiData.reduce((sum, emi) => {
             const [startYear, startMonth] = emi.start_date.split('-').map(Number)
             const emiStartMonth = startYear * 12 + startMonth - 1
-            if (viewMonth < emiStartMonth) return sum
+            if (monthIndex < emiStartMonth) return sum
             
             if (emi.end_date) {
               const [endYear, endMonth] = emi.end_date.split('-').map(Number)
               const emiEndMonth = endYear * 12 + endMonth - 1
-              if (viewMonth > emiEndMonth) return sum
+              if (monthIndex > emiEndMonth) return sum
             }
             return sum + Number(emi.amount)
           }, 0)
+          totalEmiOutflow = emiOutflowForMonth(viewMonth)
+          projectedOutflow += emiOutflowForMonth(nextMonth)
         }
 
         // 2. Fetch Active Chittis
-        const { data: chittiData } = await supabase.from('chittis').select('monthly_installment, start_date, duration_months').eq('status', 'ACTIVE')
         if (chittiData) {
            chittiData.forEach(chitti => {
              const [startYear, startMonth] = chitti.start_date.split('-').map(Number)
@@ -88,15 +129,31 @@ export default function Dashboard() {
              const emiEndMonth = emiStartMonth + chitti.duration_months - 1
 
              if (viewMonth >= emiStartMonth && viewMonth <= emiEndMonth) {
-                totalOutflow += Number(chitti.monthly_installment)
+                totalChittiOutflow += Number(chitti.monthly_installment)
+             }
+             if (nextMonth >= emiStartMonth && nextMonth <= emiEndMonth) {
+                projectedOutflow += Number(chitti.monthly_installment)
              }
            })
         }
         
-        setUpcomingOutflow(totalOutflow)
+        setEmiOutflow(totalEmiOutflow)
+        setChittiOutflow(totalChittiOutflow)
+        setUpcomingOutflow(totalEmiOutflow + totalChittiOutflow)
+        setNextMonthOutflow(projectedOutflow)
       } catch (err) {
         console.warn('Could not fetch obligations for forecast:', err)
       }
+
+      // Start the recent-activity request before paging the selected date range,
+      // so its latency overlaps with the potentially larger chart query.
+      const recentTransactionsPromise = supabase
+        .from('transactions')
+        .select('id, amount, description, created_at, from_account_id, to_account_id, tagged_profile_id, contact_id')
+        .eq('owner_id', ownerId)
+        .eq('status', 'COMPLETED')
+        .order('created_at', { ascending: false })
+        .limit(25)
 
       try {
         if (rangeStart > rangeEnd) throw new Error('Invalid dashboard date range')
@@ -105,6 +162,7 @@ export default function Dashboard() {
           const { data, error } = await supabase
             .from('transactions')
             .select('amount, fee_amount, from_account_id, to_account_id, created_at')
+            .eq('owner_id', ownerId)
             .eq('status', 'COMPLETED')
             .gte('created_at', indiaDateStartToIso(rangeStart))
             .lt('created_at', indiaDateExclusiveEndToIso(rangeEnd))
@@ -115,30 +173,20 @@ export default function Dashboard() {
           monthTx.push(...(data || []))
           if ((data || []).length < 1000) break
         }
-        if (monthTx) {
-          setMonthIncome(monthTx.reduce((sum, tx) => sum + (!tx.from_account_id ? Number(tx.amount) : 0), 0))
-          setMonthExpenses(monthTx.reduce((sum, tx) => sum + (!tx.to_account_id ? Number(tx.amount) : 0) + Number(tx.fee_amount || 0), 0))
-          const byDay = new Map<string, { day: string; income: number; expense: number }>()
-          monthTx.forEach(tx => {
-            const day = toIndiaDateInputValue(new Date(tx.created_at))
-            const row = byDay.get(day) || { day, income: 0, expense: 0 }
-            if (!tx.from_account_id) row.income += Number(tx.amount)
-            if (!tx.to_account_id) row.expense += Number(tx.amount)
-            row.expense += Number(tx.fee_amount || 0)
-            byDay.set(day, row)
-          })
-          setCashFlowDays([...byDay.values()].slice(-31))
-        }
+        setMonthIncome(monthTx.reduce((sum, tx) => sum + (!tx.from_account_id ? Number(tx.amount) : 0), 0))
+        setMonthExpenses(monthTx.reduce((sum, tx) => sum + (!tx.to_account_id ? Number(tx.amount) : 0) + Number(tx.fee_amount || 0), 0))
+        const cashFlow = buildCashFlowBuckets(monthTx.map(tx => ({
+          ...tx,
+          date: toIndiaDateInputValue(new Date(tx.created_at)),
+        })), rangeStart, rangeEnd)
+        setCashFlowGranularity(cashFlow.granularity)
+        setCashFlowDays(cashFlow.buckets)
       } catch (err) {
         console.warn('Could not fetch this month\'s cash flow:', err)
       }
 
       try {
-        const { data: txData } = await supabase
-          .from('transactions')
-          .select('id, amount, description, created_at, from_account_id, to_account_id, tagged_profile_id, contact_id')
-          .order('created_at', { ascending: false })
-          .limit(5)
+        const { data: txData } = await recentTransactionsPromise
 
         if (txData) {
           const pIds = new Set<string>()
@@ -179,9 +227,22 @@ export default function Dashboard() {
   }, [rangeStart, rangeEnd])
 
   const safeToSpend = liquidCash - upcomingOutflow
-  const monthNet = monthIncome - monthExpenses
+  const nextMonthSafeToSpend = liquidCash - nextMonthOutflow
+  const savingsRate = monthIncome > 0 ? ((monthIncome - monthExpenses) / monthIncome) * 100 : null
+  const obligationBurden = liquidCash > 0 ? (upcomingOutflow / liquidCash) * 100 : null
   const selectedPeriod = `${formatIndiaDate(rangeStart, { month: 'short', day: 'numeric' })} – ${formatIndiaDate(rangeEnd, { month: 'short', day: 'numeric', year: 'numeric' })}`
   const maxFlowBar = Math.max(1, ...cashFlowDays.flatMap(day => [day.income, day.expense]))
+  const today = toIndiaDateInputValue()
+  const [todayYear, todayMonth] = today.split('-').map(Number)
+  const nextMonthDate = new Date(Date.UTC(todayYear, todayMonth, 15, 6))
+  const nextMonthLabel = new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }).format(nextMonthDate)
+  const money = (value: number, decimals = 0) => privacyMode ? '••••••' : `₹${value.toLocaleString('en-IN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`
+  const matchesQuickRange = (days: number | 'month' | 'year') => {
+    const end = toIndiaDateInputValue()
+    const [year, month, day] = end.split('-').map(Number)
+    const start = days === 'month' ? `${end.slice(0, 7)}-01` : days === 'year' ? `${year}-01-01` : new Date(Date.UTC(year, month - 1, day - days + 1)).toISOString().slice(0, 10)
+    return rangeStart === start && rangeEnd === end
+  }
   const setQuickRange = (days: number | 'month' | 'year') => {
     const end = toIndiaDateInputValue()
     const [year, month, day] = end.split('-').map(Number)
@@ -189,147 +250,83 @@ export default function Dashboard() {
     setRangeStart(start); setRangeEnd(end)
   }
 
-  return (
-    <div className="p-4 sm:p-6 w-full max-w-7xl mx-auto text-white animate-in fade-in duration-300 pb-32">
-      
-      <PageHeader title="Financial Overview" description="A clear view of your balances, commitments, and recent activity." icon={<TrendingUp className="text-emerald-400" />} />
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 'p' || event.altKey || event.ctrlKey || event.metaKey) return
+      if (event.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return
+      setPrivacyMode(current => !current)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
-      {/* P2P APPROVALS INBOX INJECTED HERE */}
-      <PendingRequests />
+  const liquidAccounts = accounts.filter(account => ['bank', 'cash', 'wallet'].includes(account.type))
+  const creditAccounts = accounts.filter(account => ['credit', 'credit_card', 'pay_later'].includes(account.type))
+  const visibleAccounts = accountTab === 'liquid' ? liquidAccounts : accountTab === 'credit' ? creditAccounts : accounts
+  const filteredTransactions = recentTx.filter(tx => transactionTab === 'all' || tx.type === transactionTab)
+  const shownTransactions = showMoreActivity ? filteredTransactions : filteredTransactions.slice(0, 5)
+  const composition = [
+    { label: 'Banks', value: liquidAccounts.filter(account => account.type === 'bank').reduce((sum, account) => sum + Math.max(0, Number(account.balance)), 0), color: 'var(--ed-coral)' },
+    { label: 'Cash & wallets', value: liquidAccounts.filter(account => ['cash', 'wallet'].includes(account.type)).reduce((sum, account) => sum + Math.max(0, Number(account.balance)), 0), color: 'var(--ed-teal)' },
+    { label: 'Credit used', value: creditAccounts.reduce((sum, account) => sum + Math.max(0, -Number(account.balance)), 0), color: 'var(--ed-coral)' },
+    { label: 'Other', value: accounts.filter(account => !['bank', 'cash', 'wallet', 'credit', 'credit_card', 'pay_later'].includes(account.type)).reduce((sum, account) => sum + Math.max(0, Number(account.balance)), 0), color: 'var(--ed-ink)' },
+  ]
+  const compositionTotal = composition.reduce((sum, item) => sum + item.value, 0)
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6 items-stretch">
-        
-        <section className="bg-gradient-to-br from-emerald-500/15 via-white/5 to-white/5 border border-emerald-400/20 backdrop-blur-md rounded-3xl overflow-hidden flex flex-col min-h-40">
-            <div className="p-5 sm:p-6 flex-1 flex flex-col justify-center">
-              <h3 className="text-slate-300 font-medium mb-1">Total Net Worth</h3>
-              <div className="flex items-center text-4xl md:text-5xl font-black">
-                <IndianRupee className="w-8 h-8 md:w-10 md:h-10 text-emerald-400/70 mr-2" />
-                <span className={netWorth < 0 ? 'text-rose-400' : 'text-white'}>
-                  <span className="min-w-0 break-all">{netWorth.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                </span>
-              </div>
-            </div>
-        </section>
+  return <EditorialBoard {...{ navigate, netWorth, liquidCash, upcomingOutflow, nextMonthOutflow, emiOutflow, chittiOutflow, obligationBurden, monthIncome, monthExpenses, savingsRate, accounts, activeEmis, activeChittis, accountsLoaded, recentTx, accountTab, setAccountTab, transactionTab, setTransactionTab, showMoreActivity, setShowMoreActivity, privacyMode, setPrivacyMode, rangeStart, rangeEnd, setRangeStart, setRangeEnd, cashFlowDays, cashFlowGranularity, selectedPeriod, maxFlowBar, safeToSpend, nextMonthSafeToSpend, nextMonthLabel, money, matchesQuickRange, setQuickRange, liquidAccounts, creditAccounts, visibleAccounts, filteredTransactions, shownTransactions, composition, compositionTotal }} />
 
-        <section className="bg-indigo-500/10 border border-indigo-500/20 backdrop-blur-md rounded-3xl overflow-hidden flex flex-col min-h-40">
-            <div className="p-5 sm:p-6 flex-1 flex flex-col justify-center">
-              <h3 className="text-indigo-400 font-bold mb-3 flex items-center text-sm uppercase tracking-wider">
-                <CalendarDays className="w-4 h-4 mr-2" /> Runway Forecast
-              </h3>
-              
-              <div className="flex justify-between items-end mb-2">
-                <div>
-                  <p className="text-xs text-slate-400 mb-0.5">Liquid Assets</p>
-                  <p className="font-bold text-emerald-400">+₹{liquidCash.toLocaleString('en-IN')}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-slate-400 mb-0.5">Monthly EMIs & Chittis</p>
-                  <p className="font-bold text-rose-400">-₹{upcomingOutflow.toLocaleString('en-IN')}</p>
-                </div>
-              </div>
-              
-              <div className="border-t border-indigo-500/30 pt-2 mt-1 flex justify-between items-center">
-                <span className="text-sm font-medium text-slate-300">Safe to Spend</span>
-                <div className={`flex items-center font-black text-lg ${safeToSpend >= 0 ? 'text-white' : 'text-rose-400'}`}>
-                  {safeToSpend >= 0 ? (
-                    <ShieldCheck className="w-4 h-4 mr-1.5 text-emerald-400" />
-                  ) : (
-                    <AlertTriangle className="w-4 h-4 mr-1.5 text-rose-400" />
-                  )}
-                  ₹{safeToSpend.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </div>
-              </div>
-            </div>
-        </section>
+}
 
-        <section className="xl:col-span-2 bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl p-5 sm:p-6">
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <div>
-              <h3 className="font-bold text-slate-200">Monthly cash flow</h3>
-              <p className="text-xs text-slate-500 mt-0.5">{selectedPeriod} · transfers excluded</p>
-            </div>
-            <span className={`text-sm sm:text-base font-bold ${monthNet >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {monthNet >= 0 ? '+' : '-'}₹{Math.abs(monthNet).toLocaleString('en-IN', { maximumFractionDigits: 0 })} net
-            </span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/15 p-3 sm:p-4">
-              <p className="text-xs text-slate-400">Income</p>
-              <p className="mt-1 font-bold text-emerald-400 break-all">+₹{monthIncome.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
-            </div>
-            <div className="rounded-2xl bg-rose-500/10 border border-rose-500/15 p-3 sm:p-4">
-              <p className="text-xs text-slate-400">Expenses</p>
-              <p className="mt-1 font-bold text-rose-400 break-all">-₹{monthExpenses.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
-            </div>
-            <div className="col-span-2 sm:col-span-1 rounded-2xl bg-white/5 border border-white/10 p-3 sm:p-4">
-              <p className="text-xs text-slate-400">Savings rate</p>
-              <p className={`mt-1 font-bold ${monthIncome > 0 && monthNet >= 0 ? 'text-emerald-400' : 'text-slate-200'}`}>
-                {monthIncome > 0 ? `${Math.round((monthNet / monthIncome) * 100)}%` : '—'}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl overflow-hidden flex flex-col min-h-60">
-            <div className="p-5 border-b border-white/5 flex items-center justify-between bg-black/10">
-              <h3 className="font-bold flex items-center text-slate-200">
-                <Landmark className="w-4 h-4 mr-2 text-indigo-400" /> Accounts <span className="ml-2 text-xs font-normal text-slate-500">{accounts.length}</span>
-              </h3>
-            </div>
-            <div className="p-4 flex-1 overflow-y-auto space-y-2">
-              {accounts.map(acc => (
-                <div key={acc.id} className="flex justify-between items-center p-3 rounded-xl hover:bg-white/5 transition-colors">
-                    <span className="text-sm font-medium text-slate-300 min-w-0 truncate">{acc.name}</span>
-                  <span className={`text-sm font-bold shrink-0 ml-3 ${Number(acc.balance) < 0 ? 'text-rose-400' : 'text-white'}`}>
-                    ₹{Number(acc.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-              ))}
-              {accounts.length === 0 && <p className="text-sm text-slate-500 text-center py-4">No accounts found.</p>}
-            </div>
-        </section>
-
-        <section className="xl:col-span-2 bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl p-5 sm:p-6">
-          <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4 mb-5">
-            <div><h3 className="font-bold flex items-center text-slate-100"><ChartNoAxesCombined className="w-4 h-4 mr-2 text-indigo-300" /> Cash flow</h3><p className="text-xs text-slate-500 mt-1">Income and expenses for the selected period</p></div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">{[['7 days', 7], ['30 days', 30], ['This month', 'month'], ['This year', 'year']].map(([label, value]) => <button key={label} onClick={() => setQuickRange(value as number | 'month' | 'year')} className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2 text-xs text-slate-300">{label}</button>)}</div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-end gap-3 mb-4"><label className="text-xs text-slate-500">From<input type="date" value={rangeStart} max={rangeEnd} onChange={e => setRangeStart(e.target.value)} className="mt-1 block w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white" /></label><span className="hidden sm:block text-slate-500 pb-2">through</span><label className="text-xs text-slate-500">To<input type="date" value={rangeEnd} min={rangeStart} max={toIndiaDateInputValue()} onChange={e => setRangeEnd(e.target.value)} className="mt-1 block w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white" /></label></div>
-          <div className="flex items-center gap-4 text-xs text-slate-400 mb-2"><span className="flex items-center gap-1.5"><i className="w-2 h-2 rounded-full bg-emerald-400" />Income</span><span className="flex items-center gap-1.5"><i className="w-2 h-2 rounded-full bg-rose-400" />Expenses</span><span className="ml-auto">{selectedPeriod}</span></div>
-          {cashFlowDays.length ? <div className="flex h-36 items-end gap-1 overflow-x-auto rounded-2xl bg-black/10 p-3">{cashFlowDays.map(day => <div key={day.day} title={`${day.day} · Income ${day.income.toLocaleString('en-IN')} · Expenses ${day.expense.toLocaleString('en-IN')}`} className="min-w-7 flex-1 h-full flex items-end justify-center gap-0.5"><button type="button" aria-label={`Open income report for ${day.day}: ${day.income.toLocaleString('en-IN')}`} disabled={day.income <= 0} onClick={() => navigate(buildReportPath({ from: day.day, to: day.day, kind: 'income' }))} className="w-1/2 min-w-2 h-full flex items-end justify-center rounded-t focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300 disabled:cursor-default"><span aria-hidden="true" className="w-full rounded-t bg-emerald-400/80 hover:bg-emerald-300 transition-colors" style={{ height: day.income > 0 ? `${Math.max(2, day.income / maxFlowBar * 100)}%` : '0%' }} /></button><button type="button" aria-label={`Open expense report for ${day.day}: ${day.expense.toLocaleString('en-IN')}`} disabled={day.expense <= 0} onClick={() => navigate(buildReportPath({ from: day.day, to: day.day, kind: 'expense' }))} className="w-1/2 min-w-2 h-full flex items-end justify-center rounded-t focus-visible:outline focus-visible:outline-2 focus-visible:outline-rose-300 disabled:cursor-default"><span aria-hidden="true" className="w-full rounded-t bg-rose-400/80 hover:bg-rose-300 transition-colors" style={{ height: day.expense > 0 ? `${Math.max(2, day.expense / maxFlowBar * 100)}%` : '0%' }} /></button></div>)}</div> : <div className="grid place-items-center h-36 rounded-2xl bg-black/10 text-sm text-slate-500">No cash flow for these dates.</div>}
-          <div className="mt-4 flex justify-between items-center"><span className="text-xs text-slate-500">Select an income or expense bar to open that day's entries. Transfers are excluded.</span><Link to={buildReportPath({ from: rangeStart, to: rangeEnd })} className="text-sm font-semibold text-indigo-300 hover:text-indigo-200">Open detailed reports →</Link></div>
-        </section>
-
-        <section className="bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl overflow-hidden flex flex-col min-h-60">
-            <div className="p-5 border-b border-white/5 flex items-center justify-between bg-black/10">
-              <h3 className="font-bold flex items-center text-slate-200">
-                <ArrowRightLeft className="w-4 h-4 mr-2 text-rose-400" /> Recent Activity
-              </h3>
-            </div>
-            <div className="p-4 flex-1 overflow-y-auto space-y-2">
-              {recentTx.map(tx => (
-                <div key={tx.id} className="flex justify-between items-center p-3 rounded-xl hover:bg-white/5 transition-colors">
-                  <div>
-                    <p className="text-sm font-medium text-slate-200 line-clamp-1">{tx.description}</p>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <p className="text-xs text-slate-500">{formatIndiaDate(tx.created_at)}</p>
-                      {tx.taggedName && (
-                        <span className="flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                          <User className="w-3 h-3 mr-1" /> {tx.taggedName}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <span className={`text-sm font-bold ${tx.type === 'income' ? 'text-emerald-400' : tx.type === 'expense' ? 'text-rose-400' : 'text-slate-300'}`}>
-                    {tx.type === 'expense' ? '-' : tx.type === 'income' ? '+' : ''}₹{Number(tx.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-              ))}
-              {recentTx.length === 0 && <p className="text-sm text-slate-500 text-center py-8">No transactions yet. Add your first transaction to see it here.</p>}
-            </div>
-        </section>
-
-      </div>
+function EditorialBoard(p: any) {
+  const money = p.money as (n: number, d?: number) => string
+  const group = 'ed-panel rounded-[1.35rem] border p-5 sm:p-6'
+  const accountKinds: Record<string, string> = { bank: 'Bank', cash: 'Cash', wallet: 'Wallet', credit: 'Credit card', credit_card: 'Credit card', pay_later: 'Pay later' }
+  const accountViewRows = p.accountTab === 'chitti' ? p.activeChittis.map((item: any) => ({ id: item.id, name: item.name, type: 'chitti', balance: Number(item.monthly_installment), href: '/chittis' })) : p.visibleAccounts
+  const cashBars = p.cashFlowDays as CashFlowBucket[]
+  const formatBucketLabel = (bucket: CashFlowBucket) => p.cashFlowGranularity === 'month'
+    ? formatIndiaDate(`${bucket.start.slice(0, 7)}-15`, { month: 'short', year: '2-digit' })
+    : formatIndiaDate(bucket.start, { month: 'short', day: 'numeric' })
+  const bucketDescription = (bucket: CashFlowBucket) => bucket.start === bucket.end
+    ? bucket.start
+    : `${bucket.start} through ${bucket.end}`
+  return <div className="page-shell dashboard-editorial mx-auto w-full max-w-[1500px] pb-32">
+    <PageHeader eyebrow="RR CAPITAL · YOUR MONEY" title="Financial overview" description="A clear view of what you have, what is committed, and where it is going." icon={<TrendingUp />} />
+    {p.accountsLoaded && p.accounts.length === 0 && <section className="dashboard-onboarding ed-panel mb-5 grid gap-5 rounded-[1.35rem] p-5 sm:grid-cols-[1fr_auto] sm:items-center sm:p-6">
+      <div className="flex items-start gap-4"><span className="dashboard-onboarding-mark"><Landmark className="h-5 w-5" /></span><div><p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-accent-400">A clear start</p><h2 className="text-lg font-semibold text-[var(--ink)]">Add your first account</h2><p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted)]">Set a bank, wallet, cash, or credit line with its starting balance. Your dashboard fills in as you record activity.</p></div></div>
+      <Link to="/accounts" className="dashboard-onboarding-link inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold"><Landmark className="h-4 w-4" /> Create an account</Link>
+    </section>}
+    <div className="grid grid-cols-1 items-stretch gap-4 sm:gap-5 xl:grid-cols-12">
+      <section className="ed-networth xl:col-span-5"><div className="flex items-start justify-between gap-3"><div><p className="ed-kicker">Your total net worth</p><p className="mt-1 text-sm opacity-70">Across your accounts and credit lines</p></div><button type="button" onClick={() => p.setPrivacyMode(!p.privacyMode)} className="ed-icon-button" aria-label={p.privacyMode ? 'Show balances' : 'Hide balances'}>{p.privacyMode ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button></div>
+        <div className="ed-total mt-8">{money(p.netWorth, 2)}</div><div className="mt-2 text-xs opacity-65">Across {p.accounts.length} recorded accounts · latest balances</div>
+        <div className="ed-composition mt-7" aria-label="Balance composition">{p.compositionTotal > 0 ? p.composition.map((x: any) => <i key={x.label} title={x.label} style={{ width: `${Math.max(1, x.value / p.compositionTotal * 100)}%`, background: x.color }} />) : <i style={{ width: '100%' }} />}</div>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">{p.composition.map((x: any) => <span key={x.label} className="ed-legend"><i style={{ background: x.color }} />{x.label}<b>{money(x.value)}</b></span>)}</div>
+        <button type="button" onClick={() => window.dispatchEvent(new CustomEvent('rr:transaction-draft', { detail: { type: 'transfer' } }))} className="ed-action mt-7"><ArrowRightLeft className="h-4 w-4" /> Move money <ChevronRight className="ml-auto h-4 w-4" /></button>
+      </section>
+      <section className="ed-commitments xl:col-span-7"><div className="flex items-start justify-between gap-3"><div><p className="ed-kicker">Commitments &amp; liquidity</p><p className="mt-1 text-sm opacity-70">Current balance less scheduled payments</p></div><CalendarDays className="h-5 w-5 opacity-60" /></div>
+        <div className="mt-7 grid gap-5 sm:grid-cols-2"><div><p className="text-xs opacity-65">Liquid balance</p><p className="ed-stat mt-1">{money(p.liquidCash)}</p></div><div><p className="text-xs opacity-65">This month · EMIs &amp; Chittis</p><p className="ed-stat mt-1">−{money(p.upcomingOutflow)}</p></div></div>
+        <div className="ed-forecast mt-6"><div><p className="text-xs opacity-65">After this month’s commitments</p><p className="mt-1 text-xl font-semibold">{money(p.safeToSpend)}</p></div><div className="ed-forecast-next"><p className="text-xs opacity-65">Next month · {p.nextMonthLabel}</p><p className="mt-1 text-lg font-semibold">{money(p.nextMonthSafeToSpend)}</p><span>{money(p.nextMonthOutflow)} scheduled</span></div></div>
+        <p className="mt-4 text-[11px] opacity-60">Projection holds today’s liquid balance constant and subtracts listed recurring commitments.</p>
+      </section>
+      <section className="ed-chart xl:col-span-8"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div><p className="ed-kicker">Cash flow · {p.selectedPeriod}</p><p className="mt-1 text-sm opacity-65">{p.cashFlowGranularity === 'day' ? 'Daily' : 'Monthly'} income and expenses · transfers excluded</p></div><Link className="ed-link" to={buildReportPath({ from: p.rangeStart, to: p.rangeEnd })}>Open detailed report <ChevronRight className="h-4 w-4" /></Link></div>
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">{[['Income', p.monthIncome, 'income'], ['Expenses', p.monthExpenses, 'expense'], ['Net flow', p.monthIncome-p.monthExpenses, 'net']].map(([label,value,key]: any) => <div className="ed-metric" key={key}><span>{label}</span><b className={key}>{money(value)}</b></div>)}<div className="ed-metric ed-savings-metric"><div><span>Savings rate</span><b>{p.savingsRate === null ? '—' : `${p.savingsRate.toFixed(1)}%`}</b></div><span className="ed-savings-ring" style={{ '--savings-progress': `${Math.max(0, Math.min(100, p.savingsRate ?? 0))}%` } as React.CSSProperties} aria-hidden="true" /></div></div>
+        <div className="mt-5 flex flex-wrap gap-2" role="group" aria-label="Quick date ranges">{[['7 days',7],['30 days',30],['This month','month'],['This year','year']].map(([label,value]: any) => <button key={label} type="button" aria-pressed={p.matchesQuickRange(value)} onClick={() => p.setQuickRange(value)} className={`ed-range ${p.matchesQuickRange(value) ? 'active' : ''}`}>{label}</button>)}</div>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:max-w-md"><label className="ed-date">From<input type="date" value={p.rangeStart} max={p.rangeEnd} onChange={e => p.setRangeStart(e.target.value)} /></label><label className="ed-date">To<input type="date" value={p.rangeEnd} min={p.rangeStart} max={toIndiaDateInputValue()} onChange={e => p.setRangeEnd(e.target.value)} /></label></div>
+        {cashBars.length ? <div className="ed-bars mt-5" role="group" aria-label={`${p.cashFlowGranularity === 'day' ? 'Daily' : 'Monthly'} cash flow chart`}>{cashBars.map((bucket, i) => { const dates = { from: bucket.start, to: bucket.end }; const description = bucketDescription(bucket); return <div className="ed-bar-day" key={bucket.start} title={`${description}: income ${money(bucket.income)}, expenses ${money(bucket.expense)}`}><button aria-label={`View income entries ${bucket.start === bucket.end ? 'on' : 'from'} ${description}`} disabled={!bucket.income} onClick={() => p.navigate(buildReportPath({ ...dates, kind: 'income' }))}><i style={{ height: `${bucket.income ? Math.max(3, bucket.income / p.maxFlowBar * 100) : 0}%` }} /></button><button aria-label={`View expense entries ${bucket.start === bucket.end ? 'on' : 'from'} ${description}`} disabled={!bucket.expense} onClick={() => p.navigate(buildReportPath({ ...dates, kind: 'expense' }))}><i style={{ height: `${bucket.expense ? Math.max(3, bucket.expense / p.maxFlowBar * 100) : 0}%` }} /></button>{(i % Math.max(1, Math.ceil(cashBars.length/6)) === 0 || i === cashBars.length-1) && <small>{formatBucketLabel(bucket)}</small>}</div> })}</div> : <div className="ed-empty mt-5">No completed income or expense entries in this period.</div>}
+        <div className="mt-4 flex gap-4 text-xs opacity-65"><span className="ed-dot income-dot"/> Income <span className="ed-dot expense-dot"/> Expenses <span className="ml-auto">Select a bar to view matching report entries</span></div>
+      </section>
+      <div className="flex flex-col gap-4 xl:col-span-4"><section className={group}><div className="flex items-center justify-between"><div><p className="ed-kicker">Accounts</p><p className="mt-1 text-sm opacity-65">{p.accounts.length} accounts and credit lines</p></div><Link to="/accounts" className="ed-icon-button" aria-label="Manage accounts"><ChevronRight className="h-4 w-4" /></Link></div>
+        <div className="mt-4 flex flex-wrap gap-1" role="tablist" aria-label="Account filters">{[['all','All'],['liquid','Liquid'],['credit','Credit'],['chitti','Chittis']].map(([key,label]) => <button role="tab" aria-selected={p.accountTab===key} className={`ed-tab ${p.accountTab===key?'active':''}`} key={key} onClick={() => p.setAccountTab(key)}>{label}</button>)}</div>
+        <div className="mt-3 divide-y ed-divider">{accountViewRows.map((acc: any) => <Link to={acc.href || '/accounts'} key={acc.id} className="ed-account"><span className="ed-account-mark">{['bank','cash','wallet'].includes(acc.type) ? <Wallet className="h-4 w-4"/> : <CreditCard className="h-4 w-4"/>}</span><span className="min-w-0 flex-1"><b className="block truncate">{acc.name}</b><small>{accountKinds[acc.type] || (acc.type === 'chitti' ? 'Active Chitti · monthly installment' : 'Account')}</small></span><strong>{money(Number(acc.balance))}</strong></Link>)}{accountViewRows.length===0 && <div className="py-6 text-center text-sm opacity-60">No entries in this view.</div>}</div>
+      </section><PendingRequests /></div>
+      <section className={`${group} xl:col-span-7`}><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><p className="ed-kicker">Recent activity</p><p className="mt-1 text-sm opacity-65">Latest recorded transactions</p></div><Link to="/ledger" className="ed-link">Open ledger <ChevronRight className="h-4 w-4"/></Link></div>
+        <div className="mt-4 flex flex-wrap gap-1" role="tablist" aria-label="Transaction filters">{[['all','All'],['income','Income'],['expense','Expenses'],['transfer','Transfers']].map(([key,label])=><button role="tab" aria-selected={p.transactionTab===key} className={`ed-tab ${p.transactionTab===key?'active':''}`} key={key} onClick={()=>p.setTransactionTab(key)}>{label}</button>)}</div>
+        <div className="mt-3 divide-y ed-divider">{p.shownTransactions.map((tx:any)=><div key={tx.id} className="ed-transaction"><span className={`ed-transaction-icon ${tx.type}`} aria-hidden="true">{tx.type==='income'?<ArrowDownLeft className="h-4 w-4"/>:tx.type==='expense'?<ArrowUpRight className="h-4 w-4"/>:<ArrowRightLeft className="h-4 w-4"/>}</span><span className="min-w-0 flex-1"><b className="block truncate">{tx.description || (tx.type==='transfer'?'Transfer':tx.type)}</b><small>{formatIndiaDate(tx.created_at)}{tx.taggedName?` · ${tx.taggedName}`:''}</small></span><strong className={tx.type}>{tx.type==='expense'?'−':tx.type==='income'?'+':''}{money(Number(tx.amount),2)}</strong></div>)}{p.shownTransactions.length===0 && <div className="py-6 text-center text-sm opacity-60">No matching transactions found.</div>}</div>
+        {p.filteredTransactions.length>5 && <button className="ed-show-more mt-4" onClick={()=>p.setShowMoreActivity(!p.showMoreActivity)}>{p.showMoreActivity?'Show fewer':'Show up to 25 recent entries'} <ChevronRight className={`h-4 w-4 ${p.showMoreActivity?'rotate-90':''}`}/></button>}
+      </section>
+      <section className={`${group} xl:col-span-5`}><div className="flex items-center justify-between"><div><p className="ed-kicker">Schedules</p><p className="mt-1 text-sm opacity-65">Active Chittis and recurring EMIs · {money(p.upcomingOutflow)} this month</p></div><Link to="/calendar" className="ed-link">Calendar <ChevronRight className="h-4 w-4"/></Link></div>
+        <div className="ed-commitment-summary mt-4 grid grid-cols-2 gap-2"><div><span>EMIs</span><strong>{money(p.emiOutflow)}</strong></div><div><span>Chittis</span><strong>{money(p.chittiOutflow)}</strong></div><div className="col-span-2"><span>Share of liquid balance</span><strong>{p.obligationBurden === null ? 'Add a liquid account to compare' : `${p.obligationBurden.toFixed(1)}%`}</strong></div></div>
+        <div className="mt-4 divide-y ed-divider">{[...p.activeChittis.map((x:any)=>({...x, scheduleType:'Chitti', installment:x.monthly_installment})),...p.activeEmis.map((x:any)=>({...x, scheduleType:'Recurring EMI', installment:x.amount}))].slice(0,5).map((item:any,i:number)=><div className="ed-schedule" key={`${item.scheduleType}-${item.id || item.name}-${i}`}><span className="ed-schedule-mark"><CalendarDays className="h-4 w-4"/></span><span className="min-w-0 flex-1"><b className="block truncate">{item.name || item.scheduleType}</b><small>{item.scheduleType}</small></span><strong>{money(Number(item.installment))}<small>/ month</small></strong></div>)}{!p.activeChittis.length && !p.activeEmis.length && <div className="py-6 text-center text-sm opacity-60">No active recurring schedules.</div>}</div>
+      </section>
     </div>
-  )
+  </div>
 }

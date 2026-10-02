@@ -135,7 +135,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-4 sm:p-6 w-full max-w-4xl mx-auto text-white animate-in fade-in duration-300 pb-32">
+    <div className="page-shell w-full max-w-4xl mx-auto animate-in fade-in duration-300 pb-32">
       
       {/* Header & Search */}
       <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-8 gap-4">
@@ -162,7 +162,7 @@ export default function Settings() {
         
         {/* Profile Section (Explicit Save) */}
         {showProfile && (
-          <section className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-sm relative">
+          <section className="surface-panel rounded-3xl p-6 md:p-8 relative">
             <div className="flex items-center mb-6">
               <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center mr-4 border border-indigo-500/20">
                 <User className="w-5 h-5 text-indigo-400" />
@@ -244,7 +244,7 @@ export default function Settings() {
 
         {/* AI Integration Section (Explicit Save) */}
         {showIntegration && (
-          <section className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-sm relative">
+          <section className="surface-panel rounded-3xl p-6 md:p-8 relative">
             <div className="flex items-center mb-6">
               <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center mr-4 border border-emerald-500/20">
                 <Key className="w-5 h-5 text-emerald-400" />
@@ -285,7 +285,7 @@ export default function Settings() {
 
         {/* Security & Toggles (Instant Save) */}
         {showSecurity && (
-          <section className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-sm">
+          <section className="surface-panel rounded-3xl p-6 md:p-8">
             <div className="flex items-center mb-6">
               <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center mr-4 border border-amber-500/20">
                 <Lock className="w-5 h-5 text-amber-400" />

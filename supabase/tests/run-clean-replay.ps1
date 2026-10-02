@@ -52,17 +52,18 @@ if (-not $apiSchemas -or $apiSchemas -match '"net"') {
 Write-Output 'PASS `net` schema is not exposed by local Supabase Data API configuration'
 $testFiles = Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.test.sql' | Sort-Object Name
 $migrations = Get-ChildItem -LiteralPath $migrationPath -Filter '*.sql' | Sort-Object Name
-$perryMigrationPattern = '^20261002040(1|2|6)\d{2}_|^20261002041011_'
+$perryMigrationPattern = '^20261002040(1|2|6)\d{2}_'
+$excludedMigrationPattern = "$perryMigrationPattern|^20261002041000_|^20261002041011_"
 if ($CoreOnly) {
   # Perry's optional migrations/tests are deliberately absent from the normal
   # RR Capital release. Prove the financial schema replays alone.
-  $migrations = @($migrations | Where-Object { $_.BaseName -notmatch $perryMigrationPattern })
+  $migrations = @($migrations | Where-Object { $_.BaseName -notmatch $excludedMigrationPattern })
   $testFiles = @($testFiles | Where-Object {
     $_.Name -ne 'perry_summary_security.test.sql'
   })
 } elseif ($StagedThenPerry) {
   $perryMigrations = @($migrations | Where-Object { $_.BaseName -match $perryMigrationPattern })
-  $coreMigrations = @($migrations | Where-Object { $_.BaseName -notmatch $perryMigrationPattern })
+  $coreMigrations = @($migrations | Where-Object { $_.BaseName -notmatch $excludedMigrationPattern })
   # Simulate shipping core first, then using a deliberate include-all follow-up
   # to apply only Perry's still-pending historical versions.
   $migrations = @($coreMigrations) + @($perryMigrations)
@@ -125,7 +126,7 @@ CREATE TABLE supabase_migrations.schema_migrations (
     Invoke-LocalPsql $databaseName @'
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations
-              WHERE version IN ('20261002040100','20261002040200','20261002040600'))
+              WHERE version IN ('20261002040100','20261002040200','20261002040600','20261002041000','20261002041011'))
      OR to_regclass('private.perry_owner_config') IS NOT NULL
      OR to_regprocedure('private.personal_summary()') IS NOT NULL
      OR to_regprocedure('public.personal_summary()') IS NOT NULL THEN
@@ -133,6 +134,19 @@ DO $$ BEGIN
   END IF;
 END $$;
 '@ 'Verify Perry role and summary are absent from core-only release' | Out-Null
+  } elseif ($StagedThenPerry) {
+    Invoke-LocalPsql $databaseName @'
+DO $$ DECLARE perry_versions text[]; BEGIN
+  SELECT array_agg(version ORDER BY version) INTO perry_versions
+  FROM supabase_migrations.schema_migrations
+  WHERE version IN ('20261002040100','20261002040200','20261002040600');
+  IF perry_versions IS DISTINCT FROM ARRAY['20261002040100','20261002040200','20261002040600']::text[]
+     OR EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations
+                 WHERE version IN ('20261002041000','20261002041011')) THEN
+    RAISE EXCEPTION 'Staged Perry replay must include only the three deferred Perry migrations and exclude superseded aliases';
+  END IF;
+END $$;
+'@ 'Verify staged Perry migrations and exclude superseded aliases' | Out-Null
   }
 
   $assertionCount = 0

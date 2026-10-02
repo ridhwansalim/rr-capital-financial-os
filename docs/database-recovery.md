@@ -41,9 +41,9 @@ The free logical export is stored outside Git at %LOCALAPPDATA%\RR-Capital-Backu
 
 Vercel production is still READY at commit 8952a165480d551f5b0dd064159bade7eae9b390. Current application changes remain local/uncommitted and have not been deployed. No Perry connection was made. Next release work is client deployment/smoke verification, followed only after household refresh by deferred 410 cutover. No hosted financial rows were created or modified.
 
-## Current continuation checkpoint - 2026-10-02
+## Earlier continuation checkpoint - 2026-10-02 (superseded by the production release below)
 
-This section supersedes stale release-status sentences below where they conflict. The RR Capital hosted migration ledger records the legacy P2P RPC cutover as `20261002044711_revoke_legacy_p2p_debt_rpc.sql`; the source SQL matches the prior reviewed `20261002041000` cutover byte-for-byte. The old `41000` and Perry-specific `40100`, `40200`, `40600`, and `41011` source files are not hosted migration versions and must not be bundled as pending production migrations. The read-only hash-pinned cutover dry-run passes and confirms `44711` is already applied.
+This records the state immediately before the approved production release below. Later release and catalog evidence supersedes its statements that the profile/category migrations were pending. The RR Capital hosted migration ledger records the legacy P2P RPC cutover as `20261002044711_revoke_legacy_p2p_debt_rpc.sql`; the source SQL matches the prior reviewed `20261002041000` cutover byte-for-byte. The old `41000` and Perry-specific `40100`, `40200`, `40600`, and `41011` source files are not hosted migration versions and must not be bundled as pending production migrations.
 
 Authenticated still has broad profile column-update capability in the last hosted metadata audit. The proposed local fixes are `20261002055319_restrict_profile_update_columns.sql` and `20261002055400_restrict_category_mutation_columns.sql`, paired with removal of manual Telegram Chat ID editing and synthetic SQL regression tests. The category grant change derives owner_id from auth.uid() and limits client insert/update to name/color. The guarded hosted dry-run selected exactly those two migrations and skipped Vault; neither was applied. Perry remains disconnected, and Perry migrations remain excluded.
 
@@ -56,7 +56,7 @@ Fresh metadata-only catalog inspection found authenticated table-level INSERT, U
 
 The fresh catalog confirms `account_balances` is a `security_invoker` view with authenticated SELECT only, while `transactions` has a single owner-scoped SELECT policy. Public SECURITY DEFINER routines in the current catalog scan have fixed search paths and no EXECUTE for PUBLIC, anon, or authenticated. The core-only isolated replay now passes 52 migrations, 30 SQL files, and 149 pgTAP assertions; its scratch DB was dropped. All nine Node suites pass (69 tests), production build passes with the large-chunk and deprecated-PWA-option warnings, and lint exits successfully with existing React-hook/unused-import warnings. Mobile login at 390px has no horizontal overflow.
 
-No hosted migrations were applied. The hash-pinned profile/category release script was invoked in dry-run mode, but the automated approval review stopped the invocation because that script also contains a production apply path. Do not bypass the review; obtain explicit approval for these two exact hosted permission migrations before using the apply path. The six XPENC feature migrations also remain unapplied pending the production release step. The current RR Capital free logical export exists outside Git with ACL restricted to the owner, SYSTEM, and Administrators; it is not a complete platform backup or restore rehearsal.
+At this checkpoint, no hosted migrations had been applied. The subsequent production release section below records that the owner approved and deployed the eight-migration bundle. The current RR Capital free logical export exists outside Git with ACL restricted to the owner, SYSTEM, and Administrators; it is not a complete platform backup or restore rehearsal.
 
 ## RR Capital production release — 2026-10-02
 

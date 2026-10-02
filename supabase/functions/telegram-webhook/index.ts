@@ -149,8 +149,10 @@ serve(async (req) => {
     // the Settings page confirms the committed link by reading the profile.
     if (!linked && !delivered) return new Response('Retry', { status: 500, headers: corsHeaders })
     return new Response('OK', { status: 200, headers: corsHeaders })
-  } catch (error) {
-    console.error('Telegram webhook failed', error)
+  } catch {
+    // Avoid logging arbitrary exception text: fetch errors can include request
+    // URLs, and Telegram API URLs contain the server-side bot token.
+    console.error('Telegram webhook failed')
     return new Response('Error', { status: 500, headers: corsHeaders })
   }
 })

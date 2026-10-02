@@ -52,20 +52,26 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
 
   const fetchInitialData = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user
       if (!user) return
       setCurrentUserId(user.id)
 
-      const { data: contacts } = await supabase.from('contacts').select('id, name').eq('owner_id', user.id).order('name').limit(10)
+      const [contactResult, accountResult, balanceResult] = await Promise.all([
+        supabase.from('contacts').select('id, name').eq('owner_id', user.id).order('name').limit(10),
+        supabase.from('accounts').select('id, name, opening_date').eq('owner_id', user.id).order('name'),
+        supabase.from('account_balances').select('id, balance'),
+      ])
+
+      const { data: contacts } = contactResult
       if (contacts) setMyContacts(contacts.map(c => ({ id: c.id, name: c.name, subtitle: 'Shadow Contact', type: 'contact' })))
 
-      const { data: accData } = await supabase.from('accounts').select('*').order('name')
-      const { data: balData } = await supabase.from('account_balances').select('*')
-      
+      const accData = accountResult.data
+      const balData = balanceResult.data
       if (accData) {
+        const balancesById = new Map((balData || []).map(balance => [balance.id, Number(balance.balance)]))
         const merged = accData.map(acc => {
-          const matched = balData?.find(b => b.id === acc.id)
-          return { ...acc, balance: matched ? Number(matched.balance) : 0 }
+          return { ...acc, balance: balancesById.get(acc.id) ?? 0 }
         })
         setAccounts(merged)
       }

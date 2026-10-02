@@ -1,6 +1,10 @@
 # Telegram linking and profile write boundary
 
-Status: local fix prepared and verified; production migration not applied.
+## Current status — 2026-10-03
+
+The approved profile/category permission migrations are present in RR Capital's hosted migration ledger. A fresh catalog check confirms authenticated users have no table-level INSERT/UPDATE/DELETE on `profiles`, cannot update `telegram_chat_id`, and can still update approved profile preferences. Category writes are column-limited to `name` and `color`; owner RLS policies remain in force. The latest Vercel production deployment (`7b5199c611385659fc88fdd72e0b69ef4f96271d`) contains the one-time Telegram linking UI; the old manual Chat ID field is absent from that deployed commit. The owner still needs to complete the private-chat `/start` link before Telegram alerts can be delivered.
+
+The dated notes below preserve the original finding and rollout history; their pre-release status statements are historical.
 
 ## Verified finding
 

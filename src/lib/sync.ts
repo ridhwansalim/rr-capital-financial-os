@@ -26,11 +26,11 @@ export function postQueuedTransaction(txn: LocalTransaction) {
 async function runSync() {
   if (!navigator.onLine) return
   try {
-    const pending = await localDB.outbox.where('sync_status').equals('pending').toArray()
-    if (pending.length === 0) return
-
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) return
+    const pending = await localDB.outbox.where('[owner_id+sync_status]')
+      .equals([user.id, 'pending']).toArray()
+    if (pending.length === 0) return
 
     for (const txn of pending) {
       // A shared browser can have pending entries for a different login.

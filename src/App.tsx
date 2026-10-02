@@ -26,7 +26,19 @@ const FinancialHealthScore = lazy(() => import('./screens/FinancialHealthScore')
 const FeatureRoute = lazy(() => import('./components/FeatureRoute'))
 
 function ScreenLoading() {
-  return <div className="min-h-[50vh] flex items-center justify-center text-sm text-slate-400" role="status" aria-live="polite">Loading page...</div>
+  return <div className="app-loading-state min-h-[58vh] px-6 flex items-center justify-center text-sm text-slate-400" role="status" aria-live="polite" aria-busy="true">
+    <div className="w-full max-w-2xl">
+      <div className="flex items-center gap-3 mb-8">
+        <span className="app-loading-mark"><span /></span>
+        <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-400">RR Capital</p><p className="mt-1 text-xs text-slate-500">Preparing your workspace</p></div>
+      </div>
+      <div className="h-7 w-48 rounded-lg bg-white/10 app-loading-shimmer" />
+      <div className="mt-3 h-4 w-72 max-w-full rounded bg-white/5 app-loading-shimmer" />
+      <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {[0, 1, 2].map(item => <div key={item} className="h-24 rounded-2xl border border-white/10 bg-white/5 p-4"><div className="h-3 w-20 rounded bg-white/10 app-loading-shimmer" /><div className="mt-5 h-5 w-32 max-w-full rounded bg-white/10 app-loading-shimmer" /></div>)}
+      </div>
+    </div>
+  </div>
 }
 
 export default function App() {

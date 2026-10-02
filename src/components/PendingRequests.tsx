@@ -14,28 +14,35 @@ export default function PendingRequests() {
 
   const fetchInboxData = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user
       if (!user) return
 
-      const [{ data: accData, error: accountError }, { data: balanceData, error: balanceError }] = await Promise.all([
+      // The inbox panels are independent. Load them with account context in one
+      // wave so phones do not pay six serial network round trips before rendering.
+      const [accountResult, balanceResult, incDebtResult, incEmiResult, incSettlementResult, decDebtResult, decEmiResult, decSettlementResult] = await Promise.all([
         supabase.from('accounts').select('id, name, type, opening_date').order('name'),
-        supabase.from('account_balances').select('id, balance')
+        supabase.from('account_balances').select('id, balance'),
+        supabase.from('obligations').select('*').eq('status', 'PENDING_APPROVAL').neq('owner_id', user.id).or(`creditor_profile_id.eq.${user.id},debtor_profile_id.eq.${user.id}`),
+        supabase.from('recurring_emis').select('*').eq('status', 'PENDING_APPROVAL').eq('counterparty_profile_id', user.id),
+        supabase.from('settlements').select('*, obligations(description)').eq('status', 'PENDING_APPROVAL').eq('counterparty_profile_id', user.id),
+        supabase.from('obligations').select('*').eq('status', 'DECLINED').eq('owner_id', user.id),
+        supabase.from('recurring_emis').select('*').eq('status', 'DECLINED').eq('owner_id', user.id),
+        supabase.from('settlements').select('*').eq('status', 'DECLINED').eq('initiator_id', user.id).is('initiator_dismissed_at', null),
       ])
+      const { data: accData, error: accountError } = accountResult
+      const { data: balanceData, error: balanceError } = balanceResult
       if (accountError) throw accountError
       if (balanceError) throw balanceError
       const balancesById = new Map((balanceData || []).map(account => [account.id, account.balance]))
       setAccounts((accData || []).map(account => ({ ...account, balance: balancesById.get(account.id) ?? 0 })))
 
-      // 1. Fetch Debts & EMIs
-      const { data: incDebts } = await supabase.from('obligations').select('*').eq('status', 'PENDING_APPROVAL').neq('owner_id', user.id).or(`creditor_profile_id.eq.${user.id},debtor_profile_id.eq.${user.id}`)
-      const { data: incEmis } = await supabase.from('recurring_emis').select('*').eq('status', 'PENDING_APPROVAL').eq('counterparty_profile_id', user.id)
-      
-      // 2. Fetch SETTLEMENTS (Repayments arriving TO you)
-      const { data: incSettlements } = await supabase.from('settlements').select('*, obligations(description)').eq('status', 'PENDING_APPROVAL').eq('counterparty_profile_id', user.id)
-
-      const { data: decDebts } = await supabase.from('obligations').select('*').eq('status', 'DECLINED').eq('owner_id', user.id)
-      const { data: decEmis } = await supabase.from('recurring_emis').select('*').eq('status', 'DECLINED').eq('owner_id', user.id)
-      const { data: decSettlements } = await supabase.from('settlements').select('*').eq('status', 'DECLINED').eq('initiator_id', user.id).is('initiator_dismissed_at', null)
+      const incDebts = incDebtResult.data
+      const incEmis = incEmiResult.data
+      const incSettlements = incSettlementResult.data
+      const decDebts = decDebtResult.data
+      const decEmis = decEmiResult.data
+      const decSettlements = decSettlementResult.data
 
       const taggedIncDebts = (incDebts || []).map(d => ({ ...d, req_category: 'debt' }))
       const taggedIncEmis = (incEmis || []).map(e => ({ ...e, req_category: 'emi' }))

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Settings as SettingsIcon, Search, User, Key, Lock, RotateCcw, Save, Trash2, Loader2, Palette, Bot, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut } from 'lucide-react'
+import { Settings as SettingsIcon, Search, User, Key, Lock, RotateCcw, Save, Trash2, Loader2, Palette, Bot, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut, Sun, Moon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDate } from '../lib/financeDate'
-import { useTheme } from '../components/ThemeProvider'
+import { normalizeThemeMode, useTheme } from '../components/ThemeProvider'
 import { useModalBack } from '../lib/useModalBack'
 import { hasAppPinConfigured, migrateLegacyAppPin, removeAppPin, storeAppPin } from '../lib/appPin'
 import { setOptionalFeature, useOptionalFeatures } from '../lib/optionalFeatures'
@@ -18,10 +18,12 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
 export default function Settings() {
   const navigate = useNavigate()
   const telegramBotUsername = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'ridhwans_fin_bot').replace(/^@/, '')
-  const { setTheme } = useTheme()
+  const { themeMode, setTheme } = useTheme()
   const { flags: featureFlags } = useOptionalFeatures()
   const [featureBusy, setFeatureBusy] = useState(false)
   const [featureError, setFeatureError] = useState('')
+  const [isSigningOut, setIsSigningOut] = useState(false)
+  const [signOutError, setSignOutError] = useState('')
   const [guidedHelpEnabled, setGuidedHelpState] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [isLoading, setIsLoading] = useState(true)
@@ -34,20 +36,21 @@ export default function Settings() {
   const [telegramExpiresAt, setTelegramExpiresAt] = useState(0)
   const [geminiKeyDraft, setGeminiKeyDraft] = useState('')
   const [geminiKeyConfigured, setGeminiKeyConfigured] = useState(false)
+  const [geminiStatusLoading, setGeminiStatusLoading] = useState(true)
   const [geminiKeyBusy, setGeminiKeyBusy] = useState(false)
   const [geminiKeyMessage, setGeminiKeyMessage] = useState('')
 
-  const defaultProfile = {
+  const [defaultProfile] = useState(() => ({
     full_name: '',
     username: '',
-    theme_mode: 'system',
-    theme_accent: 'emerald',
+    theme_mode: themeMode,
+    theme_accent: 'coral',
     ai_model: 'gemini-1.5-flash',
     ai_persona: 'Analyst',
     telegram_chat_id: '',
     is_biometric_enabled: false,
     registered_devices: [] as any[]
-  }
+  }))
   const [originalProfile, setOriginalProfile] = useState(defaultProfile)
   const [draftProfile, setDraftProfile] = useState(defaultProfile)
 
@@ -59,21 +62,32 @@ export default function Settings() {
   const [isPinSaving, setIsPinSaving] = useState(false)
 
   useEffect(() => {
-    if (draftProfile.theme_mode && draftProfile.theme_accent) {
-      setTheme(draftProfile.theme_mode, draftProfile.theme_accent)
-    }
-  }, [draftProfile.theme_mode, draftProfile.theme_accent, setTheme])
+    setTheme(normalizeThemeMode(draftProfile.theme_mode))
+  }, [draftProfile.theme_mode, setTheme])
 
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        // getSession reads the already established local session. ProtectedRoute has
+        // verified access; RLS remains the authority for every query below.
+        const { data: { session } } = await supabase.auth.getSession()
+        const user = session?.user
         if (user) {
           setUserId(user.id)
           setGuidedHelpState(isGuidedHelpEnabled(user.id))
+          // Profile data gates the page. Gemini status does not, so let it resolve in
+          // the background instead of adding another mobile-network round trip.
+          void supabase.functions.invoke('manage-gemini-key', { body: { action: 'status' } })
+            .then(({ data: keyStatus, error }) => {
+              if (error) throw error
+              setGeminiKeyConfigured(keyStatus?.configured === true)
+            })
+            .catch(error => console.warn('Could not check Gemini key status:', error))
+            .finally(() => setGeminiStatusLoading(false))
+
           const { data } = await supabase.from('profiles').select('full_name, username, theme_mode, theme_accent, ai_model, ai_persona, telegram_chat_id, is_biometric_enabled, registered_devices').eq('id', user.id).single()
           if (data) {
-            const themeMode = ['amoled', 'light'].includes(data.theme_mode) ? data.theme_mode : 'system'
+            const themeMode = normalizeThemeMode(data.theme_mode)
             const uniqueDevices = Array.from(new Map((data.registered_devices || []).map((device: any) => [device.id, device])).values())
             const loadedProfile = { ...defaultProfile, ...data, theme_mode: themeMode, registered_devices: uniqueDevices }
             setOriginalProfile(loadedProfile)
@@ -83,14 +97,15 @@ export default function Settings() {
             localStorage.setItem('financial_os_devices', JSON.stringify(loadedProfile.registered_devices))
             localStorage.setItem('financial_os_bio_enabled', loadedProfile.is_biometric_enabled ? 'true' : 'false')
           }
-          const { data: keyStatus } = await supabase.functions.invoke('manage-gemini-key', { body: { action: 'status' } })
-          setGeminiKeyConfigured(keyStatus?.configured === true)
         }
 
         setAutoLock(localStorage.getItem('financial_os_autolock') === 'true')
         setLockTime(localStorage.getItem('financial_os_lock_time') || '3')
-        await migrateLegacyAppPin()
+        // PBKDF2 migration is local-only and can take noticeable time on phones.
+        // Keep the settings page responsive while it runs.
         setHasPinConfigured(hasAppPinConfigured())
+        void migrateLegacyAppPin().then(() => setHasPinConfigured(hasAppPinConfigured()))
+          .catch(error => console.warn('Could not migrate the local app PIN:', error))
         setSavedPin('')
 
       } catch (error) {
@@ -100,9 +115,45 @@ export default function Settings() {
       }
     }
     fetchSettings()
-  }, [])
+  }, [defaultProfile])
 
   const isProfileModified = JSON.stringify({ ...originalProfile, telegram_chat_id: '' }) !== JSON.stringify({ ...draftProfile, telegram_chat_id: '' })
+
+  const signOut = async () => {
+    if (isSigningOut) return
+    if (isProfileModified && !window.confirm('You have unsaved settings. Sign out and discard them?')) return
+    setIsSigningOut(true)
+    setSignOutError('')
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError) throw sessionError
+
+      let pendingCount: number | null = 0
+      if (session?.user.id) {
+        try {
+          const { localDB } = await import('../lib/db')
+          pendingCount = await localDB.outbox.where('owner_id').equals(session.user.id)
+            .filter(item => item.sync_status !== 'synced').count()
+        } catch {
+          pendingCount = null
+        }
+      }
+      if (pendingCount === null) {
+        if (!window.confirm('I could not check this browser for saved offline transactions. They may remain on this device after sign-out. Continue?')) return
+      } else if (pendingCount > 0) {
+        const noun = pendingCount === 1 ? 'transaction' : 'transactions'
+        if (!window.confirm(`${pendingCount} offline ${noun} will remain saved on this browser after sign-out. You can review them under Offline transactions when you sign in again. Continue?`)) return
+      }
+
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+      window.location.replace('/auth')
+    } catch {
+      setSignOutError('Sign-out could not be confirmed. Check your connection and try again.')
+    } finally {
+      setIsSigningOut(false)
+    }
+  }
 
   useModalBack(isProfileModified, () => navigate(-1), true, 'You have unsaved settings. Leave and discard them?')
 
@@ -157,7 +208,7 @@ export default function Settings() {
       setOriginalProfile(draftProfile)
       localStorage.setItem('financial_os_devices', JSON.stringify(draftProfile.registered_devices))
       localStorage.setItem('financial_os_bio_enabled', draftProfile.is_biometric_enabled ? 'true' : 'false')
-    } catch (error) {
+    } catch {
       alert('Failed to save settings.')
     } finally {
       setIsSavingProfile(false)
@@ -313,8 +364,19 @@ export default function Settings() {
         setTelegramToken('')
       }
     }
-    const interval = window.setInterval(() => { void checkLink() }, 3000)
-    return () => window.clearInterval(interval)
+    // Linking remains automatic while Settings is open, without waking the radio
+    // every three seconds or polling in a background tab.
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void checkLink()
+    }, 8000)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void checkLink()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
   }, [userId, telegramToken, telegramExpiresAt, originalProfile.telegram_chat_id])
 
   // --- HARDWARE WEBAUTHN REGISTRATION ---
@@ -432,7 +494,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-4 sm:p-6 w-full max-w-4xl mx-auto text-white animate-in fade-in duration-300 pb-32">
+    <div className="page-shell w-full max-w-4xl mx-auto animate-in fade-in duration-300 pb-32">
       
       <PageHeader title="Settings" description="Manage your identity, integrations, and security." icon={<SettingsIcon className="text-emerald-400" />} action={<div className="relative w-full md:w-72">
           <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -471,7 +533,7 @@ export default function Settings() {
 
       <div className="space-y-6">
 
-        {showModules && <section className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8">
+        {showModules && <section className="surface-panel rounded-3xl p-6 md:p-8">
           <div className="flex items-center justify-between gap-4">
             <div><h2 className="text-xl font-bold">Optional features</h2><p className="text-sm text-slate-400 mt-1">Turn planning tools on only when you want them.</p></div>
             <span className="text-[10px] uppercase tracking-wider text-emerald-300 border border-emerald-400/20 rounded-full px-3 py-1">Personal</span>
@@ -511,7 +573,7 @@ export default function Settings() {
         
         {/* Profile Section */}
         {showProfile && (
-          <section className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-sm">
+          <section className="surface-panel rounded-3xl p-6 md:p-8 backdrop-blur-sm">
             <div className="flex items-center mb-6">
               <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center mr-4 border border-indigo-500/20">
                 <User className="w-5 h-5 text-indigo-400" />
@@ -552,7 +614,7 @@ export default function Settings() {
 
         {/* Appearance Section */}
         {showAppearance && (
-          <section className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-sm">
+          <section className="surface-panel rounded-3xl p-6 md:p-8 backdrop-blur-sm">
             <div className="flex items-center mb-6">
               <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center mr-4 border border-amber-500/20">
                 <Palette className="w-5 h-5 text-amber-400" />
@@ -568,31 +630,16 @@ export default function Settings() {
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase flex justify-between">
                   <span>Theme</span> {renderUndo('theme_mode')}
                 </label>
-                <select 
-                  value={draftProfile.theme_mode}
-                  onChange={(e) => setDraftProfile({...draftProfile, theme_mode: e.target.value})}
-                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-amber-500/50 transition-colors appearance-none"
-                >
-                  <option value="system" className="text-slate-900">System default</option>
-                  <option value="amoled" className="text-slate-900">AMOLED black</option>
-                  <option value="light" className="text-slate-900">Light / day</option>
-                </select>
-              </div>
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold tracking-wide text-white/50 uppercase flex justify-between">
-                  <span>Accent Color</span> {renderUndo('theme_accent')}
-                </label>
-                <select 
-                  value={draftProfile.theme_accent}
-                  onChange={(e) => setDraftProfile({...draftProfile, theme_accent: e.target.value})}
-                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-amber-500/50 transition-colors appearance-none"
-                >
-                  <option value="emerald" className="text-slate-900">Emerald Green</option>
-                  <option value="blue" className="text-slate-900">Ocean Blue</option>
-                  <option value="orange" className="text-slate-900">Sunset Orange</option>
-                  <option value="yellow" className="text-slate-900">Gold</option>
-                  <option value="brown" className="text-slate-900">Leather Brown</option>
-                </select>
+                <div role="radiogroup" aria-label="Color theme" className="grid grid-cols-2 gap-3">
+                  {(['light', 'dark'] as const).map(mode => {
+                    const selected = draftProfile.theme_mode === mode
+                    const Icon = mode === 'light' ? Sun : Moon
+                    return <button key={mode} type="button" role="radio" aria-checked={selected} onClick={() => setDraftProfile({ ...draftProfile, theme_mode: mode, theme_accent: 'coral' })} className={`flex min-h-24 flex-col items-start justify-between rounded-xl border p-4 text-left transition-colors ${selected ? 'border-[var(--brand-primary)] bg-[var(--brand-tint)]' : 'border-[var(--line)] bg-[var(--surface-card)]'}`}>
+                      <Icon className="h-5 w-5 text-[var(--brand-primary)]" />
+                      <span className="font-medium">{mode === 'light' ? 'Light' : 'Dark'}</span>
+                    </button>
+                  })}
+                </div>
               </div>
             </div>
           </section>
@@ -600,7 +647,7 @@ export default function Settings() {
 
         {/* Integrations (AI & Telegram) */}
         {showIntegration && (
-          <section className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-sm">
+          <section className="surface-panel rounded-3xl p-6 md:p-8 backdrop-blur-sm">
             <div className="flex items-center mb-6">
               <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center mr-4 border border-emerald-500/20">
                 <Bot className="w-5 h-5 text-emerald-400" />
@@ -615,7 +662,7 @@ export default function Settings() {
               <div className="flex flex-col space-y-1">
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase flex justify-between items-center">
                   <span className="flex items-center"><Key className="w-3 h-3 mr-1" /> Your Gemini API Key (BYOK)</span>
-                  <span className={geminiKeyConfigured ? 'text-emerald-400 normal-case' : 'text-slate-500 normal-case'}>{geminiKeyConfigured ? 'Key saved securely' : 'No key saved'}</span>
+                  <span className={geminiStatusLoading ? 'text-slate-500 normal-case' : geminiKeyConfigured ? 'text-emerald-400 normal-case' : 'text-slate-500 normal-case'}>{geminiStatusLoading ? 'Checking key…' : geminiKeyConfigured ? 'Key saved securely' : 'No key saved'}</span>
                 </label>
                 <input 
                   type="password" autoComplete="new-password" placeholder="Google Gemini API key" value={geminiKeyDraft}
@@ -623,10 +670,10 @@ export default function Settings() {
                   className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-emerald-500/50 transition-colors font-mono"
                 />
                 <div className="flex flex-wrap items-center gap-3 pt-2">
-                  <button type="button" onClick={saveGeminiKey} disabled={geminiKeyBusy || geminiKeyDraft.trim().length < 20} className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-bold">
+                  <button type="button" onClick={saveGeminiKey} disabled={geminiStatusLoading || geminiKeyBusy || geminiKeyDraft.trim().length < 20} className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-bold">
                     {geminiKeyBusy ? 'Saving...' : geminiKeyConfigured ? 'Replace key' : 'Save key'}
                   </button>
-                  {geminiKeyConfigured && <button type="button" onClick={removeGeminiKey} disabled={geminiKeyBusy} className="px-4 py-2 rounded-xl border border-white/10 hover:bg-white/5 disabled:opacity-50 text-sm">Remove key</button>}
+                  {geminiKeyConfigured && <button type="button" onClick={removeGeminiKey} disabled={geminiStatusLoading || geminiKeyBusy} className="px-4 py-2 rounded-xl border border-white/10 hover:bg-white/5 disabled:opacity-50 text-sm">Remove key</button>}
                   {geminiKeyMessage && <span role="status" className="text-xs text-slate-400">{geminiKeyMessage}</span>}
                 </div>
                 <p className="text-xs leading-relaxed text-slate-500">Your key is stored encrypted in Supabase Vault. The server uses it only for your scans and never returns it to the browser.</p>
@@ -696,7 +743,7 @@ export default function Settings() {
 
         {/* Security & Toggles */}
         {showSecurity && (
-          <section className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8 backdrop-blur-sm">
+          <section className="surface-panel rounded-3xl p-6 md:p-8 backdrop-blur-sm">
             <div className="flex items-center mb-6">
               <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center mr-4 border border-amber-500/20">
                 <Lock className="w-5 h-5 text-amber-400" />
@@ -800,7 +847,7 @@ export default function Settings() {
                               <p className="text-[10px] text-slate-500">Added {formatIndiaDate(device.added_at)}</p>
                             </div>
                           </div>
-                          <button onClick={() => removeDevice(device.id)} className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors">
+                          <button onClick={() => removeDevice(device.id)} aria-label={`Remove device ${device.name || device.id}`} title="Remove device" className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
@@ -821,16 +868,17 @@ export default function Settings() {
 
       {/* NEW: Sign Out Button */}
       <section className="mt-8 pt-4 border-t border-white/10">
-        <button 
-          onClick={async () => {
-            await supabase.auth.signOut()
-            window.location.href = '/auth'
-          }}
-          className="w-full flex items-center justify-center p-4 bg-white/5 hover:bg-rose-500/10 border border-white/10 hover:border-rose-500/20 rounded-2xl text-slate-300 hover:text-rose-400 transition-colors"
+        <button
+          type="button"
+          onClick={() => void signOut()}
+          disabled={isSigningOut}
+          className="w-full flex items-center justify-center p-4 bg-white/5 hover:bg-rose-500/10 border border-white/10 hover:border-rose-500/20 rounded-2xl text-slate-300 hover:text-rose-400 transition-colors disabled:cursor-wait disabled:opacity-60"
         >
-          <LogOut className="w-5 h-5 mr-3" />
-          <span className="font-bold">Sign Out of RR Capital</span>
+          {isSigningOut ? <Loader2 className="w-5 h-5 mr-3 animate-spin" /> : <LogOut className="w-5 h-5 mr-3" />}
+          <span className="font-bold">{isSigningOut ? 'Signing out…' : 'Sign Out of RR Capital'}</span>
         </button>
+        {signOutError && <p role="alert" className="mt-3 text-center text-sm text-rose-400">{signOutError}</p>}
+        <p className="mt-3 text-center text-xs text-slate-500">Saved offline transactions stay on this browser until they sync or you discard them.</p>
       </section>
 
     </div>

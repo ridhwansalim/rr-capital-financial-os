@@ -23,6 +23,16 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
     }
   }, [])
 
+  // Offline sync touches IndexedDB and the network. Load it only after the
+  // protected app has confirmed a signed-in session, keeping the public auth
+  // page's initial bundle and startup work smaller.
+  useEffect(() => {
+    if (!isAuthenticated) return
+    void import('../lib/sync').catch(error => {
+      console.error('Could not start offline transaction sync:', error)
+    })
+  }, [isAuthenticated])
+
   if (isAuthenticated === null) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">

@@ -3,10 +3,15 @@ param(
   [switch]$Apply
 )
 
+# Historical eight-migration bundle retained for provenance. The rollout is
+# complete; this file is verification-only and the -Apply switch always fails.
 $ErrorActionPreference = 'Stop'
 $expectedProjectRef = 'hnebvwfgsotrknxpgpmv'
 if ($ProjectRef -cne $expectedProjectRef) {
   throw "This release is approved for RR Capital only ($expectedProjectRef)."
+}
+if ($Apply) {
+  throw 'The eight-migration release is already applied. This script is verification-only; production apply is disabled.'
 }
 
 $migrationHashes = [ordered]@{
@@ -97,27 +102,11 @@ try {
   if (-not $jsonLine) { throw 'Supabase CLI returned no structured dry-run result; stopped.' }
   $result = $jsonLine | ConvertFrom-Json
   $pending = @($result.migrations | Sort-Object)
-  $expectedPending = @($migrationHashes.Keys | Sort-Object)
+  $expectedPending = @()
   if (-not $result.dryRun -or ($pending -join "`n") -cne ($expectedPending -join "`n")) {
-    throw "Unexpected pending migration selection; expected only the eight approved RR Capital migrations. Got: $($pending -join ', '). No migration was applied."
+    throw "RR Capital no longer matches the reviewed eight-migration release. Expected no pending migrations; got: $($pending -join ', '). No migration was applied."
   }
-  Write-Output 'PASS dry-run selected only the eight approved RR Capital security/XPENC migrations; Perry and duplicate cutover migrations were excluded; Vault sync was skipped.'
-
-  if (-not $Apply) {
-    Write-Output 'DRY RUN ONLY. Pass -Apply to apply this exact migration set after explicit owner approval.'
-    return
-  }
-
-  try {
-    $ErrorActionPreference = 'Continue'
-    $applyOutput = & $cachedCli db push --yes --skip-vault --workdir $bundleRoot --project-ref $ProjectRef 2>&1
-    $applyExitCode = $LASTEXITCODE
-  }
-  finally { $ErrorActionPreference = $previousPreference }
-  if ($applyExitCode -ne 0) {
-    throw "Migration apply failed (exit $applyExitCode); inspect the hosted migration ledger before retrying."
-  }
-  Write-Output 'PASS applied the eight approved security/XPENC migrations to RR Capital; Perry migrations and Vault sync were excluded.'
+  Write-Output 'PASS: all eight pinned security/XPENC migrations are already recorded in the RR Capital ledger; no core migrations are pending; Perry aliases are excluded; no hosted changes made.'
 }
 finally {
   $resolvedTemp = [IO.Path]::GetFullPath($tempRoot).TrimEnd('\') + '\'

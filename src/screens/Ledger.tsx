@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { ArrowRightLeft, Search, Filter, Loader2, IndianRupee, User, Wallet, ArrowDownRight, ArrowUpRight } from 'lucide-react'
+import React, { useState, useEffect, useMemo } from 'react'
+import { ArrowRightLeft, Search, Loader2, User, Wallet, ArrowDownRight, ArrowUpRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDate } from '../lib/financeDate'
 import PageHeader from '../components/PageHeader'
@@ -19,18 +19,14 @@ export default function Ledger() {
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense' | 'transfer'>('all')
-
-  useEffect(() => {
-    fetchTransactions()
-  }, [])
+  const [visibleCount, setVisibleCount] = useState(50)
 
   const fetchTransactions = async () => {
-    setIsLoading(true)
     try {
       // 1. Fetch all transactions
       const { data: txData, error: txError } = await supabase
         .from('transactions')
-        .select('*')
+        .select('id, amount, description, created_at, from_account_id, to_account_id, tagged_profile_id, contact_id')
         .order('created_at', { ascending: false })
 
       if (txError) throw txError
@@ -51,18 +47,22 @@ export default function Ledger() {
       // 3. Fetch all related names
       const nameMap: Record<string, string> = {}
       
-      if (accountIds.size > 0) {
-        const { data: accounts } = await supabase.from('accounts').select('id, name').in('id', Array.from(accountIds))
-        accounts?.forEach(a => nameMap[a.id] = a.name)
-      }
-      if (profileIds.size > 0) {
-        const { data: profiles } = await supabase.rpc('profile_labels', { p_profile_ids: Array.from(profileIds) })
-        profiles?.forEach((p: { id: string; full_name: string | null; username: string | null }) => nameMap[p.id] = p.full_name || p.username || 'User')
-      }
-      if (contactIds.size > 0) {
-        const { data: contacts } = await supabase.from('contacts').select('id, name').in('id', Array.from(contactIds))
-        contacts?.forEach(c => nameMap[c.id] = c.name)
-      }
+      // Enrichment tables are independent; query them together to avoid serial
+      // round trips after the transaction list on higher-latency mobile networks.
+      const [accountResult, profileResult, contactResult] = await Promise.all([
+        accountIds.size > 0
+          ? supabase.from('accounts').select('id, name').in('id', Array.from(accountIds))
+          : Promise.resolve({ data: [], error: null }),
+        profileIds.size > 0
+          ? supabase.rpc('profile_labels', { p_profile_ids: Array.from(profileIds) })
+          : Promise.resolve({ data: [], error: null }),
+        contactIds.size > 0
+          ? supabase.from('contacts').select('id, name').in('id', Array.from(contactIds))
+          : Promise.resolve({ data: [], error: null }),
+      ])
+      accountResult.data?.forEach(a => nameMap[a.id] = a.name)
+      profileResult.data?.forEach((p: { id: string; full_name: string | null; username: string | null }) => nameMap[p.id] = p.full_name || p.username || 'User')
+      contactResult.data?.forEach(c => nameMap[c.id] = c.name)
 
       // 4. Map the raw data into our clean UI interface
       const formattedData = txData.map(tx => {
@@ -102,8 +102,12 @@ export default function Ledger() {
     }
   }
 
+  useEffect(() => {
+    void fetchTransactions()
+  }, [])
+
   // Client-side filtering and searching
-  const filteredTransactions = transactions.filter(tx => {
+  const filteredTransactions = useMemo(() => transactions.filter(tx => {
     const matchesFilter = filterType === 'all' || tx.type === filterType
     const searchLower = searchQuery.toLowerCase()
     const matchesSearch = 
@@ -112,10 +116,11 @@ export default function Ledger() {
       tx.accountName.toLowerCase().includes(searchLower)
     
     return matchesFilter && matchesSearch
-  })
+  }), [transactions, filterType, searchQuery])
+  const visibleTransactions = filteredTransactions.slice(0, visibleCount)
 
   return (
-    <div className="p-4 sm:p-6 w-full max-w-5xl mx-auto text-white animate-in fade-in duration-300 pb-32">
+    <div className="page-shell w-full max-w-5xl mx-auto animate-in fade-in duration-300 pb-32">
       
       <PageHeader title="Transactions" description="Your complete master ledger" icon={<ArrowRightLeft className="text-indigo-400" />} />
 
@@ -128,7 +133,7 @@ export default function Ledger() {
             type="text" 
             placeholder="Search descriptions, contacts, or accounts..." 
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => { setSearchQuery(e.target.value); setVisibleCount(50) }}
             className="w-full bg-white/5 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-sm outline-none focus:border-indigo-500/50 transition-colors placeholder:text-slate-500"
           />
         </div>
@@ -137,7 +142,7 @@ export default function Ledger() {
           {(['all', 'income', 'expense', 'transfer'] as const).map(f => (
             <button
               key={f}
-              onClick={() => setFilterType(f)}
+              onClick={() => { setFilterType(f); setVisibleCount(50) }}
               className={`px-2 sm:px-5 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all capitalize whitespace-nowrap ${
                 filterType === f ? 'bg-indigo-500/20 text-indigo-400 shadow-sm' : 'text-slate-400 hover:text-slate-200'
               }`}
@@ -166,7 +171,7 @@ export default function Ledger() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredTransactions.map((tx) => (
+          {visibleTransactions.map((tx) => (
             <div key={tx.id} className="p-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-colors backdrop-blur-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               
               <div className="flex items-start sm:items-center space-x-4">
@@ -212,6 +217,9 @@ export default function Ledger() {
               
             </div>
           ))}
+          {filteredTransactions.length > visibleCount && <button type="button" onClick={() => setVisibleCount(count => count + 50)} className="w-full rounded-xl border border-white/10 px-4 py-3 text-sm font-semibold text-slate-300 hover:bg-white/5">
+            Show next {Math.min(50, filteredTransactions.length - visibleCount)} · {visibleCount} of {filteredTransactions.length}
+          </button>}
         </div>
       )}
     </div>

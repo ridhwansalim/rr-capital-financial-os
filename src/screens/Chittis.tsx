@@ -266,7 +266,7 @@ export default function Chittis() {
   }
 
   return (
-    <div className="p-4 sm:p-6 w-full max-w-7xl mx-auto text-white animate-in fade-in duration-300 pb-32">
+    <div className="page-shell w-full max-w-7xl mx-auto animate-in fade-in duration-300 pb-32">
       
       <PageHeader title="Chitti / ROSCA" description="Manage rotating savings and credit associations." icon={<Landmark className="text-accent-400" />} action={<button
           onClick={() => setIsNewModalOpen(true)}
@@ -277,14 +277,14 @@ export default function Chittis() {
 
       {/* Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-sm">
+        <div className="surface-panel rounded-3xl p-6">
           <p className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Total Active Pots</p>
           <div className="text-3xl font-black text-white flex items-center">
             <IndianRupee className="w-6 h-6 mr-1 text-accent-400" />
             {totalPotValue.toLocaleString('en-IN')}
           </div>
         </div>
-        <div className="bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-sm">
+        <div className="surface-panel rounded-3xl p-6">
           <p className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Monthly Commitment</p>
           <div className="text-3xl font-black text-white flex items-center">
             <IndianRupee className="w-6 h-6 mr-1 text-rose-400" />
@@ -300,18 +300,22 @@ export default function Chittis() {
           const isCompleted = monthsPaid >= chitti.duration_months
 
           return (
-            <div key={chitti.id} className={`bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-sm relative overflow-hidden group ${isCompleted ? 'opacity-70' : ''}`}>
+            <div key={chitti.id} className={`surface-panel rounded-3xl p-6 relative overflow-hidden group ${isCompleted ? 'opacity-70' : ''}`}>
               
               {/* Top Actions & Status */}
               <div className="absolute top-6 right-6 flex items-center gap-2">
                 <button 
                   onClick={() => setEditingChitti(chitti)}
+                  aria-label={`Edit ${chitti.name}`}
+                  title="Edit plan"
                   className="p-2 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg transition-all border border-white/5"
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 <button 
                   onClick={() => handleDeleteChitti(chitti.id)}
+                  aria-label={`Delete ${chitti.name}`}
+                  title="Delete plan"
                   className="p-2 bg-white/5 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 rounded-lg transition-all border border-white/5"
                 >
                   <Trash2 className="w-3.5 h-3.5" />

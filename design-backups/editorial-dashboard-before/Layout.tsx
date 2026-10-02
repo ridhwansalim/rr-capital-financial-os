@@ -40,10 +40,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isDesktopMenuOpen, setIsDesktopMenuOpen] = useState(false)
   const [sharedFile, setSharedFile] = useState<File | null>(null)
-  const [isAboutOpen, setIsAboutOpen] = useState(false)
   const [transactionDraft, setTransactionDraft] = useState<TransactionDraft | null>(null)
   const modalHistoryRef = React.useRef(false)
-  
+
   const location = useLocation()
   const { flags } = useOptionalFeatures()
 
@@ -159,16 +158,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
       <div className="app-shell min-h-screen bg-transparent text-slate-50 relative font-sans">
-      
+
       {/* Desktop Sidebar */}
       <nav className="app-sidebar hidden md:flex items-center gap-7 h-16 px-6 lg:px-10 border-b z-40">
-        <button type="button" onClick={() => setIsAboutOpen(true)} className="flex shrink-0 items-center gap-3 text-left" aria-label="About RR Capital">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#f8f9fa]"><img src="/rr-favicon.svg" alt="" className="h-7 w-7" /></span>
+        <Link to="/" onPointerEnter={() => prefetchRoute('/')} onFocus={() => prefetchRoute('/')} className="flex shrink-0 items-center gap-3" aria-label="RR Capital home">
+          <img src="/rr-logo.svg" alt="" className="h-9 w-9 rounded-xl" />
           <div className="min-w-0">
             <p className="font-semibold tracking-tight text-slate-100">RR Capital</p>
             <p className="text-[10px] text-slate-500">Personal finance</p>
           </div>
-        </button>
+        </Link>
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto app-nav-scroll">
           {desktopNavItems.filter(item => ['Dashboard', 'Calendar', 'Ledger', 'Reports', 'Accounts'].includes(item.name)).map((item) => {
             const isActive = location.pathname === item.path
@@ -184,14 +183,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>}
         </div>
       </nav>
-
-      {isAboutOpen && <div className="fixed inset-0 z-[80] grid place-items-center bg-black/55 p-4" onMouseDown={event => { if (event.target === event.currentTarget) setIsAboutOpen(false) }}>
-        <section role="dialog" aria-modal="true" aria-labelledby="rr-about-title" className="surface-panel w-full max-w-sm rounded-2xl p-6 shadow-2xl">
-          <div className="flex items-start justify-between gap-4"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-[#f8f9fa]"><img src="/rr-favicon.svg" alt="" className="h-8 w-8" /></span><div><h2 id="rr-about-title" className="font-semibold text-[var(--ink)]">RR Capital</h2><p className="text-xs text-[var(--muted)]">Personal Financial OS</p></div></div><button type="button" aria-label="Close about RR Capital" onClick={() => setIsAboutOpen(false)} className="rounded-full p-2 text-[var(--muted)] hover:bg-black/5"><X className="h-4 w-4" /></button></div>
-          <div className="mt-5 border-t border-[var(--line)] pt-4"><p className="text-sm leading-6 text-[var(--muted)]">A personal finance workspace created by Ridhu for everyday use with family and friends.</p><p className="mt-3 text-[10px] uppercase tracking-[.14em] text-[var(--muted)]">RR Capital · Personal use</p></div>
-          <button type="button" onClick={() => setIsAboutOpen(false)} className="mt-5 min-h-10 w-full rounded-lg bg-[var(--surface-soft)] text-sm font-medium text-[var(--ink)]">Close</button>
-        </section>
-      </div>}
 
       {/* Main Content */}
       <main className="app-main min-h-[calc(100vh-4rem)] relative z-0 pb-28 md:pb-0">
@@ -264,13 +255,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Floating Action Button */}
       {/* FIX: Parent container set to pointer-events-none so it doesn't block underlying navbar links */}
       <div className="hidden md:flex fixed bottom-8 right-8 z-50 flex-col items-end space-y-4 pointer-events-none">
-        
+
         <div aria-hidden={!isFabOpen} className={`flex flex-col items-center md:items-end space-y-3 transition-all duration-300 origin-bottom ${isFabOpen ? 'opacity-100 scale-100 translate-y-0 pointer-events-auto' : 'opacity-0 scale-90 translate-y-4 pointer-events-none'}`}>
           <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={() => { setIsTxModalOpen(true); setIsFabOpen(false) }} className="flex items-center space-x-3 px-4 py-2 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] hover:bg-white/20 transition-all w-48 justify-center md:justify-end md:w-auto">
             <span className="font-medium text-sm tracking-wide">Transaction</span>
             <div className="p-2 bg-indigo-500 rounded-full shadow-lg ml-2"><CreditCard className="w-4 h-4 text-white" /></div>
           </button>
-          
+
           <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={() => { setIsDebtModalOpen(true); setIsFabOpen(false) }} className="flex items-center space-x-3 px-4 py-2 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.3)] hover:bg-white/20 transition-all w-48 justify-center md:justify-end md:w-auto">
             <span className="font-medium text-sm tracking-wide">Add Debt / IOU</span>
             <div className="p-2 bg-emerald-500 rounded-full shadow-lg ml-2"><Users className="w-4 h-4 text-white" /></div>

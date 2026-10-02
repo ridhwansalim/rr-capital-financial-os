@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import PageHeader from '../components/PageHeader'
-import { Users, IndianRupee, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { Users, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDate } from '../lib/financeDate'
 
@@ -23,22 +23,18 @@ export default function Debts() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    fetchDebts()
-  }, [])
-
   const fetchDebts = async () => {
-    setIsLoading(true)
     try {
       // 1. Get current user
-      const { data: { user }, error: authError } = await supabase.auth.getUser()
-      if (authError || !user) throw new Error('Auth error')
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user
+      if (!user) throw new Error('Auth error')
       const currentUserId = user.id
 
       // 2. Fetch obligations using CORRECT schema
       const { data: obs, error: obsError } = await supabase
         .from('obligations')
-        .select('*')
+        .select('id, creditor_profile_id, debtor_profile_id, shadow_contact_id, amount, reason, created_at')
         .or(`creditor_profile_id.eq.${currentUserId},debtor_profile_id.eq.${currentUserId}`)
         .order('created_at', { ascending: false })
 
@@ -57,25 +53,18 @@ export default function Debts() {
 
       // 4. Build the Name Map
       const nameMap: Record<string, string> = {}
-
-      if (profileIds.size > 0) {
-        const { data: profiles } = await supabase.rpc('profile_labels', { p_profile_ids: Array.from(profileIds) })
-        
-        profiles?.forEach((p: { id: string; full_name: string | null; username: string | null }) => {
-          nameMap[p.id] = p.full_name || p.username || 'Unknown User'
-        })
-      }
-
-      if (contactIds.size > 0) {
-        const { data: contacts } = await supabase
-          .from('contacts')
-          .select('id, name')
-          .in('id', Array.from(contactIds))
-        
-        contacts?.forEach(c => {
-          nameMap[c.id] = c.name || 'Unknown Contact'
-        })
-      }
+      const [profileResult, contactResult] = await Promise.all([
+        profileIds.size > 0
+          ? supabase.rpc('profile_labels', { p_profile_ids: Array.from(profileIds) })
+          : Promise.resolve({ data: [], error: null }),
+        contactIds.size > 0
+          ? supabase.from('contacts').select('id, name').in('id', Array.from(contactIds))
+          : Promise.resolve({ data: [], error: null }),
+      ])
+      profileResult.data?.forEach((p: { id: string; full_name: string | null; username: string | null }) => {
+        nameMap[p.id] = p.full_name || p.username || 'Unknown User'
+      })
+      contactResult.data?.forEach(c => { nameMap[c.id] = c.name || 'Unknown Contact' })
 
       // 5. Aggregate the data for the new UI
       const grouped: Record<string, AggregatedDebt> = {}
@@ -124,12 +113,16 @@ export default function Debts() {
     }
   }
 
+  useEffect(() => {
+    void fetchDebts()
+  }, [])
+
   const toggleExpand = (name: string) => {
     setExpanded(prev => ({ ...prev, [name]: !prev[name] }))
   }
 
   return (
-    <div className="p-4 sm:p-6 w-full max-w-3xl mx-auto text-white animate-in fade-in duration-300 pb-32">
+    <div className="page-shell w-full max-w-3xl mx-auto animate-in fade-in duration-300 pb-32">
       <PageHeader title="Debts & IOUs" description="Track money you owe and are owed" icon={<Users className="text-indigo-400" />} />
 
       {isLoading ? (
@@ -137,7 +130,7 @@ export default function Debts() {
           <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
         </div>
       ) : debts.length === 0 ? (
-        <div className="text-center py-20 bg-white/5 border border-white/10 rounded-3xl backdrop-blur-sm">
+        <div className="surface-panel text-center py-20 rounded-3xl">
           <Users className="w-12 h-12 text-slate-500 mx-auto mb-4 opacity-50" />
           <p className="text-slate-400 text-lg">No debts recorded yet.</p>
           <p className="text-slate-500 text-sm mt-2">Click the + button to log an IOU.</p>
@@ -152,8 +145,12 @@ export default function Debts() {
             return (
               <div key={contact.counterpartyName} className="bg-white/5 border border-white/10 rounded-2xl backdrop-blur-md overflow-hidden transition-all duration-300">
                 {/* Aggregated Header (Clickable) */}
-                <div 
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isExpanded}
                   onClick={() => toggleExpand(contact.counterpartyName)}
+                  onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleExpand(contact.counterpartyName) } }}
                   className="p-5 flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors"
                 >
                   <div className="flex items-center space-x-4">

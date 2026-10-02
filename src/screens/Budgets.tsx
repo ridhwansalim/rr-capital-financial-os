@@ -116,10 +116,10 @@ export default function Budgets() {
 
   if (!flagsLoading && !flags.budgets) return <Navigate to="/" replace />
   if (flagsLoading || loading) return <div className="p-6 min-h-[50vh] grid place-items-center text-slate-400"><Loader2 className="animate-spin" aria-label="Loading budgets" /></div>
-  return <div className="p-4 sm:p-6 w-full max-w-5xl mx-auto text-white pb-32 animate-in fade-in duration-300">
+  return <div className="page-shell w-full max-w-5xl mx-auto pb-32 animate-in fade-in duration-300">
     <PageHeader eyebrow="Planning tools" title="Budgets" description="Track categorized expenses against personal monthly plans. Budgets never block entries or move money." icon={<WalletCards className="text-emerald-400" />} action={<Link to="/settings" className="inline-flex w-full justify-center rounded-xl border border-white/10 px-4 py-3 text-sm text-slate-300 hover:bg-white/5 sm:w-auto sm:py-2">Settings</Link>} />
 
-    <div className="flex items-center justify-between rounded-2xl bg-white/5 border border-white/10 px-3 py-3 mb-5">
+    <div className="surface-panel flex items-center justify-between rounded-2xl px-3 py-3 mb-5">
       <button type="button" onClick={prevMonth} aria-label="Previous month" className="p-2 rounded-xl hover:bg-white/10"><ArrowLeft className="w-5 h-5" /></button>
       <h2 className="font-semibold">{formatIndiaDate(`${dateKey(month).slice(0, 7)}-15`, { month: 'long', year: 'numeric' })}</h2>
       <button type="button" onClick={nextMonth} disabled={dateKey(addMonth(month, 1)) > dateKey(monthStart(new Date()))} aria-label="Next month" className="p-2 rounded-xl hover:bg-white/10 disabled:opacity-30"><ArrowRight className="w-5 h-5" /></button>
@@ -134,7 +134,7 @@ export default function Budgets() {
         const today = toIndiaDateInputValue()
         const end = last <= today ? last : today
         const reportTo = buildReportPath({ from: first, to: end, category: envelope.category_id, kind: 'expense' })
-        return <article key={envelope.id} className="rounded-3xl border border-white/10 bg-white/5 p-5">
+        return <article key={envelope.id} className="surface-panel rounded-3xl p-5">
           <div className="flex justify-between items-start gap-3"><div className="flex items-center gap-3 min-w-0"><span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: category?.color || '#64748b' }} /><div><h3 className="font-semibold truncate">{category?.name || 'Category removed'}</h3><p className="text-xs text-slate-500">Monthly plan {envelope.rollover_enabled ? '· rollover on' : ''}</p></div></div>
             <button type="button" onClick={() => void deleteEnvelope(envelope.id)} aria-label={`Delete ${category?.name || 'budget'} envelope`} className="p-2 text-slate-500 hover:text-rose-300"><Trash2 className="w-4 h-4" /></button></div>
           <div className="mt-5 flex justify-between items-end"><div><p className="text-xs text-slate-400">Spent</p><p className="text-xl font-bold">{money(spent)}</p></div><div className="text-right"><p className="text-xs text-slate-400">Remaining</p><p className={`text-lg font-semibold ${remaining < 0 ? 'text-rose-300' : 'text-emerald-300'}`}>{money(remaining)}</p></div></div>
@@ -145,7 +145,7 @@ export default function Budgets() {
       {!summaries.length && <div className="md:col-span-2 rounded-3xl border border-dashed border-white/15 p-8 text-center"><p className="font-semibold">No envelopes yet</p><p className="text-sm text-slate-400 mt-2">Create one below after adding expense categories in Reports.</p></div>}
     </section>
 
-    <section className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-5 sm:p-6">
+    <section className="mt-6 surface-panel rounded-3xl p-5 sm:p-6">
       <h2 className="text-lg font-semibold flex items-center gap-2"><Plus className="w-5 h-5 text-emerald-400" />Add or update an envelope</h2>
       <p className="text-xs text-slate-400 mt-1 mb-4">Only completed, categorized personal expenses count. Transfers and contact-linked entries are excluded.</p>
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] items-end">

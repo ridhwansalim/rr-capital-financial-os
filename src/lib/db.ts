@@ -65,6 +65,12 @@ export class FinancialDatabase extends Dexie {
         }))
       })
     })
+    // Keep sync and queue reads scoped to one account in a shared browser.
+    this.version(7).stores({
+      outbox: '++id, owner_id, [owner_id+sync_status], sync_status, created_at',
+      accountCache: 'owner_id',
+      contactCache: 'owner_id'
+    })
   }
 }
 

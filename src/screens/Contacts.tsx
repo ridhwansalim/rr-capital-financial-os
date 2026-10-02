@@ -34,12 +34,13 @@ export default function Contacts() {
   const fetchContacts = async () => {
     setIsLoading(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user
       if (!user) return
 
       const { data, error } = await supabase
         .from('contacts')
-        .select('*')
+        .select('id, name, created_at')
         .eq('owner_id', user.id)
         .order('name', { ascending: true })
 
@@ -141,7 +142,7 @@ export default function Contacts() {
   }
 
   return (
-    <div className="p-4 sm:p-6 w-full max-w-4xl mx-auto text-white animate-in fade-in duration-300 pb-32">
+    <div className="page-shell w-full max-w-4xl mx-auto animate-in fade-in duration-300 pb-32">
       <PageHeader title="Shadow Contacts" description="Manage your offline network and map them to real accounts" icon={<Users className="text-emerald-400" />} />
 
       {isLoading ? (
@@ -161,7 +162,7 @@ export default function Contacts() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {contacts.map((contact) => (
-            <div key={contact.id} className="p-5 border border-white/10 rounded-2xl bg-white/5 hover:bg-white/10 transition-colors backdrop-blur-sm flex flex-col group">
+            <div key={contact.id} className="surface-panel p-5 rounded-2xl transition-colors flex flex-col group">
               
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-4 flex-1">
@@ -197,12 +198,16 @@ export default function Contacts() {
                       <div className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex space-x-1 transition-all">
                         <button 
                           onClick={() => startEditing(contact)}
+                          aria-label={`Edit ${contact.name}`}
+                          title="Edit contact"
                           className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button 
                           onClick={() => handleDelete(contact.id)}
+                          aria-label={`Delete ${contact.name}`}
+                          title="Delete contact"
                           className="p-2 hover:bg-rose-500/10 rounded-lg text-slate-400 hover:text-rose-400 transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />

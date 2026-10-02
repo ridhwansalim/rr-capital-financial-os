@@ -106,11 +106,11 @@ export default function SavingsGoals() {
     if (deleteError) setError(deleteError.message); else await load()
   }
 
-  return <main className="p-4 sm:p-6 w-full max-w-5xl mx-auto text-white pb-32 animate-in fade-in duration-300">
+  return <main className="page-shell w-full max-w-5xl mx-auto pb-32 animate-in fade-in duration-300">
     <PageHeader eyebrow="Planning tools" title="Savings goals" description="Private planning targets with contributions you record explicitly. They are not bank balances and never move or link money." icon={<PiggyBank className="text-emerald-300" />} action={<Link to="/settings" className="inline-flex w-full justify-center rounded-xl border border-white/10 px-4 py-3 text-sm text-slate-300 hover:bg-white/5 sm:w-auto sm:py-2">Manage optional features</Link>} />
 
     {error && <p role="alert" className="mb-4 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-200">{error}</p>}
-    <form onSubmit={event => void saveGoal(event)} className="mb-6 rounded-3xl border border-white/10 bg-white/5 p-5 sm:p-6">
+    <form onSubmit={event => void saveGoal(event)} className="surface-panel mb-6 rounded-3xl p-5 sm:p-6">
       <h2 className="text-lg font-semibold flex items-center gap-2"><Target className="w-5 h-5 text-emerald-300" />{editingId ? 'Edit goal' : 'Create a goal'}</h2>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <label className="text-xs text-slate-400">Goal name<input maxLength={80} value={name} onChange={event => setName(event.target.value)} placeholder="Family trip" className={amountInput} /></label>
@@ -127,7 +127,7 @@ export default function SavingsGoals() {
         const rows = contributions.filter(item => item.goal_id === goal.id)
         const draft = contributionDrafts[goal.id] || { amount: '', date: toIndiaDateInputValue(), note: '' }
         const updateDraft = (patch: Partial<typeof draft>) => setContributionDrafts(current => ({ ...current, [goal.id]: { ...draft, ...patch } }))
-        return <article key={goal.id} className="rounded-3xl border border-white/10 bg-white/5 p-5">
+        return <article key={goal.id} className="surface-panel rounded-3xl p-5">
           <div className="flex justify-between items-start gap-3"><div className="min-w-0"><h3 className="font-semibold text-lg truncate">{goal.name}</h3><p className="text-xs text-slate-500 mt-1">{goal.target_date ? `Target ${formatIndiaDate(goal.target_date)}` : 'No target date'}</p></div><div className="flex gap-1 shrink-0"><button type="button" onClick={() => editGoal(goal)} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5">Edit</button><button type="button" aria-label={`Delete ${goal.name}`} onClick={() => void deleteGoal(goal)} className="rounded-lg p-2 text-slate-500 hover:text-rose-300"><Trash2 className="w-4 h-4" /></button></div></div>
           <div className="mt-5 flex justify-between items-end gap-2"><div><p className="text-xs text-slate-400">Recorded contributions</p><p className="text-xl font-bold text-emerald-200">{money(saved)}</p></div><p className="text-sm text-slate-400">of {money(Number(goal.target_amount))}</p></div>
           <div className="mt-3 h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full bg-emerald-400" style={{ width: `${percent}%` }} /></div>

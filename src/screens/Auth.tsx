@@ -108,14 +108,14 @@ export default function Auth() {
   const title = authMode === 'invite' ? 'Accept your invitation' : authMode === 'recovery' ? 'Reset your password' : 'Welcome back'
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4 font-sans text-slate-50 relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-emerald-500/20 rounded-full blur-3xl" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl" />
+    <div style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }} className="app-auth-page min-h-screen flex items-center justify-center bg-[var(--canvas)] p-4 font-sans text-[var(--ink)] relative overflow-hidden">
+      <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-[var(--brand-tint)] rounded-full blur-3xl" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-[var(--surface-strong)] opacity-60 rounded-full blur-3xl" />
 
-      <div className="box-border w-[calc(100vw-2rem)] min-w-0 max-w-md p-6 sm:p-8 rounded-3xl backdrop-blur-2xl bg-white/5 border border-white/10 shadow-2xl relative z-10 animate-in fade-in zoom-in-95 duration-500">
+      <div style={{ width: '100%', maxWidth: '28rem', boxSizing: 'border-box' }} className="app-auth-card min-w-0 p-6 sm:p-8 rounded-2xl bg-[var(--surface-card)] border border-[var(--line)] shadow-[var(--app-shadow)] relative z-10 animate-in fade-in zoom-in-95 duration-500">
         <div className="flex flex-col items-center mb-8">
-          <img src="/rr-logo.svg" alt="RR Capital" className="h-32 mb-4 drop-shadow-2xl rounded-2xl" />
-          <h1 className="text-xl font-semibold text-white">{title}</h1>
+          <img src="/rr-logo.svg" alt="RR Capital" className="h-16 mb-5 rounded-xl" />
+          <h1 className="text-2xl font-normal tracking-tight text-[var(--ink)]" style={{ fontFamily: 'var(--font-display)' }}>{title}</h1>
           <p className="text-slate-400 text-sm mt-2 text-center">
             {authMode === 'invite'
               ? 'Choose a password to finish setting up your invited account.'
@@ -144,7 +144,7 @@ export default function Auth() {
                 aria-label="Email address"
                 value={email}
                 onChange={event => setEmail(event.target.value)}
-                className="w-full bg-black/20 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-emerald-500/50 transition-all"
+                className="w-full bg-[var(--surface-soft)] border border-[var(--line)] rounded-lg pl-10 pr-4 py-3 text-sm text-[var(--ink)] placeholder:text-[var(--muted)] outline-none focus:border-[var(--brand-primary)] transition-all"
               />
             </div>
           )}
@@ -160,7 +160,7 @@ export default function Auth() {
               aria-label={isSettingPassword ? 'New password' : 'Password'}
               value={password}
               onChange={event => setPassword(event.target.value)}
-              className="w-full bg-black/20 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-emerald-500/50 transition-all"
+              className="w-full bg-[var(--surface-soft)] border border-[var(--line)] rounded-lg pl-10 pr-4 py-3 text-sm text-[var(--ink)] placeholder:text-[var(--muted)] outline-none focus:border-[var(--brand-primary)] transition-all"
               />
           </div>
 
@@ -178,12 +178,12 @@ export default function Auth() {
                 aria-label="Confirm new password"
                 value={passwordConfirmation}
                 onChange={event => setPasswordConfirmation(event.target.value)}
-                className="w-full bg-black/20 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-emerald-500/50 transition-all"
+                className="w-full bg-[var(--surface-soft)] border border-[var(--line)] rounded-lg pl-10 pr-4 py-3 text-sm text-[var(--ink)] placeholder:text-[var(--muted)] outline-none focus:border-[var(--brand-primary)] transition-all"
               />
             </div>
           )}
 
-          <button type="submit" disabled={isLoading} className="w-full flex items-center justify-center py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50 mt-2">
+          <button type="submit" disabled={isLoading} className="app-auth-primary w-full flex items-center justify-center py-3 rounded-lg bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-active)] text-white font-semibold transition-all shadow-md disabled:opacity-50 mt-2">
             {isLoading
               ? <Loader2 className="w-5 h-5 animate-spin" />
               : <>{authMode === 'login' ? <LogIn className="w-4 h-4 mr-2" /> : null}{authMode === 'login' ? 'Sign in' : 'Set Password'}</>}
@@ -193,7 +193,7 @@ export default function Auth() {
         {authMode === 'login' ? (
           <>
             <div className="mt-4 text-right">
-              <button type="button" onClick={handlePasswordReset} disabled={isLoading} className="text-sm text-emerald-400 font-semibold hover:underline disabled:opacity-50">
+              <button type="button" onClick={handlePasswordReset} disabled={isLoading} className="text-sm text-accent-400 font-semibold hover:underline disabled:opacity-50">
                 Forgot password?
               </button>
             </div>
@@ -226,7 +226,7 @@ export default function Auth() {
             <button
               type="button"
               onClick={() => { setAuthMode('login'); setPassword(''); setPasswordConfirmation(''); setMessage(null) }}
-              className="w-full mt-4 text-sm text-emerald-400 font-semibold hover:underline"
+              className="w-full mt-4 text-sm text-accent-400 font-semibold hover:underline"
             >
               Back to sign in
             </button>
