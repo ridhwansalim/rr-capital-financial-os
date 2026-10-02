@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie'
+import { redactPersistedOfflineError } from './offlineErrorMessages'
 
 export interface CachedAccount {
   id: string
@@ -70,6 +71,17 @@ export class FinancialDatabase extends Dexie {
       outbox: '++id, owner_id, [owner_id+sync_status], sync_status, created_at',
       accountCache: 'owner_id',
       contactCache: 'owner_id'
+    })
+    // Remove raw server diagnostics left by older clients without changing or
+    // deleting queued transactions, their owners, or their idempotency keys.
+    this.version(8).stores({
+      outbox: '++id, owner_id, [owner_id+sync_status], sync_status, created_at',
+      accountCache: 'owner_id',
+      contactCache: 'owner_id'
+    }).upgrade(async transaction => {
+      await transaction.table('outbox').toCollection().modify((item: LocalTransaction) => {
+        redactPersistedOfflineError(item)
+      })
     })
   }
 }

@@ -5,6 +5,7 @@ import { localDB, type CachedAccount, type LocalTransaction } from '../lib/db'
 import { postQueuedTransaction } from '../lib/sync'
 import { indiaDateInputToIso, isDateBeforeOpeningDate, openingBalanceForAccountType, toIndiaDateInputValue } from '../lib/financeDate'
 import { offlineAccountChoices } from '../lib/offlineOwnership'
+import { offlineRejectionMessage } from '../lib/offlineErrorMessages'
 
 interface TransactionModalProps {
   isOpen: boolean
@@ -488,7 +489,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
           // for correction; ambiguous network failures remain in the outbox.
           if (/^(22|23|42501|PGRST2)/.test(rpcResult.error.code || '')) {
             await localDB.outbox.delete(localId)
-            throw new Error(rpcResult.error.message)
+            throw new Error(offlineRejectionMessage(rpcResult.error.code))
           }
           alert('Transaction saved on this device. It will retry when the connection is available.')
           handleClose(true)

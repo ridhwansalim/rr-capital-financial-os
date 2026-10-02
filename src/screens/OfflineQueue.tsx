@@ -5,6 +5,7 @@ import { localDB, type LocalTransaction } from '../lib/db'
 import { discardFailedOutboxItem, retryOutboxItem, retryOutboxItems } from '../lib/sync'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDateTime } from '../lib/financeDate'
+import { safePersistedOfflineMessage } from '../lib/offlineErrorMessages'
 import { cacheForOwner, visibleOfflineItems } from '../lib/offlineOwnership'
 import PageHeader from '../components/PageHeader'
 
@@ -58,8 +59,8 @@ export default function OfflineQueue() {
         const ids = visibleItems.flatMap(item => item.id === undefined ? [] : [item.id])
         await retryOutboxItems(ids, ownerId)
       }
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Retry could not start')
+    } catch {
+      setMessage('Retry could not start. Check your connection and sign-in, then try again.')
     } finally { setBusy(false) }
   }
   const discard = async (item: LocalTransaction) => {
@@ -73,8 +74,8 @@ export default function OfflineQueue() {
     try {
       const removed = await discardFailedOutboxItem(item.id, ownerId)
       setMessage(removed ? 'Failed entry discarded from this device.' : 'This entry changed state, so it was not discarded.')
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'The failed entry could not be discarded.')
+    } catch {
+      setMessage('The failed entry could not be discarded from this device. Refresh the queue and try again.')
     } finally { setBusy(false) }
   }
 
@@ -91,7 +92,7 @@ export default function OfflineQueue() {
       <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="font-semibold">{item.description || 'Transaction'}</span><span className={`text-xs px-2 py-1 rounded-full ${item.sync_status === 'failed' ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'}`}>{item.sync_status === 'failed' ? 'Needs retry' : 'Pending'}</span></div>
         <p className="text-sm text-slate-400 mt-1">{accountName(item.from_account_id)} → {accountName(item.to_account_id)} · {formatIndiaDateTime(item.created_at)}</p>
         {item.last_attempt_at && <p className="mt-1 flex items-center gap-1 text-xs text-slate-500"><Clock3 className="h-3 w-3" />Last tried {formatIndiaDateTime(item.last_attempt_at)}</p>}
-        {item.last_error && <p className="text-sm text-rose-300 mt-2 break-words" role="alert">{item.last_error}</p>}
+        {safePersistedOfflineMessage(item.sync_status, item.last_error) && <p className="text-sm text-rose-300 mt-2 break-words" role="alert">{safePersistedOfflineMessage(item.sync_status, item.last_error)}</p>}
       </div>
       <div className="flex items-center justify-between gap-3 shrink-0 sm:justify-end"><span className="font-semibold">₹{Number(item.amount).toLocaleString('en-IN')}</span><div className="flex items-center gap-2"><button onClick={() => item.id !== undefined && void retry(item.id)} disabled={!online || busy} aria-label={`Retry ${item.description || 'transaction'}`} className="flex items-center gap-2 rounded-xl bg-[var(--accent-soft)] px-4 py-2 font-medium text-[var(--accent)] hover:brightness-110 disabled:opacity-40"><RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} />Retry</button>{item.sync_status === 'failed' && <button type="button" onClick={() => void discard(item)} disabled={busy} aria-label={`Discard failed ${item.description || 'transaction'}`} className="flex items-center gap-2 rounded-xl border border-rose-500/30 px-3 py-2 text-sm font-medium text-rose-400 hover:bg-rose-500/10 disabled:opacity-40"><Trash2 className="h-4 w-4" />Discard</button>}</div></div>
     </div>)}</div>

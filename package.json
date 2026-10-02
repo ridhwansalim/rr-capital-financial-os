@@ -10,7 +10,7 @@
     "test": "npm run test:dates && npm run test:offline && npm run test:edge-inputs && npm run test:reports && npm run test:dashboard-cash-flow && npm run test:budgets && npm run test:calculators && npm run test:account-health && npm run test:feature-flag-cache && npm run test:perry && npm run test:financial-health",
     "preview": "vite preview",
     "test:dates": "node --experimental-strip-types supabase/tests/finance_date.test.mjs",
-    "test:offline": "node --experimental-strip-types supabase/tests/offline_ownership.test.mjs",
+    "test:offline": "node --experimental-strip-types supabase/tests/offline_ownership.test.mjs && node --experimental-strip-types supabase/tests/offline_error_messages.test.mjs",
     "test:edge-inputs": "node --experimental-strip-types supabase/tests/bounded_json.test.mjs && node --experimental-strip-types supabase/tests/receipt_payload.test.mjs",
     "test:reports": "node --experimental-strip-types supabase/tests/report_navigation.test.mjs",
     "test:dashboard-cash-flow": "node --experimental-strip-types supabase/tests/dashboard_cash_flow.test.mjs",

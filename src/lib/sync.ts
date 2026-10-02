@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import { ensureOfflineRequestId } from './offlineRequestId'
 import { discardFailedOutboxItem as discardFailedItem } from './offlineQueueActions'
 import { canSyncOfflineItem } from './offlineOwnership'
+import { offlineRejectionMessage, OFFLINE_RETRY_MESSAGE } from './offlineErrorMessages'
 
 let activeSync: Promise<void> | null = null
 
@@ -60,22 +61,25 @@ async function runSync() {
           const needsAttention = /^(22|23|42501|PGRST2)/.test(error.code || '')
           await localDB.outbox.update(txn.id, {
             sync_status: needsAttention ? 'failed' : 'pending',
-            last_error: error.message, last_attempt_at: new Date().toISOString()
+            last_error: needsAttention ? offlineRejectionMessage(error.code) : OFFLINE_RETRY_MESSAGE,
+            last_attempt_at: new Date().toISOString()
           })
           if (!needsAttention) break
           continue
         }
         await localDB.outbox.delete(txn.id)
-      } catch (error) {
+      } catch {
         await localDB.outbox.update(txn.id, {
-          last_error: error instanceof Error ? error.message : 'Connection failed',
+          last_error: OFFLINE_RETRY_MESSAGE,
           last_attempt_at: new Date().toISOString()
         })
         break
       }
     }
-  } catch (error) {
-    console.error('Could not read or sync offline transactions:', error)
+  } catch {
+    // Avoid logging error objects from storage/network libraries, which may
+    // contain request details or server diagnostics.
+    console.error('Offline transaction sync stopped')
   }
 }
 
