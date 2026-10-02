@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { Check, X, Loader2, Wallet, AlertCircle, Trash2, CalendarDays, ArrowDownLeft } from 'lucide-react'
 import { formatIndiaDate, isAccountOpenForOccurrence } from '../lib/financeDate'
 
@@ -102,7 +103,7 @@ export default function PendingRequests() {
         if (error) throw error
       }
       setRequests(requests.filter(req => !(req.id === id && req.req_category === category)))
-    } catch (error: any) { alert(error.message) } finally { setProcessingId(null) }
+    } catch (error) { alert(safeCaughtErrorMessage(error, 'Could not decline this request. Refresh the inbox and try again.')) } finally { setProcessingId(null) }
   }
 
   const occurrenceForRequest = (req: any): string | null =>
@@ -148,7 +149,7 @@ export default function PendingRequests() {
       setAcceptingId(null)
       window.location.reload()
     } catch (error: any) {
-      alert(`Failed to process: ${error.message}`)
+      alert(safeCaughtErrorMessage(error, 'Could not process this request. Refresh the inbox and try again.'))
     } finally {
       setProcessingId(null)
     }
@@ -167,7 +168,7 @@ export default function PendingRequests() {
         if (error) throw error
       }
       setDeclinedAlerts(declinedAlerts.filter(req => !(req.id === id && req.req_category === category)))
-    } catch (error: any) { alert(`Could not dismiss this notice: ${error.message}`) } finally { setProcessingId(null) }
+    } catch (error) { alert(safeCaughtErrorMessage(error, 'Could not dismiss this notice. Refresh the inbox and try again.')) } finally { setProcessingId(null) }
   }
 
   if (isLoading || (requests.length === 0 && declinedAlerts.length === 0)) return null

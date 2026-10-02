@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "npm run test:dates && npm run test:offline && npm run test:edge-inputs && npm run test:reports && npm run test:dashboard-cash-flow && npm run test:budgets && npm run test:calculators && npm run test:account-health && npm run test:feature-flag-cache && npm run test:perry && npm run test:financial-health",
+    "test": "npm run test:dates && npm run test:offline && npm run test:edge-inputs && npm run test:reports && npm run test:dashboard-cash-flow && npm run test:budgets && npm run test:calculators && npm run test:account-health && npm run test:feature-flag-cache && npm run test:perry && npm run test:financial-health && npm run test:safe-errors",
     "preview": "vite preview",
     "test:dates": "node --experimental-strip-types supabase/tests/finance_date.test.mjs",
     "test:offline": "node --experimental-strip-types supabase/tests/offline_ownership.test.mjs && node --experimental-strip-types supabase/tests/offline_error_messages.test.mjs",
@@ -19,7 +19,8 @@
     "test:account-health": "node --experimental-strip-types supabase/tests/account_health_math.test.mjs",
     "test:feature-flag-cache": "node --experimental-strip-types supabase/tests/feature_flag_cache.test.mjs",
     "test:perry": "node --experimental-strip-types supabase/functions/perry-summary/handler.test.mjs",
-    "test:financial-health": "node --experimental-strip-types supabase/tests/financial_health_math.test.mjs"
+    "test:financial-health": "node --experimental-strip-types supabase/tests/financial_health_math.test.mjs",
+    "test:safe-errors": "node --experimental-strip-types supabase/tests/safe_error_messages.test.mjs"
   },
   "dependencies": {
     "@radix-ui/react-popover": "^1.1.23",

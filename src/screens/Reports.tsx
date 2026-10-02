@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDate, formatIndiaDateInputValue, indiaDateExclusiveEndToIso, indiaDateInputToIso, indiaDateStartToIso, toIndiaDateInputValue } from '../lib/financeDate'
 import { parseReportFocus } from '../lib/reportNavigation'
+import { safeBackendErrorMessage } from '../lib/safeErrorMessages'
 import PageHeader from '../components/PageHeader'
 
 type Tx = { id: string; amount: number; fee_amount: number; description: string | null; created_at: string; from_account_id: string | null; to_account_id: string | null; category_id: string | null }
@@ -150,7 +151,7 @@ export default function Reports() {
     const reason = window.prompt('Reason for voiding this entry:', 'Entered in error')
     if (!reason?.trim()) return
     const { error: voidError } = await supabase.rpc('void_ledger_transaction', { p_transaction_id: tx.id, p_reason: reason.trim() })
-    if (voidError) setError(voidError.message.includes('original workflow') ? voidError.message : 'This entry could not be voided. It may already be linked to another financial workflow.')
+    if (voidError) setError(safeBackendErrorMessage(voidError, 'This entry could not be voided. It may already be linked to another financial workflow.'))
     else setRefreshVersion(version => version + 1)
   }
 
@@ -277,7 +278,7 @@ function CorrectionDialog({ transaction, onCancel, onSaved }: { transaction: Rep
       p_request_id: crypto.randomUUID(), p_transaction_id: transaction.id,
       p_amount: value, p_description: description.trim(), p_created_at: indiaDateInputToIso(date), p_reason: reason.trim(),
     })
-    if (correctionError) { setError(correctionError.message.includes('original workflow') ? correctionError.message : 'This entry could not be corrected. It may already be linked to another financial workflow or the correction would violate balance rules.'); setSaving(false); return }
+    if (correctionError) { setError(safeBackendErrorMessage(correctionError, 'This entry could not be corrected. It may already be linked to another financial workflow or the correction would violate balance rules.')); setSaving(false); return }
     onSaved()
   }
   return <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-sm grid place-items-center p-4" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onCancel() }}><form onSubmit={save} className="w-full max-w-lg rounded-3xl border border-white/10 bg-slate-950 p-5 shadow-2xl space-y-4" role="dialog" aria-modal="true" aria-labelledby="correct-entry-title"><div><p className="text-xs uppercase tracking-widest text-indigo-300">Audit-safe correction</p><h2 id="correct-entry-title" className="text-xl font-bold mt-1">Edit entry</h2><p className="text-xs text-slate-400 mt-1">The old row is preserved as voided and a corrected entry is posted.</p></div><label className="block text-sm text-slate-300">Description<input autoFocus maxLength={500} value={description} onChange={event => setDescription(event.target.value)} className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2" /></label><div className="grid grid-cols-2 gap-3"><label className="block text-sm text-slate-300">Amount<input type="number" min="0.01" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2" /></label><label className="block text-sm text-slate-300">Occurrence date<input type="date" required value={date} onChange={event => setDate(event.target.value)} className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2" /></label></div><label className="block text-sm text-slate-300">Correction reason<input required maxLength={200} value={reason} onChange={event => setReason(event.target.value)} className="mt-1 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2" /></label>{error && <p role="alert" className="text-sm text-rose-300">{error}</p>}<div className="flex justify-end gap-2"><button type="button" onClick={onCancel} className="rounded-xl border border-white/10 px-4 py-2 text-sm">Cancel</button><button disabled={saving} className="rounded-xl bg-indigo-500 px-4 py-2 text-sm font-semibold disabled:opacity-50">{saving ? 'Saving…' : 'Save correction'}</button></div></form></div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Landmark, Plus, IndianRupee, Calendar, Trophy, ArrowUpRight, ArrowDownRight, Wallet, Loader2, CheckCircle2, History, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { safeBackendErrorMessage } from '../lib/safeErrorMessages'
 import { useModalBack } from '../lib/useModalBack'
 import { formatIndiaDate, indiaDateInputToIso, toIndiaDateInputValue } from '../lib/financeDate'
 import InstallmentHistoryModal from '../components/InstallmentHistoryModal'
@@ -227,7 +228,7 @@ export default function Chittis() {
       p_schedule_kind: 'CHITTI', p_schedule_id: chitti.id
     })
     if (error) {
-      alert(`Could not load this payment schedule: ${error.message}`)
+      alert(safeBackendErrorMessage(error, 'Could not load this payment schedule. Refresh and try again.'))
       setPayModalData(null)
       return
     }

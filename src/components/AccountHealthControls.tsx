@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BellOff, CalendarClock, Loader2, Save, ShieldAlert } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { formatDueDate, nextMonthlyDueDate, type AccountHealthSetting } from '../lib/accountHealth'
 
 interface Props {
@@ -57,7 +58,7 @@ export default function AccountHealthControls({ accountId, accountType, balance,
       setEditing(false)
       onSaved()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save account health settings.')
+      setError(safeCaughtErrorMessage(err, 'Could not save account health settings. Try again.'))
     } finally { setBusy(false) }
   }
 
@@ -68,7 +69,7 @@ export default function AccountHealthControls({ accountId, accountType, balance,
       const { error: deleteError } = await supabase.from('account_health_settings').delete().eq('account_id', accountId)
       if (deleteError) throw deleteError
       setEditing(false); onSaved()
-    } catch (err) { setError(err instanceof Error ? err.message : 'Could not clear these settings.') }
+    } catch (err) { setError(safeCaughtErrorMessage(err, 'Could not clear these settings. Try again.')) }
     finally { setBusy(false) }
   }
 

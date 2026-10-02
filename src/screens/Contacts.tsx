@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import PageHeader from '../components/PageHeader'
 import { Users, User, Pencil, Loader2, Check, X, Link2, Trash2, Search, UserCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { formatIndiaDate } from '../lib/financeDate'
 
 interface ShadowContact {
@@ -80,7 +81,7 @@ export default function Contacts() {
       setContacts(contacts.map(c => c.id === id ? { ...c, name: editName.trim() } : c))
       setEditingId(null)
     } catch (error: any) {
-      alert(`Failed to update contact: ${error.message}`)
+      alert(safeCaughtErrorMessage(error, 'Could not update this contact. Try again.'))
     }
   }
 
@@ -92,7 +93,7 @@ export default function Contacts() {
       if (error) throw error
       fetchContacts()
     } catch (error: any) {
-      alert(`Failed to delete: ${error.message}`)
+      alert(safeCaughtErrorMessage(error, 'Could not delete this contact. Linked history is preserved.'))
     }
   }
 
@@ -135,7 +136,7 @@ export default function Contacts() {
       fetchContacts()
       
     } catch (error: any) {
-      alert(`Failed to merge contact: ${error.message}`)
+      alert(safeCaughtErrorMessage(error, 'Could not link this contact. Refresh and try again.'))
     } finally {
       setIsProcessing(false)
     }

@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { Archive, Check, Loader2, Plus, ShoppingBasket, Trash2, Undo2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useOptionalFeatures } from '../lib/optionalFeatures'
+import { safeBackendErrorMessage } from '../lib/safeErrorMessages'
 import PageHeader from '../components/PageHeader'
 
 type ShoppingList = { id: string; name: string; archived_at: string | null; created_at: string }
@@ -26,7 +27,7 @@ export default function ShoppingLists() {
       supabase.from('shopping_lists').select('id,name,archived_at,created_at').order('archived_at', { ascending: true, nullsFirst: true }).order('created_at', { ascending: false }),
       supabase.from('shopping_list_items').select('id,list_id,name,quantity,expected_cost,purchased').order('created_at'),
     ])
-    if (listResult.error || itemResult.error) setError(listResult.error?.message || itemResult.error?.message || 'Could not load shopping lists.')
+    if (listResult.error || itemResult.error) setError(safeBackendErrorMessage(listResult.error || itemResult.error, 'Could not load shopping lists.'))
     else { setError(''); setLists((listResult.data || []) as ShoppingList[]); setItems((itemResult.data || []) as ShoppingItem[]) }
     setLoading(false)
   }, [])
@@ -46,7 +47,7 @@ export default function ShoppingLists() {
     if (!newListName.trim()) return
     setSaving(true); setError('')
     const { error: saveError } = await supabase.from('shopping_lists').insert({ name: newListName.trim() })
-    if (saveError) setError(saveError.message)
+    if (saveError) setError(safeBackendErrorMessage(saveError, 'Could not save this shopping list.'))
     else { setNewListName(''); await load() }
     setSaving(false)
   }
@@ -62,14 +63,14 @@ export default function ShoppingLists() {
     }
     setSaving(true); setError('')
     const { error: saveError } = await supabase.from('shopping_list_items').insert({ list_id: listId, name: draft.name.trim(), quantity, expected_cost: cost })
-    if (saveError) setError(saveError.message)
+    if (saveError) setError(safeBackendErrorMessage(saveError, 'Could not save this shopping item.'))
     else { setDrafts(current => ({ ...current, [listId]: { name: '', quantity: '1', cost: '' } })); await load() }
     setSaving(false)
   }
 
   const togglePurchased = async (item: ShoppingItem) => {
     const { error: saveError } = await supabase.from('shopping_list_items').update({ purchased: !item.purchased }).eq('id', item.id)
-    if (saveError) setError(saveError.message); else await load()
+    if (saveError) setError(safeBackendErrorMessage(saveError, 'Could not update this shopping item.')); else await load()
   }
 
   const saveEdit = async (event: FormEvent) => {
@@ -83,25 +84,25 @@ export default function ShoppingLists() {
       return
     }
     const { error: saveError } = await supabase.from('shopping_list_items').update({ name: editing.name.trim(), quantity, expected_cost: cost }).eq('id', editing.id)
-    if (saveError) setError(saveError.message); else { setEditing(null); await load() }
+    if (saveError) setError(safeBackendErrorMessage(saveError, 'Could not update this shopping list.')); else { setEditing(null); await load() }
   }
 
   const deleteItem = async (item: ShoppingItem) => {
     if (!window.confirm(`Delete “${item.name}” from this list?`)) return
     const { error: deleteError } = await supabase.from('shopping_list_items').delete().eq('id', item.id)
-    if (deleteError) setError(deleteError.message); else await load()
+    if (deleteError) setError(safeBackendErrorMessage(deleteError, 'Could not delete this shopping item.')); else await load()
   }
 
   const archiveList = async (list: ShoppingList) => {
     const archivedAt = list.archived_at ? null : new Date().toISOString()
     const { error: updateError } = await supabase.from('shopping_lists').update({ archived_at: archivedAt }).eq('id', list.id)
-    if (updateError) setError(updateError.message); else await load()
+    if (updateError) setError(safeBackendErrorMessage(updateError, 'Could not archive this shopping list.')); else await load()
   }
 
   const deleteList = async (list: ShoppingList) => {
     if (!window.confirm(`Delete “${list.name}” and its items? This only affects shopping-list data and never creates or changes transactions.`)) return
     const { error: deleteError } = await supabase.from('shopping_lists').delete().eq('id', list.id)
-    if (deleteError) setError(deleteError.message); else await load()
+    if (deleteError) setError(safeBackendErrorMessage(deleteError, 'Could not delete this shopping list.')); else await load()
   }
 
   const activeLists = lists.filter(list => !list.archived_at)

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Settings as SettingsIcon, Search, User, Key, Lock, ShieldAlert, RotateCcw, Save, ChevronDown, ChevronUp, Trash2, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { hasAppPinConfigured } from '../lib/appPin'
 
 export default function Settings() {
@@ -87,7 +88,7 @@ export default function Settings() {
       setGeminiKeyDraft('')
       setGeminiKeyMessage('Your key is encrypted in Supabase Vault.')
     } catch (error) {
-      setGeminiKeyMessage(error instanceof Error ? error.message : 'Could not save your Gemini key.')
+      setGeminiKeyMessage(safeCaughtErrorMessage(error, 'Could not save your Gemini key. Check the key and try again.'))
     } finally { setGeminiKeyBusy(false) }
   }
 
@@ -102,7 +103,7 @@ export default function Settings() {
       setGeminiKeyDraft('')
       setGeminiKeyMessage('Your key has been removed.')
     } catch (error) {
-      setGeminiKeyMessage(error instanceof Error ? error.message : 'Could not remove your Gemini key.')
+      setGeminiKeyMessage(safeCaughtErrorMessage(error, 'Could not remove your Gemini key. Try again.'))
     } finally { setGeminiKeyBusy(false) }
   }
 

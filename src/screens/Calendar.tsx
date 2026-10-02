@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Calendar as CalendarIcon, Plus, ChevronLeft, ChevronRight, IndianRupee, Loader2, CalendarDays, X, Wallet, Trash2, Search, Users, User, UserPlus, ArrowUpRight, ArrowRightLeft, History } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { safeBackendErrorMessage, safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { useModalBack } from '../lib/useModalBack'
 import { formatIndiaDate, indiaDateInputToIso, monthlyInstallmentDate, toIndiaDateInputValue } from '../lib/financeDate'
 import InstallmentHistoryModal from '../components/InstallmentHistoryModal'
@@ -215,7 +216,7 @@ export default function Calendar() {
       setIsAddModalOpen(false)
       resetEmiForm()
       fetchEngineData()
-    } catch (error: any) { alert(error.message) } finally { setIsSubmitting(false) }
+    } catch (error) { alert(safeCaughtErrorMessage(error, 'Could not save this recurring payment. Check the details and try again.')) } finally { setIsSubmitting(false) }
   }
 
   const handlePayInstallment = async (e: React.FormEvent) => {
@@ -260,7 +261,7 @@ export default function Calendar() {
 
       setPayEmiData(null); setPayAccountId(''); setPayDate(toIndiaDateInputValue())
       fetchEngineData()
-    } catch (err: any) { alert(err.message) } finally { setIsSubmitting(false) }
+    } catch (err) { alert(safeCaughtErrorMessage(err, 'Could not record this installment. Refresh the schedule and try again.')) } finally { setIsSubmitting(false) }
   }
 
   const handleDelete = async (id: string) => {
@@ -270,7 +271,7 @@ export default function Calendar() {
       if (error) throw error
       fetchEngineData()
     } catch (err: any) {
-      alert(`Unable to cancel this recurring payment: ${err.message}`)
+      alert(safeCaughtErrorMessage(err, 'Unable to cancel this recurring payment. Refresh the schedule and try again.'))
     }
   }
 
@@ -284,7 +285,7 @@ export default function Calendar() {
       p_schedule_kind: 'BANK_EMI', p_schedule_id: emi.id
     })
     if (error) {
-      alert(`Could not load this payment schedule: ${error.message}`)
+      alert(safeBackendErrorMessage(error, 'Could not load this payment schedule. Refresh and try again.'))
       setPayEmiData(null)
       return
     }

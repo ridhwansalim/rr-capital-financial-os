@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { formatIndiaDate } from '../lib/financeDate'
 import { toIndiaDateInputValue } from '../lib/financeDate'
 import { useModalBack } from '../lib/useModalBack'
+import { safeBackendErrorMessage } from '../lib/safeErrorMessages'
 
 type ScheduleKind = 'CHITTI' | 'BANK_EMI'
 type Installment = {
@@ -39,7 +40,7 @@ export default function InstallmentHistoryModal({ isOpen, scheduleKind, schedule
       p_schedule_kind: scheduleKind,
       p_schedule_id: scheduleId
     })
-    if (loadError) setError(loadError.message)
+    if (loadError) setError(safeBackendErrorMessage(loadError, 'Could not load installment history.'))
     else setItems((data || []) as Installment[])
     setIsLoading(false)
   }, [isOpen, scheduleId, scheduleKind])
@@ -56,7 +57,7 @@ export default function InstallmentHistoryModal({ isOpen, scheduleKind, schedule
       p_installment_number: item.installment_number,
       p_status: status
     })
-    if (updateError) setError(updateError.message)
+    if (updateError) setError(safeBackendErrorMessage(updateError, 'Could not update installment history.'))
     else {
       await load()
       onChanged?.()

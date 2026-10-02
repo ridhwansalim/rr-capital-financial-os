@@ -4,6 +4,7 @@ import { Loader2, PiggyBank, Target, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useOptionalFeatures } from '../lib/optionalFeatures'
 import { toIndiaDateInputValue, formatIndiaDate } from '../lib/financeDate'
+import { safeBackendErrorMessage } from '../lib/safeErrorMessages'
 import PageHeader from '../components/PageHeader'
 
 type Goal = { id: string; name: string; target_amount: number; target_date: string | null; created_at: string }
@@ -30,7 +31,7 @@ export default function SavingsGoals() {
       supabase.from('savings_goal_contributions').select('id,goal_id,amount,contributed_on,note').order('contributed_on', { ascending: false }).order('created_at', { ascending: false }),
     ])
     if (goalResult.error || contributionResult.error) {
-      setError(goalResult.error?.message || contributionResult.error?.message || 'Could not load savings goals.')
+      setError(safeBackendErrorMessage(goalResult.error || contributionResult.error, 'Could not load savings goals.'))
     } else {
       setError('')
       setGoals((goalResult.data || []) as Goal[])
@@ -68,7 +69,7 @@ export default function SavingsGoals() {
     const result = editingId
       ? await supabase.from('savings_goals').update(values).eq('id', editingId)
       : await supabase.from('savings_goals').insert(values)
-    if (result.error) setError(result.error.message)
+    if (result.error) setError(safeBackendErrorMessage(result.error, 'Could not save this goal.'))
     else { resetGoalForm(); await load() }
     setSaving(false)
   }
@@ -81,7 +82,7 @@ export default function SavingsGoals() {
   const deleteGoal = async (goal: Goal) => {
     if (!window.confirm(`Delete “${goal.name}” and its planning contributions? Ledger transactions and account balances are never affected.`)) return
     const { error: deleteError } = await supabase.from('savings_goals').delete().eq('id', goal.id)
-    if (deleteError) setError(deleteError.message); else await load()
+    if (deleteError) setError(safeBackendErrorMessage(deleteError, 'Could not delete this goal.')); else await load()
   }
 
   const addContribution = async (goalId: string) => {
@@ -95,7 +96,7 @@ export default function SavingsGoals() {
     const { error: saveError } = await supabase.from('savings_goal_contributions').insert({
       goal_id: goalId, amount, contributed_on: draft.date, note: draft.note.trim(),
     })
-    if (saveError) setError(saveError.message)
+    if (saveError) setError(safeBackendErrorMessage(saveError, 'Could not save this contribution.'))
     else { setContributionDrafts(current => { const next = { ...current }; delete next[goalId]; return next }); await load() }
     setSaving(false)
   }
@@ -103,7 +104,7 @@ export default function SavingsGoals() {
   const deleteContribution = async (row: Contribution) => {
     if (!window.confirm(`Delete the ${money(Number(row.amount))} planning contribution? No account or transaction will change.`)) return
     const { error: deleteError } = await supabase.from('savings_goal_contributions').delete().eq('id', row.id)
-    if (deleteError) setError(deleteError.message); else await load()
+    if (deleteError) setError(safeBackendErrorMessage(deleteError, 'Could not delete this contribution.')); else await load()
   }
 
   return <main className="page-shell w-full max-w-5xl mx-auto pb-32 animate-in fade-in duration-300">

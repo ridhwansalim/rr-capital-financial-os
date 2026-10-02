@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { Mail, Lock, Loader2, LogIn, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 type AuthMode = 'login' | 'invite' | 'recovery'
@@ -62,7 +63,7 @@ export default function Auth() {
       })
       window.setTimeout(() => window.location.replace('/'), 900)
     } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Authentication failed. Please try again.' })
+      setMessage({ type: 'error', text: safeCaughtErrorMessage(error, 'Authentication failed. Check your sign-in details or invite link and try again.') })
     } finally {
       setIsLoading(false)
     }
@@ -83,7 +84,7 @@ export default function Auth() {
       if (error) throw error
       setMessage({ type: 'success', text: 'If an account exists for that email, a password reset link will be sent.' })
     } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Unable to request a password reset.' })
+      setMessage({ type: 'error', text: safeCaughtErrorMessage(error, 'Unable to request a password reset. Check your email address and try again.') })
     } finally {
       setIsLoading(false)
     }
@@ -99,7 +100,7 @@ export default function Auth() {
       })
       if (error) throw error
     } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Google sign-in failed. Please try again.' })
+      setMessage({ type: 'error', text: safeCaughtErrorMessage(error, 'Google sign-in failed. Please try again.') })
       setIsLoading(false)
     }
   }

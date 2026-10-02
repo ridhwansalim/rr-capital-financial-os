@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { X, IndianRupee, Loader2, Wallet, ArrowUpRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { useModalBack } from '../lib/useModalBack'
 import { isDateBeforeOpeningDate, toIndiaDateInputValue } from '../lib/financeDate'
 
@@ -96,7 +97,7 @@ export default function SettleDebtModal({ isOpen, onClose, obligation }: SettleD
       alert("Payment request sent! Waiting for receiver to accept.")
       onClose()
     } catch (err: any) {
-      setFormError(err?.message || 'Settlement request could not be sent.')
+      setFormError(safeCaughtErrorMessage(err, 'Settlement request could not be sent. Refresh and try again.'))
     } finally {
       setIsSubmitting(false)
     }

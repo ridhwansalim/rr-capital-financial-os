@@ -6,6 +6,7 @@ import { postQueuedTransaction } from '../lib/sync'
 import { indiaDateInputToIso, isDateBeforeOpeningDate, openingBalanceForAccountType, toIndiaDateInputValue } from '../lib/financeDate'
 import { offlineAccountChoices } from '../lib/offlineOwnership'
 import { offlineRejectionMessage } from '../lib/offlineErrorMessages'
+import { safeBackendErrorMessage, safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 
 interface TransactionModalProps {
   isOpen: boolean
@@ -285,7 +286,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
       setDescription(data.description)
       setType(data.type)
     } catch (scanError: any) {
-      setError(scanError?.message || 'Receipt scanning failed. Please try again.')
+      setError(safeCaughtErrorMessage(scanError, 'Receipt scanning failed. Please try again.'))
     } finally {
       setIsAiScanning(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -332,14 +333,14 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
       from_account_id: type === 'income' ? null : selectedAccount || null,
       to_account_id: type === 'expense' ? null : type === 'income' ? selectedAccount || null : targetAccount || null,
     }).select('id,name,transaction_type,amount,fee_amount,description,from_account_id,to_account_id').single()
-    if (saveError) setError(saveError.message)
+    if (saveError) setError(safeBackendErrorMessage(saveError, 'Could not save this transaction template.'))
     else { setTemplates(current => [data as TransactionTemplate, ...current]); setTemplateName('') }
     setTemplateBusy(false)
   }
 
   const deleteTemplate = async (id: string) => {
     const { error: deleteError } = await supabase.from('transaction_templates').delete().eq('id', id)
-    if (deleteError) setError(deleteError.message)
+    if (deleteError) setError(safeBackendErrorMessage(deleteError, 'Could not delete this transaction template.'))
     else setTemplates(current => current.filter(template => template.id !== id))
   }
 
@@ -407,7 +408,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
       setNewAccCreditLimit('')
       setNewAccOpeningDate(toIndiaDateInputValue())
     } catch (err: any) {
-      setError(err.message)
+      setError(safeCaughtErrorMessage(err, 'Could not create this account.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -504,10 +505,10 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
       if (navigator.onLine && window.location.pathname === '/') window.location.reload()
 
     } catch (err: any) {
-      const message = typeof err?.message === 'string' ? err.message : 'Could not save this transaction.'
-      setError(message.includes('Transaction would make liquid account history negative')
+      const safeMessage = safeCaughtErrorMessage(err, 'Could not save this transaction.')
+      setError(safeMessage.includes('Transaction would make liquid account history negative')
         ? 'This transaction would take the account below zero on that date. Check the opening balance and earlier entries.'
-        : message)
+        : safeMessage)
     } finally {
       setIsSubmitting(false)
     }

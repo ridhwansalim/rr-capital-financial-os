@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { X, Search, UserPlus, IndianRupee, User, Users, Loader2, Wallet } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { indiaDateInputToIso, isDateBeforeOpeningDate, toIndiaDateInputValue } from '../lib/financeDate'
+import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 
 interface AddDebtModalProps {
   isOpen: boolean
@@ -199,7 +200,7 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
       if (window.location.pathname === '/debts') window.location.reload()
     } catch (error: any) {
       console.error('Debt or IOU submission failed')
-      alert(`Failed to save obligation: ${error.message}`)
+      alert(safeCaughtErrorMessage(error, 'Could not save this debt or IOU. Check the details and try again.'))
     } finally {
       setIsSubmitting(false)
     }

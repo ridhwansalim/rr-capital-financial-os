@@ -3,6 +3,7 @@ import { X, Wallet, CreditCard, IndianRupee, Loader2, ChevronDown } from 'lucide
 import { supabase } from '../lib/supabase'
 import { useModalBack } from '../lib/useModalBack'
 import { openingBalanceForAccountType, toIndiaDateInputValue } from '../lib/financeDate'
+import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 
 interface AddAccountModalProps {
   isOpen: boolean
@@ -63,7 +64,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
       onSuccess()
     } catch (error: any) {
       console.error('Account creation failed')
-      alert(`Failed to create account: ${error.message}`)
+      alert(safeCaughtErrorMessage(error, 'Could not create this account. Check the details and try again.'))
     } finally {
       setIsSubmitting(false)
     }

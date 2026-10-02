@@ -6,6 +6,7 @@ import { useOptionalFeatures } from '../lib/optionalFeatures'
 import { formatIndiaDate, indiaDateStartToIso, toIndiaDateInputValue } from '../lib/financeDate'
 import { buildReportPath } from '../lib/reportNavigation'
 import { calculateBudgetPeriod } from '../lib/budgetMath'
+import { safeBackendErrorMessage } from '../lib/safeErrorMessages'
 import PageHeader from '../components/PageHeader'
 
 type Category = { id: string; name: string; color: string }
@@ -38,7 +39,7 @@ export default function Budgets() {
       supabase.from('budget_envelopes').select('id,category_id,monthly_limit,rollover_enabled,created_at').order('created_at'),
     ])
     if (catsError || rowsError) {
-      setError(catsError?.message || rowsError?.message || 'Could not load budgets.')
+      setError(safeBackendErrorMessage(catsError || rowsError, 'Could not load budgets.'))
       setLoading(false)
       return
     }
@@ -57,7 +58,7 @@ export default function Budgets() {
           .eq('status', 'COMPLETED').not('from_account_id', 'is', null).is('to_account_id', null)
           .is('contact_id', null).is('tagged_profile_id', null)
           .gte('created_at', indiaDateStartToIso(from)).order('created_at').order('id').range(start, start + pageSize - 1)
-        if (pageError) { setError(pageError.message); setLoading(false); return }
+        if (pageError) { setError(safeBackendErrorMessage(pageError, 'Could not load budget activity.')); setLoading(false); return }
         const page = (data || []) as Expense[]
         all.push(...page)
         if (page.length < pageSize) break
@@ -100,7 +101,7 @@ export default function Budgets() {
     const { error: saveError } = existing
       ? await supabase.from('budget_envelopes').update({ monthly_limit: numeric, rollover_enabled: rollover }).eq('id', existing.id)
       : await supabase.from('budget_envelopes').insert({ category_id: categoryId, monthly_limit: numeric, rollover_enabled: rollover })
-    if (saveError) setError(saveError.message)
+    if (saveError) setError(safeBackendErrorMessage(saveError, 'Could not save this budget.'))
     else { setAmount(''); setCategoryId(''); setRollover(false); await load() }
     setSaving(false)
   }
@@ -108,7 +109,7 @@ export default function Budgets() {
   const deleteEnvelope = async (id: string) => {
     if (!window.confirm('Delete this budget envelope? This keeps all transactions unchanged.')) return
     const { error: deleteError } = await supabase.from('budget_envelopes').delete().eq('id', id)
-    if (deleteError) setError(deleteError.message); else await load()
+    if (deleteError) setError(safeBackendErrorMessage(deleteError, 'Could not delete this budget.')); else await load()
   }
 
   const prevMonth = () => setMonth(current => addMonth(current, -1))

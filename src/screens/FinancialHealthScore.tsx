@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Info, Loader2, ShieldCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { toIndiaDateInputValue, indiaDateStartToIso, indiaDateExclusiveEndToIso } from '../lib/financeDate'
 import { isEligiblePersonalScoreTransaction, lastThreeCompleteMonths, scoreFinancialHealth, type FinancialHealthResult } from '../lib/financialHealth'
 import PageHeader from '../components/PageHeader'
@@ -96,7 +97,7 @@ export default function FinancialHealthScore() {
         const nextResult = scoreFinancialHealth({ liquidBalance, monthlyExpenses: expenses / 3, income, expenses, creditOutstanding, creditLimit, hasCreditLine: creditAccounts.length > 0 })
         if (active) setResult(nextResult)
       } catch (loadError) {
-        if (active) setError(loadError instanceof Error ? loadError.message : 'Could not calculate the private score.')
+        if (active) setError(safeCaughtErrorMessage(loadError, 'Could not calculate the private score. Refresh and try again.'))
       } finally { if (active) setLoading(false) }
     }
     void load()

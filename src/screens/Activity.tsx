@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { safeCaughtErrorMessage } from "@/lib/safeErrorMessages"
 import { CheckCircle2, XCircle, Clock, Landmark } from "lucide-react"
 
 type Transaction = {
@@ -65,7 +66,7 @@ export default function Activity() {
       .eq('id', txnId)
       
     if (error) {
-      alert("Error accepting handshake: " + error.message)
+      alert(safeCaughtErrorMessage(error, 'Could not accept this request. Refresh and try again.'))
     } else {
       setPendingTxns(prev => prev.filter(t => t.id !== txnId))
       setAcceptingId(null)
@@ -82,7 +83,7 @@ export default function Activity() {
       .eq('id', txnId)
       
     if (error) {
-      alert("Error rejecting handshake: " + error.message)
+      alert(safeCaughtErrorMessage(error, 'Could not reject this request. Refresh and try again.'))
     } else {
       setPendingTxns(prev => prev.filter(t => t.id !== txnId))
     }

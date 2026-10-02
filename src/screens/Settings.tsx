@@ -7,6 +7,7 @@ import { normalizeThemeMode, useTheme } from '../components/ThemeProvider'
 import { useModalBack } from '../lib/useModalBack'
 import { hasAppPinConfigured, migrateLegacyAppPin, removeAppPin, storeAppPin } from '../lib/appPin'
 import { setOptionalFeature, useOptionalFeatures } from '../lib/optionalFeatures'
+import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { isGuidedHelpEnabled, replayGuidance, setGuidedHelpEnabled } from '../lib/guidedHelp'
 import PageHeader from '../components/PageHeader'
 
@@ -228,7 +229,7 @@ export default function Settings() {
       setGeminiKeyDraft('')
       setGeminiKeyMessage('Your key is encrypted in Supabase Vault and ready for receipt scans.')
     } catch (error) {
-      setGeminiKeyMessage(error instanceof Error ? error.message : 'Could not save your Gemini key.')
+      setGeminiKeyMessage(safeCaughtErrorMessage(error, 'Could not save your Gemini key. Check the key and try again.'))
     } finally {
       setGeminiKeyBusy(false)
     }
@@ -245,7 +246,7 @@ export default function Settings() {
       setGeminiKeyDraft('')
       setGeminiKeyMessage('Your Gemini key has been removed.')
     } catch (error) {
-      setGeminiKeyMessage(error instanceof Error ? error.message : 'Could not remove your Gemini key.')
+      setGeminiKeyMessage(safeCaughtErrorMessage(error, 'Could not remove your Gemini key. Try again.'))
     } finally {
       setGeminiKeyBusy(false)
     }
@@ -257,7 +258,7 @@ export default function Settings() {
     if (!enabled && !window.confirm('Turn budgets off? Your budget data will be kept and will return if you enable budgets again.')) return
     setFeatureBusy(true); setFeatureError('')
     try { await setOptionalFeature('budgets', enabled) }
-    catch (error) { setFeatureError(error instanceof Error ? error.message : 'Could not update this feature setting.') }
+    catch (error) { setFeatureError(safeCaughtErrorMessage(error, 'Could not update this feature setting. Try again.')) }
     finally { setFeatureBusy(false) }
   }
 
@@ -266,7 +267,7 @@ export default function Settings() {
     if (enabled && !window.confirm('Enable read-only calculators? They use values you enter, save no scenarios, and never create or change financial records.')) return
     setFeatureBusy(true); setFeatureError('')
     try { await setOptionalFeature('calculators', enabled) }
-    catch (error) { setFeatureError(error instanceof Error ? error.message : 'Could not update this feature setting.') }
+    catch (error) { setFeatureError(safeCaughtErrorMessage(error, 'Could not update this feature setting. Try again.')) }
     finally { setFeatureBusy(false) }
   }
 
@@ -276,7 +277,7 @@ export default function Settings() {
     if (!enabled && !window.confirm('Turn savings goals off? Your goals and contributions will be kept and return if you enable this module again.')) return
     setFeatureBusy(true); setFeatureError('')
     try { await setOptionalFeature('savings_goals', enabled) }
-    catch (error) { setFeatureError(error instanceof Error ? error.message : 'Could not update this feature setting.') }
+    catch (error) { setFeatureError(safeCaughtErrorMessage(error, 'Could not update this feature setting. Try again.')) }
     finally { setFeatureBusy(false) }
   }
 
@@ -286,7 +287,7 @@ export default function Settings() {
     if (!enabled && !window.confirm('Turn shopping lists off? Your lists and items will be kept and return if you enable this module again.')) return
     setFeatureBusy(true); setFeatureError('')
     try { await setOptionalFeature('shopping_lists', enabled) }
-    catch (error) { setFeatureError(error instanceof Error ? error.message : 'Could not update this feature setting.') }
+    catch (error) { setFeatureError(safeCaughtErrorMessage(error, 'Could not update this feature setting. Try again.')) }
     finally { setFeatureBusy(false) }
   }
 
@@ -296,7 +297,7 @@ export default function Settings() {
     if (!enabled && !window.confirm('Turn account health off? Your thresholds and due-day settings will be kept and return if you enable the module again.')) return
     setFeatureBusy(true); setFeatureError('')
     try { await setOptionalFeature('account_health', enabled) }
-    catch (error) { setFeatureError(error instanceof Error ? error.message : 'Could not update this feature setting.') }
+    catch (error) { setFeatureError(safeCaughtErrorMessage(error, 'Could not update this feature setting. Try again.')) }
     finally { setFeatureBusy(false) }
   }
 
@@ -306,7 +307,7 @@ export default function Settings() {
     if (!enabled && !window.confirm('Turn the wellness indicator off? No score data is stored, and your financial records will be unchanged.')) return
     setFeatureBusy(true); setFeatureError('')
     try { await setOptionalFeature('financial_health_score', enabled) }
-    catch (error) { setFeatureError(error instanceof Error ? error.message : 'Could not update this feature setting.') }
+    catch (error) { setFeatureError(safeCaughtErrorMessage(error, 'Could not update this feature setting. Try again.')) }
     finally { setFeatureBusy(false) }
   }
 
@@ -345,7 +346,7 @@ export default function Settings() {
       setTelegramToken(data)
       setTelegramExpiresAt(Date.now() + 10 * 60 * 1000)
     } catch (error) {
-      setTelegramLinkError(error instanceof Error ? error.message : 'Could not create a link code')
+      setTelegramLinkError(safeCaughtErrorMessage(error, 'Could not create a link code. Try again.'))
     } finally { setTelegramBusy(false) }
   }
 
@@ -418,8 +419,8 @@ export default function Settings() {
         
         setDraftProfile({ ...draftProfile, registered_devices: updatedDevices })
       }
-    } catch (err: any) {
-      alert("Biometric registration failed: " + err.message)
+    } catch {
+      alert('Biometric registration failed. Check your device settings and try again.')
     }
   }
 

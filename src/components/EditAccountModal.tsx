@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { X, IndianRupee, Loader2, Trash2, AlertTriangle, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useModalBack } from '../lib/useModalBack'
+import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 
 interface Account {
   id: string
@@ -63,7 +64,7 @@ export default function EditAccountModal({ isOpen, onClose, onSuccess, account }
       onSuccess()
     } catch (error: any) {
       console.error('Account update failed')
-      alert(`Failed to update account: ${error.message}`)
+      alert(safeCaughtErrorMessage(error, 'Could not update this account. Check the details and try again.'))
     } finally {
       setIsSubmitting(false)
     }
@@ -92,7 +93,7 @@ export default function EditAccountModal({ isOpen, onClose, onSuccess, account }
       onSuccess()
     } catch (error: any) {
       console.error('Account deletion failed')
-      alert(`Delete Failed: ${error.message}`)
+      alert(safeCaughtErrorMessage(error, 'Could not delete this account. Linked financial history is preserved.'))
       setIsConfirmingDelete(false)
     } finally {
       setIsSubmitting(false)
