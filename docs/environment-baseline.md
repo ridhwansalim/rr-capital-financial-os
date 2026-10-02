@@ -6,9 +6,9 @@ This is the authoritative current snapshot. Later dated sections are historical 
 
 | Environment | Supabase project | Project ref | Verified state |
 | --- | --- | --- | --- |
-| Local app and linked Supabase project | RR Capital | `hnebvwfgsotrknxpgpmv` | `supabase/config.toml` targets `financial-os`; linked-project identity was verified as RR Capital. The latest verified repository commit `8b6b20238896a271b8c0023fee2b15a960778999` is pushed to `origin/master`. It adds synthetic browser verification and does not change finance behavior or hosted schema. |
+| Local app and linked Supabase project | RR Capital | `hnebvwfgsotrknxpgpmv` | `supabase/config.toml` targets `financial-os`; linked-project identity was verified as RR Capital. At recheck, the checkout was clean on `master`, tracking `origin/master`, at commit `1182e38bf46e8f157039679c8ba6bc3f9f469991`. That commit documents local recovery-folder ACL hardening and does not change finance behavior or hosted schema. |
 | Production database | RR Capital | `hnebvwfgsotrknxpgpmv` | `ACTIVE_HEALTHY`, Postgres 17.6.1; fresh metadata query on 2026-10-03 returned 54 migrations through `20261002195439_match_obligation_on_ledger_retry`. |
-| Production web app | RR Capital | Vercel `financial-os` | Deployment `dpl_98F8JAE7P9cWY7HDPy3gGKKnhcY6` is `READY` for commit `8b6b20238896a271b8c0023fee2b15a960778999`; `financial-os-orcin-ten.vercel.app/auth` returned HTTP 200 with the current RR Capital HTML, CSP, and security headers. |
+| Production web app | RR Capital | Vercel `financial-os` | Deployment `dpl_CsyZ39yYKErB7xmG4Y1sJJMffB2r` is `READY` for commit `1182e38bf46e8f157039679c8ba6bc3f9f469991` and aliases `financial-os-orcin-ten.vercel.app`. |
 | Separate legacy/test database | Financial OS v2 | `guvkfuxniprtqdsqlqtx` | `ACTIVE_HEALTHY`; schema and migration history remain separate. |
 
 ### Verified reset scope
