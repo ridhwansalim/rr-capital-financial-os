@@ -30,6 +30,8 @@ dist-ssr
 supabase/.branches/
 
 dev-dist/
+playwright-report/
+test-results/
 
 *.tsbuildinfo
 

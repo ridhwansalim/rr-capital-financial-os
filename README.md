@@ -22,6 +22,10 @@ The app uses React, TypeScript, Vite, Tailwind CSS, Supabase, Dexie, and a servi
 
 Use a Supabase project you control. Review the migrations before applying them to an existing database; the first migration captures this project's schema baseline.
 
+## Verify the browser flows
+
+After `npm ci`, install the Playwright browser once with `npx playwright install chromium`, then run `npm run test:e2e`. The suite builds and serves the app locally with a reserved `.invalid` Supabase URL, seeds only a synthetic browser session, and intercepts backend calls with empty/synthetic responses. It blocks and fails on requests to any other origin, checks every app page at desktop and phone widths, and rejects table writes during page load. It does not sign in to or query a hosted Supabase project. The normal `npm test` suite remains independent of browser installation.
+
 Receipt scanning sends the selected image to Google Gemini for extraction using each person's own Gemini API key from Settings. Keys are encrypted in Supabase Vault and excluded from the readable profile table. The image is not written to RR Capital storage by the scanner. The endpoint accepts images up to 8 MB and limits each account to ten scans per minute. Users should review extracted values before saving. See [`docs/receipt-scanning.md`](docs/receipt-scanning.md).
 
 ## Current rollout status
