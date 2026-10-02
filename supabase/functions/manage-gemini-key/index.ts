@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { readBoundedJson } from "../_shared/boundedJson.ts"
 
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -36,16 +37,14 @@ serve(async (req) => {
   const { data: { user }, error: authError } = await supabase.auth.getUser(match[1])
   if (authError || !user) return respond({ error: "Sign in to manage your Gemini key." }, 401, headers)
 
-  const contentLength = Number(req.headers.get("content-length") || 0)
-  if (contentLength > 2048) return respond({ error: "Request is too large." }, 413, headers)
-  let payload: { action?: unknown; apiKey?: unknown }
-  try {
-    const raw = await req.text()
-    if (new TextEncoder().encode(raw).byteLength > 2048) return respond({ error: "Request is too large." }, 413, headers)
-    payload = JSON.parse(raw)
-  } catch {
+  const parsed = await readBoundedJson(req, 2048)
+  if (!parsed.ok) {
+    return respond({ error: parsed.status === 413 ? "Request is too large." : "Invalid request." }, parsed.status, headers)
+  }
+  if (!parsed.value || typeof parsed.value !== "object" || Array.isArray(parsed.value)) {
     return respond({ error: "Invalid request." }, 400, headers)
   }
+  const payload = parsed.value as { action?: unknown; apiKey?: unknown }
 
   if (payload.action === "status") {
     const { data, error } = await supabase.rpc("has_user_gemini_key", { p_user_id: user.id })
