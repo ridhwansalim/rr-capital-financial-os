@@ -103,19 +103,9 @@ export default function Contacts() {
     const delayDebounceFn = setTimeout(async () => {
       setIsSearching(true)
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        
-        let query = supabase
-          .from('profile_directory')
-          .select('id, full_name, username')
-          .or(`username.ilike.%${searchQuery}%,full_name.ilike.%${searchQuery}%`)
-          .limit(5)
-          
-        if (user) query = query.neq('id', user.id)
-
-        const { data, error } = await query
+        const { data, error } = await supabase.rpc('search_users', { search_term: searchQuery.trim() })
         if (error) throw error
-        if (data) setSearchResults(data)
+        if (data) setSearchResults(data.slice(0, 5))
       } catch (error) {
         console.error('Search error:', error)
       } finally {

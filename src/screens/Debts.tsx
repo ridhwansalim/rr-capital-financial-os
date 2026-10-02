@@ -58,12 +58,9 @@ export default function Debts() {
       const nameMap: Record<string, string> = {}
 
       if (profileIds.size > 0) {
-        const { data: profiles } = await supabase
-          .from('profile_directory')
-          .select('id, full_name, username')
-          .in('id', Array.from(profileIds))
+        const { data: profiles } = await supabase.rpc('profile_labels', { p_profile_ids: Array.from(profileIds) })
         
-        profiles?.forEach(p => {
+        profiles?.forEach((p: { id: string; full_name: string | null; username: string | null }) => {
           nameMap[p.id] = p.full_name || p.username || 'Unknown User'
         })
       }

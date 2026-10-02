@@ -6,10 +6,10 @@ $ErrorActionPreference = 'Stop'
 $expectedProjectRef = 'hnebvwfgsotrknxpgpmv'
 if ($ProjectRef -cne $expectedProjectRef) { throw 'This release bundle is pinned to RR Capital only.' }
 $expectedPending = @(
-  '20261002040958_place_pg_net_in_extensions_schema.sql'
+  '20261002040960_include_emi_owner_in_profile_labels.sql'
 )
 $expectedHashes = @{
-  '20261002040958_place_pg_net_in_extensions_schema.sql' = '357DDEC8CBE9BF52E418F82D5EE407B17E45B8A5D564A60903A042A42DFBD4A2'
+  '20261002040960_include_emi_owner_in_profile_labels.sql' = '2BD12C56FCC04984C6C5E7A695CB936F7FC7A17D76992B6DC6DAD6F1B4121277'
 }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $sourceSupabase = Join-Path $repoRoot 'supabase'
@@ -52,7 +52,7 @@ try {
   $expected = @($expectedPending | Sort-Object)
   $nl = [Environment]::NewLine
   if (-not $result.dryRun -or ($actual -join $nl) -cne ($expected -join $nl)) { throw 'Pending migration selection mismatch; apply stopped.' }
-  Write-Output 'PASS: the reviewed pg_net placement migration alone is selected; Perry and 410 excluded.'
+  Write-Output 'PASS: the reviewed EMI profile-label fix alone is selected; Perry and 410 excluded.'
   if (-not $Apply) {
     Write-Output 'DRY RUN ONLY: pass -Apply to execute the reviewed bundle.'
     return

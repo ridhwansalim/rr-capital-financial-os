@@ -59,7 +59,7 @@ export default function PendingRequests() {
         }
       })
 
-      const { data: profiles } = await supabase.from('profile_directory').select('id, full_name, username').in('id', Array.from(profileIds))
+      const { data: profiles } = await supabase.rpc('profile_labels', { p_profile_ids: Array.from(profileIds) })
 
       const enrich = (data: any[]) => data.map(req => {
         let targetId = req.owner_id
@@ -67,7 +67,7 @@ export default function PendingRequests() {
             if (req.req_category === 'emi') targetId = req.counterparty_profile_id
             else if (req.req_category === 'debt') targetId = req.creditor_profile_id === user.id ? req.debtor_profile_id : req.creditor_profile_id
         }
-        const p = profiles?.find(prof => prof.id === targetId)
+        const p = profiles?.find((prof: { id: string; full_name: string | null; username: string | null }) => prof.id === targetId)
         return { ...req, display_name: p?.full_name || p?.username || 'Someone' }
       })
 

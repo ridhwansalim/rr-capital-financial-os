@@ -147,8 +147,8 @@ export default function Dashboard() {
 
           const nameMap: Record<string, string> = {}
           if (pIds.size > 0) {
-            const { data: profiles } = await supabase.from('profile_directory').select('id, full_name, username').in('id', Array.from(pIds))
-            profiles?.forEach(p => nameMap[p.id] = p.full_name || p.username || 'User')
+            const { data: profiles } = await supabase.rpc('profile_labels', { p_profile_ids: Array.from(pIds) })
+            profiles?.forEach((p: { id: string; full_name: string | null; username: string | null }) => nameMap[p.id] = p.full_name || p.username || 'User')
           }
           if (cIds.size > 0) {
             const { data: contacts } = await supabase.from('contacts').select('id, name').in('id', Array.from(cIds))
