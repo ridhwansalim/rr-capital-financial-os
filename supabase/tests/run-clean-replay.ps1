@@ -21,6 +21,14 @@ $databaseName = 'rr_clean_replay_' + [guid]::NewGuid().ToString('N')
 $databaseCreated = $false
 $bootstrapPath = Join-Path $PSScriptRoot '..\local_test_support.bootstrap.sql'
 $migrationPath = Join-Path $PSScriptRoot '..\migrations'
+$configPath = Join-Path $PSScriptRoot '..\config.toml'
+$configText = Get-Content -LiteralPath $configPath -Raw
+$apiSection = [regex]::Match($configText, '(?ms)^\[api\]\s*(.*?)(?=^\[|\z)').Groups[1].Value
+$apiSchemas = [regex]::Match($apiSection, '(?m)^schemas\s*=\s*\[(?<value>[^\]]*)\]').Groups['value'].Value
+if (-not $apiSchemas -or $apiSchemas -match '"net"') {
+  throw 'The `net` schema must remain excluded from Supabase Data API schemas.'
+}
+Write-Output 'PASS `net` schema is not exposed by local Supabase Data API configuration'
 $testFiles = Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.test.sql' | Sort-Object Name
 $migrations = Get-ChildItem -LiteralPath $migrationPath -Filter '*.sql' | Sort-Object Name
 if ($CoreOnly) {

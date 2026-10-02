@@ -6,10 +6,10 @@ $ErrorActionPreference = 'Stop'
 $expectedProjectRef = 'hnebvwfgsotrknxpgpmv'
 if ($ProjectRef -cne $expectedProjectRef) { throw 'This release bundle is pinned to RR Capital only.' }
 $expectedPending = @(
-  '20261002040957_index_paylater_action_request_credit_fk.sql'
+  '20261002040958_place_pg_net_in_extensions_schema.sql'
 )
 $expectedHashes = @{
-  '20261002040957_index_paylater_action_request_credit_fk.sql' = 'C295951B8D966117A2935407FF7BD0775D10121AB9E5BAAB49751C5613B8B95B'
+  '20261002040958_place_pg_net_in_extensions_schema.sql' = '357DDEC8CBE9BF52E418F82D5EE407B17E45B8A5D564A60903A042A42DFBD4A2'
 }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $sourceSupabase = Join-Path $repoRoot 'supabase'
@@ -52,7 +52,7 @@ try {
   $expected = @($expectedPending | Sort-Object)
   $nl = [Environment]::NewLine
   if (-not $result.dryRun -or ($actual -join $nl) -cne ($expected -join $nl)) { throw 'Pending migration selection mismatch; apply stopped.' }
-  Write-Output 'PASS: the reviewed Pay Later foreign-key index migration alone is selected; Perry and 410 excluded.'
+  Write-Output 'PASS: the reviewed pg_net placement migration alone is selected; Perry and 410 excluded.'
   if (-not $Apply) {
     Write-Output 'DRY RUN ONLY: pass -Apply to execute the reviewed bundle.'
     return

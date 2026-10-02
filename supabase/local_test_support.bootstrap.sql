@@ -2,11 +2,11 @@
 -- supplies auth, extension schemas, roles, and their functions itself.
 CREATE SCHEMA auth;
 CREATE SCHEMA extensions;
-CREATE SCHEMA net;
 CREATE SCHEMA vault;
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
 GRANT USAGE ON SCHEMA extensions TO anon, authenticated, service_role;
 CREATE TABLE auth.users (
   id uuid PRIMARY KEY,
@@ -18,15 +18,6 @@ CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
 $$;
 GRANT USAGE ON SCHEMA auth TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated, anon;
-
--- Model pg_net's default PUBLIC exposure so the hardening migration and its
--- privilege regression test run on plain PostgreSQL without a pg_net binary.
-CREATE FUNCTION net.http_post(url text, body jsonb DEFAULT '{}'::jsonb,
-  params jsonb DEFAULT '{}'::jsonb, headers jsonb DEFAULT '{}'::jsonb,
-  timeout_milliseconds integer DEFAULT 2000)
-RETURNS bigint LANGUAGE sql AS $$ SELECT 1::bigint $$;
-GRANT USAGE ON SCHEMA net TO PUBLIC;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA net TO PUBLIC;
 
 -- Empty Vault-compatible test stub. It preserves the columns and signatures
 -- used by migrations without storing real application secrets or claiming to

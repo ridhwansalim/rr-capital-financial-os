@@ -1,5 +1,5 @@
-﻿import React, { useState } from 'react'
-import { X, Landmark, Wallet, CreditCard, IndianRupee, Loader2 } from 'lucide-react'
+import React, { useState } from 'react'
+import { X, Wallet, CreditCard, IndianRupee, Loader2, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useModalBack } from '../lib/useModalBack'
 import { openingBalanceForAccountType, toIndiaDateInputValue } from '../lib/financeDate'
@@ -14,6 +14,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
   const [name, setName] = useState('')
   // FIXED: The database expects exactly 'credit_card', not 'credit'
   const [type, setType] = useState<'bank' | 'cash' | 'credit_card' | 'pay_later'>('bank')
+  const [accountGroup, setAccountGroup] = useState<'liquid' | 'credit'>('liquid')
   const [creditLimit, setCreditLimit] = useState('')
   const [openingBalance, setOpeningBalance] = useState('0')
   const [openingDate, setOpeningDate] = useState(() => toIndiaDateInputValue())
@@ -23,6 +24,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
   const resetForm = () => {
     setName('')
     setType('bank')
+    setAccountGroup('liquid')
     setCreditLimit('')
     setOpeningBalance('0')
     setOpeningDate(toIndiaDateInputValue())
@@ -84,25 +86,48 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
 
         <form onSubmit={handleSubmit} className="flex flex-col space-y-6">
           
-          {/* Account Type Selector */}
-          <div className="flex p-1 bg-black/20 rounded-xl backdrop-blur-sm border border-white/10">
-            {(['bank', 'cash', 'credit_card', 'pay_later'] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setType(t)}
-                className={`flex-1 py-2 flex items-center justify-center space-x-2 text-xs font-medium rounded-lg capitalize transition-all duration-200 ${
-                  type === t 
-                    ? 'bg-white/20 text-white shadow-sm' 
-                    : 'text-white/50 hover:text-white/80'
-                }`}
+          {/* Choose the account family first, then its specific kind. */}
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                { id: 'liquid', title: 'Liquid', detail: 'Money you hold', icon: Wallet },
+                { id: 'credit', title: 'Credit line', detail: 'Borrowed spending limit', icon: CreditCard },
+              ] as const).map(({ id, title, detail, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    setAccountGroup(id)
+                    setType(id === 'liquid' ? 'bank' : 'credit_card')
+                  }}
+                  aria-pressed={accountGroup === id}
+                  className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${accountGroup === id ? 'border-indigo-400/60 bg-indigo-400/15 text-white' : 'border-white/10 bg-black/20 text-white/60 hover:bg-white/5'}`}
+                >
+                  <Icon className={`h-5 w-5 shrink-0 ${accountGroup === id ? 'text-indigo-300' : ''}`} />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">{title}</span>
+                    <span className="block text-[11px] text-white/45">{detail}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <label className="relative block">
+              <span className="sr-only">Account type</span>
+              <select
+                value={type}
+                onChange={event => setType(event.target.value as typeof type)}
+                className="w-full appearance-none rounded-xl border border-white/10 bg-black/25 px-4 py-3 pr-10 text-sm text-white outline-none focus:border-indigo-400/60"
               >
-                {t === 'bank' && <Landmark className={`w-4 h-4 ${type === t ? 'text-indigo-400' : ''}`} />}
-                {t === 'cash' && <Wallet className={`w-4 h-4 ${type === t ? 'text-emerald-400' : ''}`} />}
-                {(t === 'credit_card' || t === 'pay_later') && <CreditCard className={`w-4 h-4 ${type === t ? 'text-rose-400' : ''}`} />}
-                <span>{t === 'credit_card' ? 'Credit Card' : t === 'pay_later' ? 'Pay Later' : t === 'cash' ? 'Cash in Hand' : t}</span>
-              </button>
-            ))}
+                {accountGroup === 'liquid' ? <>
+                  <option value="bank" className="text-slate-900">Bank account</option>
+                  <option value="cash" className="text-slate-900">Cash in Hand / Wallet</option>
+                </> : <>
+                  <option value="credit_card" className="text-slate-900">Credit card</option>
+                  <option value="pay_later" className="text-slate-900">Pay Later</option>
+                </>}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
+            </label>
           </div>
 
           <div className="flex flex-col space-y-1">
