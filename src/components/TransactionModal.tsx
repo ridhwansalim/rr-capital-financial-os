@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { X, ArrowDownRight, ArrowUpRight, ArrowRightLeft, Loader2, IndianRupee, Camera, Search, User, Users, UserPlus, AlertCircle } from 'lucide-react'
+import { X, ArrowDownRight, ArrowUpRight, ArrowRightLeft, Loader2, IndianRupee, Camera, Search, User, Users, UserPlus, AlertCircle, BookmarkPlus, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { localDB, type CachedAccount, type LocalTransaction } from '../lib/db'
 import { postQueuedTransaction } from '../lib/sync'
@@ -9,9 +9,12 @@ interface TransactionModalProps {
   isOpen: boolean
   onClose: () => void
   initialFile?: File | null
+  initialDraft?: TransactionDraft | null
 }
 
 type Account = CachedAccount
+type TransactionTemplate = { id: string; name: string; transaction_type: 'expense' | 'income' | 'transfer'; amount: number | null; fee_amount: number; description: string; from_account_id: string | null; to_account_id: string | null }
+export type TransactionDraft = { type: 'expense' | 'income' | 'transfer'; amount: string; feeAmount: string; description: string; selectedAccount: string; targetAccount: string }
 
 interface SearchEntity {
   id: string
@@ -20,13 +23,17 @@ interface SearchEntity {
   type: 'profile' | 'contact'
 }
 
-export default function TransactionModal({ isOpen, onClose, initialFile }: TransactionModalProps) {
+export default function TransactionModal({ isOpen, onClose, initialFile, initialDraft }: TransactionModalProps) {
   const [type, setType] = useState<'expense' | 'income' | 'transfer'>('expense')
   const [amount, setAmount] = useState('')
   const [feeAmount, setFeeAmount] = useState('')
   const [description, setDescription] = useState('')
   const [transactionDate, setTransactionDate] = useState(() => toIndiaDateInputValue())
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [templates, setTemplates] = useState<TransactionTemplate[]>([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [templateName, setTemplateName] = useState('')
+  const [templateBusy, setTemplateBusy] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState('')
   const [targetAccount, setTargetAccount] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -59,8 +66,15 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
   useEffect(() => {
     if (isOpen) {
       setAccounts([])
-      setSelectedAccount('')
-      setTargetAccount('')
+      setTemplates([])
+      setSelectedTemplateId('')
+      setTemplateName('')
+      setSelectedAccount(initialDraft?.selectedAccount || '')
+      setTargetAccount(initialDraft?.targetAccount || '')
+      setType(initialDraft?.type || 'expense')
+      setAmount(initialDraft?.amount || '')
+      setFeeAmount(initialDraft?.feeAmount || '')
+      setDescription(initialDraft?.description || '')
       setTransactionDate(toIndiaDateInputValue())
       setNewAccName('')
       setNewAccType('bank')
@@ -77,7 +91,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
       setIsCreatingAccount(false)
       void loadContacts()
     }
-  }, [isOpen])
+  }, [isOpen, initialDraft])
 
   const loadContacts = async () => {
     const { data: { session } } = await supabase.auth.getSession()
@@ -153,11 +167,13 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
     const { data: { session } } = await supabase.auth.getSession()
     const ownerId = session?.user.id
     if (!ownerId) return
+    setCurrentUserId(ownerId)
     try {
       if (!navigator.onLine) throw new Error('Offline')
-      const [accResult, balResult] = await Promise.all([
+      const [accResult, balResult, templateResult] = await Promise.all([
         supabase.from('accounts').select('id, name, type, opening_date, credit_limit').eq('owner_id', ownerId).order('name'),
-        supabase.from('account_balances').select('id, balance')
+        supabase.from('account_balances').select('id, balance'),
+        supabase.from('transaction_templates').select('id,name,transaction_type,amount,fee_amount,description,from_account_id,to_account_id').order('updated_at', { ascending: false })
       ])
       if (accResult.error) throw accResult.error
       if (balResult.error) throw balResult.error
@@ -167,8 +183,11 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
       })
       await localDB.accountCache.put({ owner_id: ownerId, accounts: merged })
       setAccounts(merged)
+      setTemplates(templateResult.error ? [] : (templateResult.data || []) as TransactionTemplate[])
       if (merged.length > 0 && !merged.some(a => a.id === selectedAccount)) {
-        setSelectedAccount(merged[0].id)
+        const preferredId = localStorage.getItem(`rr:last-account:${ownerId}`)
+        const draftAccount = merged.find(account => account.id === initialDraft?.selectedAccount)?.id
+        setSelectedAccount(draftAccount || merged.find(account => account.id === preferredId)?.id || merged[0].id)
         setTargetAccount(merged.length > 1 ? merged[1].id : merged[0].id)
       }
     } catch {
@@ -178,15 +197,18 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
         return
       }
       setAccounts(cached.accounts)
+      setTemplates([])
       if (cached.accounts.length > 0 && !cached.accounts.some(a => a.id === selectedAccount)) {
-        setSelectedAccount(cached.accounts[0].id)
+        const preferredId = localStorage.getItem(`rr:last-account:${ownerId}`)
+        const draftAccount = cached.accounts.find(account => account.id === initialDraft?.selectedAccount)?.id
+        setSelectedAccount(draftAccount || cached.accounts.find(account => account.id === preferredId)?.id || cached.accounts[0].id)
         setTargetAccount(cached.accounts.length > 1 ? cached.accounts[1].id : cached.accounts[0].id)
       }
     }
   }
 
   const handleClose = (discard = false) => {
-    if (!discard && (amount || feeAmount || description || searchQuery || isCreatingAccount || newAccName || newAccCreditLimit || newAccOpeningBalance !== '0' || newAccOpeningDate !== toIndiaDateInputValue() || transactionDate !== toIndiaDateInputValue()) &&
+    if (!discard && (amount || feeAmount || description || templateName || searchQuery || isCreatingAccount || newAccName || newAccCreditLimit || newAccOpeningBalance !== '0' || newAccOpeningDate !== toIndiaDateInputValue() || transactionDate !== toIndiaDateInputValue()) &&
         !window.confirm('You have unsaved transaction details. Discard them and close?')) return
     setType('expense')
     setAmount('')
@@ -264,20 +286,71 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
     }
   }
 
+  const applyTemplate = (template: TransactionTemplate) => {
+    setSelectedTemplateId(template.id)
+    setType(template.transaction_type)
+    setAmount(template.amount === null ? '' : String(template.amount))
+    setFeeAmount(template.transaction_type === 'transfer' ? String(template.fee_amount || 0) : '')
+    setDescription(template.description)
+    setTransactionDate(toIndiaDateInputValue())
+    const primaryAccountId = template.transaction_type === 'income' ? template.to_account_id : template.from_account_id
+    setSelectedAccount(accounts.some(account => account.id === primaryAccountId) ? primaryAccountId || '' : accounts[0]?.id || '')
+    setTargetAccount(accounts.some(account => account.id === template.to_account_id) ? template.to_account_id || '' : accounts.find(account => account.id !== template.from_account_id)?.id || '')
+    setSelectedEntity(null)
+    setSearchQuery('')
+    setNewShadowName('')
+    setError(null)
+  }
+
+  const saveTemplate = async () => {
+    const name = templateName.trim()
+    if (!name || name.length > 48) { setError('Give the template a name of 1–48 characters.'); return }
+    if (!currentUserId) { setError('Sign in before saving a template.'); return }
+    const parsed = amount.trim() ? Number(amount) : null
+    if (parsed !== null && (!Number.isFinite(parsed) || parsed <= 0 || Math.round(parsed * 100) !== parsed * 100)) {
+      setError('Enter a valid amount or leave it blank for a reusable draft.')
+      return
+    }
+    const templateFee = type === 'transfer' ? Number(feeAmount || 0) : 0
+    if (!Number.isFinite(templateFee) || templateFee < 0 || Math.round(templateFee * 100) !== templateFee * 100) {
+      setError('Enter a valid fee before saving this transfer template.')
+      return
+    }
+    setTemplateBusy(true); setError(null)
+    const { data, error: saveError } = await supabase.from('transaction_templates').insert({
+      name,
+      transaction_type: type,
+      amount: parsed,
+      fee_amount: templateFee,
+      description,
+      from_account_id: type === 'income' ? null : selectedAccount || null,
+      to_account_id: type === 'expense' ? null : type === 'income' ? selectedAccount || null : targetAccount || null,
+    }).select('id,name,transaction_type,amount,fee_amount,description,from_account_id,to_account_id').single()
+    if (saveError) setError(saveError.message)
+    else { setTemplates(current => [data as TransactionTemplate, ...current]); setTemplateName('') }
+    setTemplateBusy(false)
+  }
+
+  const deleteTemplate = async (id: string) => {
+    const { error: deleteError } = await supabase.from('transaction_templates').delete().eq('id', id)
+    if (deleteError) setError(deleteError.message)
+    else setTemplates(current => current.filter(template => template.id !== id))
+  }
+
   useEffect(() => {
-    if (!isOpen || !(amount || feeAmount || description || searchQuery || isCreatingAccount || newAccName || newAccCreditLimit || newAccOpeningBalance !== '0' || newAccOpeningDate !== toIndiaDateInputValue() || transactionDate !== toIndiaDateInputValue())) return
+    if (!isOpen || !(amount || feeAmount || description || templateName || searchQuery || isCreatingAccount || newAccName || newAccCreditLimit || newAccOpeningBalance !== '0' || newAccOpeningDate !== toIndiaDateInputValue() || transactionDate !== toIndiaDateInputValue())) return
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', warnBeforeUnload)
     return () => window.removeEventListener('beforeunload', warnBeforeUnload)
-  }, [isOpen, amount, feeAmount, description, searchQuery, isCreatingAccount, newAccName, newAccCreditLimit, newAccOpeningBalance, newAccOpeningDate, transactionDate])
+  }, [isOpen, amount, feeAmount, description, templateName, searchQuery, isCreatingAccount, newAccName, newAccCreditLimit, newAccOpeningBalance, newAccOpeningDate, transactionDate])
 
   useEffect(() => {
     if (!isOpen) return
     const closeOnBack = (event: Event) => {
-      if (amount || feeAmount || description || searchQuery || isCreatingAccount || transactionDate !== toIndiaDateInputValue()) {
+      if (amount || feeAmount || description || templateName || searchQuery || isCreatingAccount || transactionDate !== toIndiaDateInputValue()) {
         if (!window.confirm('You have unsaved transaction details. Discard them and close?')) {
           event.preventDefault()
           return
@@ -287,7 +360,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
     }
     window.addEventListener('rr:modal-back', closeOnBack)
     return () => window.removeEventListener('rr:modal-back', closeOnBack)
-  }, [isOpen, amount, feeAmount, description, searchQuery, isCreatingAccount, newAccName, newAccOpeningBalance, newAccOpeningDate, transactionDate])
+  }, [isOpen, amount, feeAmount, description, templateName, searchQuery, isCreatingAccount, newAccName, newAccOpeningBalance, newAccOpeningDate, transactionDate])
 
   const openReceiptScanner = () => {
     if (geminiKeyConfigured !== true) {
@@ -395,6 +468,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
         new_contact_name: newShadowName.trim() || null
       }
       const localId = await localDB.outbox.add(queued)
+      try { localStorage.setItem(`rr:last-account:${session.user.id}`, selectedAccount) } catch { /* Account suggestion is best-effort local convenience. */ }
       if (navigator.onLine) {
         let rpcResult: Awaited<ReturnType<typeof postQueuedTransaction>>
         try {
@@ -565,6 +639,17 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
               <details className="rounded-xl border border-white/10 bg-black/10 p-3">
                 <summary className="cursor-pointer select-none text-sm font-semibold text-indigo-300">Advanced options</summary>
                 <div className="mt-4 space-y-4">
+                  <section className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-3">
+                    <h3 className="text-sm font-semibold">Repeat entry</h3>
+                    {templates.length > 0 && <div className="flex gap-2">
+                      <select aria-label="Use saved transaction template" value={selectedTemplateId} onChange={event => { setSelectedTemplateId(event.target.value); const template = templates.find(item => item.id === event.target.value); if (template) applyTemplate(template) }} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-slate-900 px-3 py-2.5 text-sm text-white">
+                        <option value="">Start from a saved template</option>{templates.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                      </select>
+                      <button type="button" disabled={!selectedTemplateId} onClick={() => { const selected = templates.find(item => item.id === selectedTemplateId); if (selected && window.confirm(`Delete the “${selected.name}” template?`)) { void deleteTemplate(selected.id); setSelectedTemplateId('') } }} aria-label="Delete selected template" className="rounded-xl border border-white/10 px-3 text-slate-400 hover:text-rose-300 disabled:opacity-30"><Trash2 className="w-4 h-4" /></button>
+                    </div>}
+                    <div className="flex gap-2"><input value={templateName} maxLength={48} onChange={event => setTemplateName(event.target.value)} placeholder="Name this draft" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white placeholder:text-white/30" /><button type="button" disabled={templateBusy || !templateName.trim()} onClick={() => void saveTemplate()} className="inline-flex items-center gap-2 rounded-xl bg-indigo-500/20 px-3 py-2 text-sm font-semibold text-indigo-200 disabled:opacity-40"><BookmarkPlus className="w-4 h-4" />Save</button></div>
+                    <p className="text-[11px] text-slate-400">Templates start a fresh draft dated today. Contacts, transaction IDs, and completed workflow state are never copied.</p>
+                  </section>
                   <div className="flex flex-col items-center gap-2">
                     <input type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" className="hidden" ref={fileInputRef} onChange={e => { const file = e.target.files?.[0]; if (file) void processFile(file) }} />
                     <button type="button" onClick={openReceiptScanner} disabled={isAiScanning || isSubmitting || geminiKeyConfigured === null} className="flex items-center px-4 py-2 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-xl text-sm font-bold hover:bg-indigo-500/30 transition-all disabled:opacity-50">

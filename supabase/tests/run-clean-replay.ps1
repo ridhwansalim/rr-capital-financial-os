@@ -9,16 +9,37 @@ if ($CoreOnly -and $StagedThenPerry) {
 }
 
 $ErrorActionPreference = 'Stop'
-$containerStatus = & docker inspect --format '{{.State.Status}}' $ContainerName 2>$null
-if ($LASTEXITCODE -ne 0 -or $containerStatus -ne 'running') {
-  throw "Local Supabase database container '$ContainerName' must already be running."
-}
-$roleCheck = & docker exec $ContainerName psql -X -At -v ON_ERROR_STOP=1 -U postgres -d postgres -c "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'perry_reader')"
-if ($LASTEXITCODE -ne 0) { throw 'Could not inspect the local cluster role catalog.' }
-$perryRoleExistedBefore = ($roleCheck -join '').Trim() -eq 't'
-
 $databaseName = 'rr_clean_replay_' + [guid]::NewGuid().ToString('N')
 $databaseCreated = $false
+$perryRoleExistedBefore = $null
+$databaseCleanupError = $null
+$roleCleanupError = $null
+
+function Invoke-LocalAdminSql {
+  param(
+    [string]$Sql,
+    [string]$Description
+  )
+
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = 'Continue'
+    $output = & docker exec $ContainerName psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -c $Sql 2>&1
+    $exitCode = $LASTEXITCODE
+  }
+  finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+  if ($exitCode -ne 0) {
+    throw "$Description failed (psql exit $exitCode):`n$($output -join "`n")"
+  }
+  return $output
+}
+
+$roleCheck = & docker exec $ContainerName psql -X -At -v ON_ERROR_STOP=1 -U postgres -d postgres -c "SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'perry_reader')"
+if ($LASTEXITCODE -ne 0) { throw "Local Supabase database container '$ContainerName' must be running and accept PostgreSQL connections; catalog check failed." }
+$perryRoleExistedBefore = ($roleCheck -join '').Trim() -eq 't'
+
 $bootstrapPath = Join-Path $PSScriptRoot '..\local_test_support.bootstrap.sql'
 $migrationPath = Join-Path $PSScriptRoot '..\migrations'
 $configPath = Join-Path $PSScriptRoot '..\config.toml'
@@ -36,7 +57,9 @@ if ($CoreOnly) {
   # Perry's optional migrations/tests are deliberately absent from the normal
   # RR Capital release. Prove the financial schema replays alone.
   $migrations = @($migrations | Where-Object { $_.BaseName -notmatch $perryMigrationPattern })
-  $testFiles = @($testFiles | Where-Object { $_.Name -ne 'perry_summary_security.test.sql' })
+  $testFiles = @($testFiles | Where-Object {
+    $_.Name -notin @('perry_summary_security.test.sql', 'perry_login_retirement.test.sql')
+  })
 } elseif ($StagedThenPerry) {
   $perryMigrations = @($migrations | Where-Object { $_.BaseName -match $perryMigrationPattern })
   $coreMigrations = @($migrations | Where-Object { $_.BaseName -notmatch $perryMigrationPattern })
@@ -56,27 +79,6 @@ function Invoke-LocalPsql {
   try {
     $ErrorActionPreference = 'Continue'
     $output = $Sql | & docker exec -i $ContainerName psql -X -v ON_ERROR_STOP=1 -U postgres -d $Database 2>&1
-    $exitCode = $LASTEXITCODE
-  }
-  finally {
-    $ErrorActionPreference = $previousErrorActionPreference
-  }
-  if ($exitCode -ne 0) {
-    throw "$Description failed (psql exit $exitCode):`n$($output -join "`n")"
-  }
-  return $output
-}
-
-function Invoke-LocalAdminSql {
-  param(
-    [string]$Sql,
-    [string]$Description
-  )
-
-  $previousErrorActionPreference = $ErrorActionPreference
-  try {
-    $ErrorActionPreference = 'Continue'
-    $output = & docker exec $ContainerName psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -c $Sql 2>&1
     $exitCode = $LASTEXITCODE
   }
   finally {
@@ -155,10 +157,26 @@ END $$;
 }
 finally {
   if ($databaseCreated) {
-    Invoke-LocalAdminSql "DROP DATABASE $databaseName" 'Drop clean replay database' | Out-Null
-    Write-Output "Dropped scratch database $databaseName"
+    try {
+      Invoke-LocalAdminSql "DROP DATABASE IF EXISTS $databaseName" 'Drop clean replay database' | Out-Null
+      Write-Output "Dropped scratch database $databaseName"
+    }
+    catch {
+      $databaseCleanupError = $_
+    }
   }
-  if (-not $perryRoleExistedBefore) {
-    Invoke-LocalAdminSql 'DROP ROLE IF EXISTS perry_reader' 'Clean up role created only for the scratch replay' | Out-Null
+  if ($perryRoleExistedBefore -eq $false) {
+    try {
+      Invoke-LocalAdminSql 'DROP ROLE IF EXISTS perry_reader' 'Clean up role created only for the scratch replay' | Out-Null
+    }
+    catch {
+      $roleCleanupError = $_
+    }
+  }
+  if ($databaseCleanupError) {
+    Write-Error "Scratch database cleanup failed: $databaseCleanupError" -ErrorAction Continue
+  }
+  if ($roleCleanupError) {
+    Write-Error "Scratch role cleanup failed: $roleCleanupError" -ErrorAction Continue
   }
 }

@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react'
-import { Wallet, ArrowRightLeft, TrendingUp, IndianRupee, User, CalendarDays, ShieldCheck, AlertTriangle, Landmark, ChartNoAxesCombined } from 'lucide-react'
+import { ArrowRightLeft, TrendingUp, IndianRupee, User, CalendarDays, ShieldCheck, AlertTriangle, Landmark, ChartNoAxesCombined } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import PendingRequests from '../components/PendingRequests'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { formatIndiaDate, indiaDateExclusiveEndToIso, indiaDateStartToIso, toIndiaDateInputValue } from '../lib/financeDate'
+import { buildReportPath } from '../lib/reportNavigation'
+import PageHeader from '../components/PageHeader'
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const [netWorth, setNetWorth] = useState(0)
   const [liquidCash, setLiquidCash] = useState(0)
   const [upcomingOutflow, setUpcomingOutflow] = useState(0)
@@ -189,15 +192,7 @@ export default function Dashboard() {
   return (
     <div className="p-4 sm:p-6 w-full max-w-7xl mx-auto text-white animate-in fade-in duration-300 pb-32">
       
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end mb-6 sm:mb-8 gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
-            <TrendingUp className="w-7 h-7 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-emerald-400" />
-            Financial Overview
-          </h1>
-          <p className="text-slate-400 mt-1">A clear view of your balances, commitments, and recent activity.</p>
-        </div>
-      </div>
+      <PageHeader title="Financial Overview" description="A clear view of your balances, commitments, and recent activity." icon={<TrendingUp className="text-emerald-400" />} />
 
       {/* P2P APPROVALS INBOX INJECTED HERE */}
       <PendingRequests />
@@ -301,8 +296,8 @@ export default function Dashboard() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-end gap-3 mb-4"><label className="text-xs text-slate-500">From<input type="date" value={rangeStart} max={rangeEnd} onChange={e => setRangeStart(e.target.value)} className="mt-1 block w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white" /></label><span className="hidden sm:block text-slate-500 pb-2">through</span><label className="text-xs text-slate-500">To<input type="date" value={rangeEnd} min={rangeStart} max={toIndiaDateInputValue()} onChange={e => setRangeEnd(e.target.value)} className="mt-1 block w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white" /></label></div>
           <div className="flex items-center gap-4 text-xs text-slate-400 mb-2"><span className="flex items-center gap-1.5"><i className="w-2 h-2 rounded-full bg-emerald-400" />Income</span><span className="flex items-center gap-1.5"><i className="w-2 h-2 rounded-full bg-rose-400" />Expenses</span><span className="ml-auto">{selectedPeriod}</span></div>
-          {cashFlowDays.length ? <div className="flex h-36 items-end gap-1 overflow-x-auto rounded-2xl bg-black/10 p-3">{cashFlowDays.map(day => <div key={day.day} title={`${day.day} · Income ${day.income.toLocaleString('en-IN')} · Expenses ${day.expense.toLocaleString('en-IN')}`} className="min-w-3 flex-1 h-full flex items-end justify-center gap-0.5"><div className="w-1/2 min-w-1 rounded-t bg-emerald-400/80" style={{ height: `${Math.max(2, day.income / maxFlowBar * 100)}%` }} /><div className="w-1/2 min-w-1 rounded-t bg-rose-400/80" style={{ height: `${Math.max(2, day.expense / maxFlowBar * 100)}%` }} /></div>)}</div> : <div className="grid place-items-center h-36 rounded-2xl bg-black/10 text-sm text-slate-500">No cash flow for these dates.</div>}
-          <div className="mt-4 flex justify-between items-center"><span className="text-xs text-slate-500">Transfers are excluded from totals.</span><Link to="/reports" className="text-sm font-semibold text-indigo-300 hover:text-indigo-200">Open detailed reports →</Link></div>
+          {cashFlowDays.length ? <div className="flex h-36 items-end gap-1 overflow-x-auto rounded-2xl bg-black/10 p-3">{cashFlowDays.map(day => <div key={day.day} title={`${day.day} · Income ${day.income.toLocaleString('en-IN')} · Expenses ${day.expense.toLocaleString('en-IN')}`} className="min-w-7 flex-1 h-full flex items-end justify-center gap-0.5"><button type="button" aria-label={`Open income report for ${day.day}: ${day.income.toLocaleString('en-IN')}`} disabled={day.income <= 0} onClick={() => navigate(buildReportPath({ from: day.day, to: day.day, kind: 'income' }))} className="w-1/2 min-w-2 h-full flex items-end justify-center rounded-t focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300 disabled:cursor-default"><span aria-hidden="true" className="w-full rounded-t bg-emerald-400/80 hover:bg-emerald-300 transition-colors" style={{ height: day.income > 0 ? `${Math.max(2, day.income / maxFlowBar * 100)}%` : '0%' }} /></button><button type="button" aria-label={`Open expense report for ${day.day}: ${day.expense.toLocaleString('en-IN')}`} disabled={day.expense <= 0} onClick={() => navigate(buildReportPath({ from: day.day, to: day.day, kind: 'expense' }))} className="w-1/2 min-w-2 h-full flex items-end justify-center rounded-t focus-visible:outline focus-visible:outline-2 focus-visible:outline-rose-300 disabled:cursor-default"><span aria-hidden="true" className="w-full rounded-t bg-rose-400/80 hover:bg-rose-300 transition-colors" style={{ height: day.expense > 0 ? `${Math.max(2, day.expense / maxFlowBar * 100)}%` : '0%' }} /></button></div>)}</div> : <div className="grid place-items-center h-36 rounded-2xl bg-black/10 text-sm text-slate-500">No cash flow for these dates.</div>}
+          <div className="mt-4 flex justify-between items-center"><span className="text-xs text-slate-500">Select an income or expense bar to open that day's entries. Transfers are excluded.</span><Link to={buildReportPath({ from: rangeStart, to: rangeEnd })} className="text-sm font-semibold text-indigo-300 hover:text-indigo-200">Open detailed reports →</Link></div>
         </section>
 
         <section className="bg-white/5 border border-white/10 backdrop-blur-md rounded-3xl overflow-hidden flex flex-col min-h-60">

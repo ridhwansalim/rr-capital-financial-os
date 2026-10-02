@@ -179,10 +179,16 @@ SELECT ok(NOT has_table_privilege('authenticated', 'public.transaction_categorie
       AND NOT has_table_privilege('authenticated', 'public.transaction_categories', 'TRIGGER')
       AND NOT has_table_privilege('anon', 'public.transaction_categories', 'SELECT')
       AND has_table_privilege('authenticated', 'public.transaction_categories', 'SELECT')
-      AND has_table_privilege('authenticated', 'public.transaction_categories', 'INSERT')
-      AND has_table_privilege('authenticated', 'public.transaction_categories', 'UPDATE')
+      AND NOT has_table_privilege('authenticated', 'public.transaction_categories', 'INSERT')
+      AND NOT has_table_privilege('authenticated', 'public.transaction_categories', 'UPDATE')
+      AND has_column_privilege('authenticated', 'public.transaction_categories', 'name', 'INSERT')
+      AND has_column_privilege('authenticated', 'public.transaction_categories', 'color', 'INSERT')
+      AND has_column_privilege('authenticated', 'public.transaction_categories', 'name', 'UPDATE')
+      AND has_column_privilege('authenticated', 'public.transaction_categories', 'color', 'UPDATE')
+      AND NOT has_column_privilege('authenticated', 'public.transaction_categories', 'owner_id', 'INSERT')
+      AND NOT has_column_privilege('authenticated', 'public.transaction_categories', 'owner_id', 'UPDATE')
       AND has_table_privilege('authenticated', 'public.transaction_categories', 'DELETE'),
-      'category CRUD remains available without table-wide privileges or anonymous access');
+      'category CRUD is column-scoped without anonymous access');
 SELECT ok(NOT has_table_privilege('anon', 'public.parties', 'SELECT')
       AND NOT has_table_privilege('authenticated', 'public.parties', 'SELECT')
       AND NOT has_table_privilege('anon', 'public.obligation_payments', 'SELECT')

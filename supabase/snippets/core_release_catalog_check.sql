@@ -56,8 +56,16 @@ BEGIN
   END IF;
 
   IF NOT has_table_privilege('authenticated','public.transaction_categories','SELECT')
-     OR NOT has_table_privilege('authenticated','public.transaction_categories','INSERT')
-     OR NOT has_table_privilege('authenticated','public.transaction_categories','UPDATE')
+     OR has_table_privilege('authenticated','public.transaction_categories','INSERT')
+     OR has_table_privilege('authenticated','public.transaction_categories','UPDATE')
+     OR NOT has_column_privilege('authenticated','public.transaction_categories','name','INSERT')
+     OR NOT has_column_privilege('authenticated','public.transaction_categories','color','INSERT')
+     OR NOT has_column_privilege('authenticated','public.transaction_categories','name','UPDATE')
+     OR NOT has_column_privilege('authenticated','public.transaction_categories','color','UPDATE')
+     OR has_column_privilege('authenticated','public.transaction_categories','id','INSERT')
+     OR has_column_privilege('authenticated','public.transaction_categories','owner_id','INSERT')
+     OR has_column_privilege('authenticated','public.transaction_categories','created_at','INSERT')
+     OR has_column_privilege('authenticated','public.transaction_categories','owner_id','UPDATE')
      OR NOT has_table_privilege('authenticated','public.transaction_categories','DELETE')
      OR has_table_privilege('authenticated','public.transaction_categories','TRUNCATE')
      OR has_table_privilege('authenticated','public.transaction_categories','REFERENCES')
@@ -65,6 +73,13 @@ BEGIN
      OR has_table_privilege('anon','public.transaction_categories','SELECT')
      OR has_table_privilege('anon','public.transaction_categories','INSERT') THEN
     RAISE EXCEPTION 'transaction_categories grants do not match the owner-scoped CRUD contract';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema='public' AND table_name='transaction_categories'
+       AND column_name='owner_id' AND column_default='auth.uid()'
+  ) THEN
+    RAISE EXCEPTION 'transaction_categories owner_id is not derived from auth.uid()';
   END IF;
 
   IF NOT EXISTS (

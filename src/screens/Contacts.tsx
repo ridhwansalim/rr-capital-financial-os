@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import PageHeader from '../components/PageHeader'
 import { Users, User, Pencil, Loader2, Check, X, Link2, Trash2, Search, UserCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDate } from '../lib/financeDate'
@@ -141,13 +142,7 @@ export default function Contacts() {
 
   return (
     <div className="p-4 sm:p-6 w-full max-w-4xl mx-auto text-white animate-in fade-in duration-300 pb-32">
-      <div className="mb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
-          <Users className="w-7 h-7 sm:w-8 sm:h-8 mr-3 text-emerald-400" />
-          Shadow Contacts
-        </h1>
-        <p className="text-slate-400 mt-1">Manage your offline network and map them to real accounts</p>
-      </div>
+      <PageHeader title="Shadow Contacts" description="Manage your offline network and map them to real accounts" icon={<Users className="text-emerald-400" />} />
 
       {isLoading ? (
         <div className="flex justify-center py-20">

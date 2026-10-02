@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Settings as SettingsIcon, Search, User, Key, Lock, ShieldAlert, RotateCcw, Save, ChevronDown, ChevronUp, Trash2, Loader2, Palette, Bot, Bell, Shield, MessageSquare, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut } from 'lucide-react'
+import { Settings as SettingsIcon, Search, User, Key, Lock, RotateCcw, Save, Trash2, Loader2, Palette, Bot, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDate } from '../lib/financeDate'
 import { useTheme } from '../components/ThemeProvider'
 import { useModalBack } from '../lib/useModalBack'
 import { hasAppPinConfigured, migrateLegacyAppPin, removeAppPin, storeAppPin } from '../lib/appPin'
+import { setOptionalFeature, useOptionalFeatures } from '../lib/optionalFeatures'
+import { isGuidedHelpEnabled, replayGuidance, setGuidedHelpEnabled } from '../lib/guidedHelp'
+import PageHeader from '../components/PageHeader'
 
 // WebAuthn Helper to encode hardware keys
 const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
@@ -16,10 +19,13 @@ export default function Settings() {
   const navigate = useNavigate()
   const telegramBotUsername = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'ridhwans_fin_bot').replace(/^@/, '')
   const { setTheme } = useTheme()
+  const { flags: featureFlags } = useOptionalFeatures()
+  const [featureBusy, setFeatureBusy] = useState(false)
+  const [featureError, setFeatureError] = useState('')
+  const [guidedHelpEnabled, setGuidedHelpState] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
-  const [advancedOpen, setAdvancedOpen] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [telegramToken, setTelegramToken] = useState('')
   const [telegramLinkError, setTelegramLinkError] = useState('')
@@ -51,7 +57,6 @@ export default function Settings() {
   const [savedPin, setSavedPin] = useState('')
   const [hasPinConfigured, setHasPinConfigured] = useState(false)
   const [isPinSaving, setIsPinSaving] = useState(false)
-  const [deleteConfirmText, setDeleteConfirmText] = useState('')
 
   useEffect(() => {
     if (draftProfile.theme_mode && draftProfile.theme_accent) {
@@ -65,6 +70,7 @@ export default function Settings() {
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
           setUserId(user.id)
+          setGuidedHelpState(isGuidedHelpEnabled(user.id))
           const { data } = await supabase.from('profiles').select('full_name, username, theme_mode, theme_accent, ai_model, ai_persona, telegram_chat_id, is_biometric_enabled, registered_devices').eq('id', user.id).single()
           if (data) {
             const themeMode = ['amoled', 'light'].includes(data.theme_mode) ? data.theme_mode : 'system'
@@ -73,7 +79,7 @@ export default function Settings() {
             setOriginalProfile(loadedProfile)
             setDraftProfile(loadedProfile)
             
-            // Keep only device preferences locally; provider credentials remain in the owner's protected profile.
+            // Keep device preferences locally; Gemini credentials are managed server-side in Vault.
             localStorage.setItem('financial_os_devices', JSON.stringify(loadedProfile.registered_devices))
             localStorage.setItem('financial_os_bio_enabled', loadedProfile.is_biometric_enabled ? 'true' : 'false')
           }
@@ -194,6 +200,72 @@ export default function Settings() {
     }
   }
 
+  const toggleBudgets = async () => {
+    const enabled = !featureFlags.budgets
+    if (enabled && !window.confirm('Enable budgets? This stores private budget envelopes and compares them with your categorized completed expenses. It will not create entries, move money, or block transactions.')) return
+    if (!enabled && !window.confirm('Turn budgets off? Your budget data will be kept and will return if you enable budgets again.')) return
+    setFeatureBusy(true); setFeatureError('')
+    try { await setOptionalFeature('budgets', enabled) }
+    catch (error) { setFeatureError(error instanceof Error ? error.message : 'Could not update this feature setting.') }
+    finally { setFeatureBusy(false) }
+  }
+
+  const toggleCalculators = async () => {
+    const enabled = !featureFlags.calculators
+    if (enabled && !window.confirm('Enable read-only calculators? They use values you enter, save no scenarios, and never create or change financial records.')) return
+    setFeatureBusy(true); setFeatureError('')
+    try { await setOptionalFeature('calculators', enabled) }
+    catch (error) { setFeatureError(error instanceof Error ? error.message : 'Could not update this feature setting.') }
+    finally { setFeatureBusy(false) }
+  }
+
+  const toggleSavingsGoals = async () => {
+    const enabled = !featureFlags.savings_goals
+    if (enabled && !window.confirm('Enable savings goals? Goals and contributions are private planning records only. They will not link to transactions, affect account balances, or move money.')) return
+    if (!enabled && !window.confirm('Turn savings goals off? Your goals and contributions will be kept and return if you enable this module again.')) return
+    setFeatureBusy(true); setFeatureError('')
+    try { await setOptionalFeature('savings_goals', enabled) }
+    catch (error) { setFeatureError(error instanceof Error ? error.message : 'Could not update this feature setting.') }
+    finally { setFeatureBusy(false) }
+  }
+
+  const toggleShoppingLists = async () => {
+    const enabled = !featureFlags.shopping_lists
+    if (enabled && !window.confirm('Enable shopping lists? Items and expected costs are private planning records. Marking an item purchased will not create a transaction or update an account.')) return
+    if (!enabled && !window.confirm('Turn shopping lists off? Your lists and items will be kept and return if you enable this module again.')) return
+    setFeatureBusy(true); setFeatureError('')
+    try { await setOptionalFeature('shopping_lists', enabled) }
+    catch (error) { setFeatureError(error instanceof Error ? error.message : 'Could not update this feature setting.') }
+    finally { setFeatureBusy(false) }
+  }
+
+  const toggleAccountHealth = async () => {
+    const enabled = !featureFlags.account_health
+    if (enabled && !window.confirm('Enable account health context? You can set your own minimum balances and statement/due days. RR Capital will show only rule-based warnings on Accounts; it will not change balances, fetch bank data, or calculate amounts due.')) return
+    if (!enabled && !window.confirm('Turn account health off? Your thresholds and due-day settings will be kept and return if you enable the module again.')) return
+    setFeatureBusy(true); setFeatureError('')
+    try { await setOptionalFeature('account_health', enabled) }
+    catch (error) { setFeatureError(error instanceof Error ? error.message : 'Could not update this feature setting.') }
+    finally { setFeatureBusy(false) }
+  }
+
+  const toggleFinancialHealthScore = async () => {
+    const enabled = !featureFlags.financial_health_score
+    if (enabled && !window.confirm('Enable the private wellness indicator? It is read-only, uses only eligible personal records, and is not a credit score or financial advice.')) return
+    if (!enabled && !window.confirm('Turn the wellness indicator off? No score data is stored, and your financial records will be unchanged.')) return
+    setFeatureBusy(true); setFeatureError('')
+    try { await setOptionalFeature('financial_health_score', enabled) }
+    catch (error) { setFeatureError(error instanceof Error ? error.message : 'Could not update this feature setting.') }
+    finally { setFeatureBusy(false) }
+  }
+
+  const toggleGuidedHelp = () => {
+    if (!userId) return
+    const enabled = !guidedHelpEnabled
+    setGuidedHelpState(enabled)
+    setGuidedHelpEnabled(userId, enabled)
+  }
+
   const requestTelegramLink = async () => {
     setTelegramBusy(true)
     setTelegramLinkError('')
@@ -223,19 +295,6 @@ export default function Settings() {
       setTelegramExpiresAt(Date.now() + 10 * 60 * 1000)
     } catch (error) {
       setTelegramLinkError(error instanceof Error ? error.message : 'Could not create a link code')
-    } finally { setTelegramBusy(false) }
-  }
-
-  const saveManualTelegramId = async () => {
-    if (!userId) return
-    setTelegramBusy(true)
-    setTelegramLinkError('')
-    try {
-      const { error } = await supabase.from('profiles').update({ telegram_chat_id: draftProfile.telegram_chat_id.trim() }).eq('id', userId)
-      if (error) throw error
-      setOriginalProfile(prev => ({ ...prev, telegram_chat_id: draftProfile.telegram_chat_id.trim() }))
-    } catch (error) {
-      setTelegramLinkError(error instanceof Error ? error.message : 'Could not save Chat ID')
     } finally { setTelegramBusy(false) }
   }
 
@@ -360,6 +419,7 @@ export default function Settings() {
   const showAppearance = 'theme appearance color dark light'.includes(query) || query === ''
   const showIntegration = 'ai key openai gemini claude chatgpt integration telegram bot'.includes(query) || query === ''
   const showSecurity = 'security lock auto password biometric danger delete pin time faceid touchid'.includes(query) || query === ''
+  const showModules = 'optional features modules budgets envelopes planning calculators guided help tips savings goals shopping lists account health minimum balance due date credit financial wellness score'.includes(query) || query === ''
 
   if (isLoading) {
     return (
@@ -374,15 +434,7 @@ export default function Settings() {
   return (
     <div className="p-4 sm:p-6 w-full max-w-4xl mx-auto text-white animate-in fade-in duration-300 pb-32">
       
-      <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-8 gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
-            <SettingsIcon className="w-7 h-7 sm:w-8 sm:h-8 mr-3 text-emerald-400" />
-            Settings
-          </h1>
-          <p className="text-slate-400 mt-1">Manage your identity, integrations, and security.</p>
-        </div>
-        <div className="relative w-full md:w-72">
+      <PageHeader title="Settings" description="Manage your identity, integrations, and security." icon={<SettingsIcon className="text-emerald-400" />} action={<div className="relative w-full md:w-72">
           <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input 
             type="text" 
@@ -391,8 +443,7 @@ export default function Settings() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:border-emerald-500/50 transition-colors placeholder:text-slate-500"
           />
-        </div>
-      </div>
+        </div>} actionClassName="md:w-72" />
 
       {isProfileModified && (
         <div className="sticky top-4 z-50 mb-8 p-4 bg-indigo-500/10 border border-indigo-500/30 backdrop-blur-xl rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl animate-in slide-in-from-top-4">
@@ -419,6 +470,44 @@ export default function Settings() {
       )}
 
       <div className="space-y-6">
+
+        {showModules && <section className="bg-white/5 border border-white/10 rounded-3xl p-6 md:p-8">
+          <div className="flex items-center justify-between gap-4">
+            <div><h2 className="text-xl font-bold">Optional features</h2><p className="text-sm text-slate-400 mt-1">Turn planning tools on only when you want them.</p></div>
+            <span className="text-[10px] uppercase tracking-wider text-emerald-300 border border-emerald-400/20 rounded-full px-3 py-1">Personal</span>
+          </div>
+          <div className="mt-5 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4">
+            <div><h3 className="font-semibold">Budgets and envelopes</h3><p className="text-xs text-slate-400 mt-1 max-w-xl">Compare categorized personal expenses with monthly plans. Turning this off hides the page and keeps your saved envelopes.</p></div>
+            <button type="button" role="switch" aria-checked={Boolean(featureFlags.budgets)} disabled={featureBusy} onClick={() => void toggleBudgets()} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors disabled:opacity-50 ${featureFlags.budgets ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${featureFlags.budgets ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4">
+            <div><h3 className="font-semibold">Account health context</h3><p className="text-xs text-slate-400 mt-1 max-w-xl">Set your own liquid-account minimums and credit statement/due days. Optional warnings appear on Accounts; balances and bills are never changed or inferred.</p></div>
+            <button type="button" role="switch" aria-checked={Boolean(featureFlags.account_health)} disabled={featureBusy} onClick={() => void toggleAccountHealth()} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors disabled:opacity-50 ${featureFlags.account_health ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${featureFlags.account_health ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4">
+            <div><h3 className="font-semibold">Calculators</h3><p className="text-xs text-slate-400 mt-1 max-w-xl">Estimate loan payments, compare extra-payoff scenarios, and model savings growth. Inputs are not saved and results do not change your records.</p></div>
+            <button type="button" role="switch" aria-checked={Boolean(featureFlags.calculators)} disabled={featureBusy} onClick={() => void toggleCalculators()} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors disabled:opacity-50 ${featureFlags.calculators ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${featureFlags.calculators ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4">
+            <div><h3 className="font-semibold">Savings goals</h3><p className="text-xs text-slate-400 mt-1 max-w-xl">Track private targets with explicit contributions. They are planning values only and never link to accounts or transactions.</p></div>
+            <button type="button" role="switch" aria-checked={Boolean(featureFlags.savings_goals)} disabled={featureBusy} onClick={() => void toggleSavingsGoals()} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors disabled:opacity-50 ${featureFlags.savings_goals ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${featureFlags.savings_goals ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4">
+            <div><h3 className="font-semibold">Shopping lists</h3><p className="text-xs text-slate-400 mt-1 max-w-xl">Plan items and expected costs. Purchased state stays inside the list and does not post to the ledger.</p></div>
+            <button type="button" role="switch" aria-checked={Boolean(featureFlags.shopping_lists)} disabled={featureBusy} onClick={() => void toggleShoppingLists()} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors disabled:opacity-50 ${featureFlags.shopping_lists ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${featureFlags.shopping_lists ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4">
+            <div><h3 className="font-semibold">Financial wellness indicator</h3><p className="text-xs text-slate-400 mt-1 max-w-xl">A private, read-only score based on eligible personal balances and activity. No score is stored; this is not a credit score or financial advice.</p></div>
+            <button type="button" role="switch" aria-checked={Boolean(featureFlags.financial_health_score)} disabled={featureBusy} onClick={() => void toggleFinancialHealthScore()} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors disabled:opacity-50 ${featureFlags.financial_health_score ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${featureFlags.financial_health_score ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4">
+            <div><h3 className="font-semibold">Guided page tips</h3><p className="text-xs text-slate-400 mt-1 max-w-xl">Show a short dismissible hint the first time you visit each page on this device.</p></div>
+            <button type="button" role="switch" aria-checked={guidedHelpEnabled} onClick={toggleGuidedHelp} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors ${guidedHelpEnabled ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${guidedHelpEnabled ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+          </div>
+          <div className="flex justify-end"><button type="button" disabled={!guidedHelpEnabled || !userId} onClick={() => userId && replayGuidance(userId)} className="rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/5 disabled:opacity-40">Replay page tips</button></div>
+          {featureBusy && <p className="mt-3 text-xs text-slate-400">Saving feature setting…</p>}
+          {featureError && <p role="alert" className="mt-3 text-xs text-rose-300">{featureError}</p>}
+        </section>}
         
         {/* Profile Section */}
         {showProfile && (
@@ -600,20 +689,7 @@ export default function Settings() {
                 {telegramLinkError && <p role="alert" className="text-sm text-rose-300">{telegramLinkError}</p>}
               </div>
 
-              <div className="flex flex-col space-y-1">
-                <label className="text-xs font-semibold tracking-wide text-white/50 uppercase flex justify-between items-center">
-                  <span className="flex items-center"><MessageSquare className="w-3 h-3 mr-1" /> Telegram Chat ID</span>
-                  {renderUndo('telegram_chat_id')}
-                </label>
-                <input 
-                  type="text" placeholder="Enter Chat ID..." value={draftProfile.telegram_chat_id}
-                  onChange={(e) => setDraftProfile({...draftProfile, telegram_chat_id: e.target.value})}
-                  className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-emerald-500/50 transition-colors"
-                />
-                <p className="text-xs leading-relaxed text-slate-500">Receipt scans use your personal key. It is sent only from RR Capital’s server to Google Gemini and is never shared with other accounts.</p>
-                <p className="text-xs text-slate-500">Advanced: enter a Chat ID manually if you need to keep the existing setup. Linking through the bot verifies the chat.</p>
-                {draftProfile.telegram_chat_id !== originalProfile.telegram_chat_id && <button type="button" onClick={() => void saveManualTelegramId()} disabled={telegramBusy} className="self-start px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-50">Save Chat ID</button>}
-              </div>
+              <p className="text-xs leading-relaxed text-slate-500">Linking or changing the destination requires opening the bot from this signed-in account. This verifies that you control both the RR Capital account and the Telegram chat.</p>
             </div>
           </section>
         )}

@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Wallet, Landmark, CreditCard, Plus, IndianRupee, Loader2, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import AddAccountModal from '../components/AddAccountModal'
 import EditAccountModal from '../components/EditAccountModal' // <-- New Import
+import AccountHealthControls from '../components/AccountHealthControls'
+import { useOptionalFeatures } from '../lib/optionalFeatures'
+import type { AccountHealthSetting } from '../lib/accountHealth'
+import PageHeader from '../components/PageHeader'
 
 interface Account {
   id: string
@@ -14,13 +18,15 @@ interface Account {
 
 export default function Accounts() {
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [healthSettings, setHealthSettings] = useState<Record<string, AccountHealthSetting>>({})
   const [isLoading, setIsLoading] = useState(true)
+  const { flags } = useOptionalFeatures()
   
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [editingAccount, setEditingAccount] = useState<Account | null>(null)
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     setIsLoading(true)
     try {
       const { data: accData, error: accError } = await supabase
@@ -31,6 +37,7 @@ export default function Accounts() {
       if (accError) throw accError
       if (!accData || accData.length === 0) {
         setAccounts([])
+        setHealthSettings({})
         return
       }
 
@@ -53,16 +60,26 @@ export default function Accounts() {
       })
       
       setAccounts(merged)
+      if (flags.account_health) {
+        const { data: settings, error: settingsError } = await supabase.from('account_health_settings')
+          .select('account_id, minimum_balance, statement_day, due_day, show_notices')
+          .in('account_id', merged.map(account => account.id))
+        if (settingsError) throw settingsError
+        setHealthSettings(Object.fromEntries((settings || []).map(row => [row.account_id, row as AccountHealthSetting])))
+      } else {
+        setHealthSettings({})
+      }
     } catch (error) {
       console.error('Error fetching accounts:', error)
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [flags.account_health])
 
   useEffect(() => {
-    fetchAccounts()
-  }, [])
+    const timer = window.setTimeout(() => { void fetchAccounts() }, 0)
+    return () => window.clearTimeout(timer)
+  }, [fetchAccounts])
 
   const liquidAccounts = accounts.filter(a => a.type === 'bank' || a.type === 'cash' || a.type === 'wallet')
   const creditAccounts = accounts.filter(a => a.type === 'credit' || a.type === 'credit_card' || a.type === 'pay_later')
@@ -73,21 +90,12 @@ export default function Accounts() {
   return (
     <div className="p-4 sm:p-6 w-full max-w-5xl mx-auto text-white animate-in fade-in duration-300 pb-32">
       
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 mb-8">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
-            <Wallet className="w-7 h-7 sm:w-8 sm:h-8 mr-3 text-indigo-400" />
-            Accounts
-          </h1>
-          <p className="text-slate-400 mt-1">Manage your balances and credit limits</p>
-        </div>
-        <button 
+      <PageHeader title="Accounts" description="Manage your balances and credit limits" icon={<Wallet className="text-indigo-400" />} action={<button
           onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center justify-center w-full sm:w-auto px-4 py-3 sm:py-2 bg-indigo-500 hover:bg-indigo-400 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)]"
+          className="flex w-full items-center justify-center rounded-xl bg-indigo-500 px-4 py-3 font-bold text-white transition-all hover:bg-indigo-400 sm:w-auto sm:py-2"
         >
           <Plus className="w-4 h-4 mr-2" /> Add Account
-        </button>
-      </div>
+        </button>} />
 
       {isLoading ? (
         <div className="flex justify-center py-20">
@@ -134,6 +142,7 @@ export default function Accounts() {
                       {Number(acc.balance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
+                  {flags.account_health && <AccountHealthControls accountId={acc.id} accountType={acc.type} balance={Number(acc.balance)} setting={healthSettings[acc.id]} onSaved={() => void fetchAccounts()} />}
                 </div>
               ))}
               {liquidAccounts.length === 0 && <p className="text-slate-500 text-sm">No liquid accounts found.</p>}
@@ -205,6 +214,7 @@ export default function Accounts() {
                           <div className={`h-full ${barColor} transition-all duration-1000 ease-out`} style={{ width: `${utilization}%` }} />
                         </div>
                       </div>
+                      {flags.account_health && <AccountHealthControls accountId={acc.id} accountType={acc.type} balance={Number(acc.balance)} setting={healthSettings[acc.id]} onSaved={() => void fetchAccounts()} />}
                     </div>
                   </div>
                 )

@@ -7,6 +7,7 @@ import InstallmentHistoryModal from '../components/InstallmentHistoryModal'
 import { format } from 'date-fns'
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/dist/style.css'
+import PageHeader from '../components/PageHeader'
 
 interface EMI {
   id: string
@@ -310,17 +311,9 @@ export default function Calendar() {
 
   return (
     <div className="p-4 sm:p-6 w-full max-w-6xl mx-auto text-white animate-in fade-in duration-300 pb-32 relative">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
-            <CalendarIcon className="w-7 h-7 sm:w-8 sm:h-8 mr-2 sm:mr-3 text-indigo-400" /> Calendar & EMIs
-          </h1>
-          <p className="text-slate-400 mt-1">Track your recurring payments and P2P obligations</p>
-        </div>
-        <button onClick={() => setIsAddModalOpen(true)} className="flex items-center px-4 py-2 bg-indigo-500 hover:bg-indigo-400 text-white rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)]">
+      <PageHeader title="Calendar & EMIs" description="Track your recurring payments and P2P obligations" icon={<CalendarIcon className="text-indigo-400" />} action={<button onClick={() => setIsAddModalOpen(true)} className="flex w-full items-center justify-center rounded-xl bg-indigo-500 px-4 py-3 font-bold text-white transition-all hover:bg-indigo-400 sm:w-auto sm:py-2">
           <Plus className="w-4 h-4 mr-2" /> Add Recurring
-        </button>
-      </div>
+        </button>} />
 
       {isLoading ? (
         <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 text-indigo-500 animate-spin" /></div>

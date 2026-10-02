@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(9);
+SELECT plan(11);
 
 SELECT ok(
   has_table_privilege('authenticated', 'public.account_balances', 'SELECT')
@@ -11,6 +11,14 @@ SELECT ok(
 );
 
 SELECT ok(
+  (SELECT c.reloptions @> ARRAY['security_invoker=true']
+     FROM pg_class c WHERE c.oid='public.account_balances'::regclass)
+  AND has_table_privilege('authenticated','public.accounts','SELECT')
+  AND has_table_privilege('authenticated','public.transactions','SELECT'),
+  'balance view evaluates with caller privileges and owner-filtered underlying reads'
+);
+
+SELECT ok(
   NOT has_table_privilege('anon', 'public.account_balances', 'SELECT')
   AND NOT has_table_privilege('anon', 'public.transaction_categories', 'SELECT')
   AND NOT has_table_privilege('anon', 'public.transaction_categories', 'INSERT'),
@@ -19,13 +27,21 @@ SELECT ok(
 
 SELECT ok(
   has_table_privilege('authenticated', 'public.transaction_categories', 'SELECT')
-  AND has_table_privilege('authenticated', 'public.transaction_categories', 'INSERT')
-  AND has_table_privilege('authenticated', 'public.transaction_categories', 'UPDATE')
+  AND NOT has_table_privilege('authenticated', 'public.transaction_categories', 'INSERT')
+  AND NOT has_table_privilege('authenticated', 'public.transaction_categories', 'UPDATE')
+  AND has_column_privilege('authenticated', 'public.transaction_categories', 'name', 'INSERT')
+  AND has_column_privilege('authenticated', 'public.transaction_categories', 'color', 'INSERT')
+  AND has_column_privilege('authenticated', 'public.transaction_categories', 'name', 'UPDATE')
+  AND has_column_privilege('authenticated', 'public.transaction_categories', 'color', 'UPDATE')
+  AND NOT has_column_privilege('authenticated', 'public.transaction_categories', 'id', 'INSERT')
+  AND NOT has_column_privilege('authenticated', 'public.transaction_categories', 'owner_id', 'INSERT')
+  AND NOT has_column_privilege('authenticated', 'public.transaction_categories', 'created_at', 'INSERT')
+  AND NOT has_column_privilege('authenticated', 'public.transaction_categories', 'owner_id', 'UPDATE')
   AND has_table_privilege('authenticated', 'public.transaction_categories', 'DELETE')
   AND NOT has_table_privilege('authenticated', 'public.transaction_categories', 'TRUNCATE')
   AND NOT has_table_privilege('authenticated', 'public.transaction_categories', 'REFERENCES')
   AND NOT has_table_privilege('authenticated', 'public.transaction_categories', 'TRIGGER'),
-  'authenticated category CRUD remains available without table-wide or schema privileges'
+  'authenticated category CRUD is column-scoped and retains owner-safe delete without table-wide or schema privileges'
 );
 
 SELECT ok(
@@ -118,6 +134,27 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 SELECT pass('authenticated TRUNCATE attempts are denied on every owner-scoped table');
+
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+  BEGIN
+    UPDATE public.account_balances SET id=id WHERE false;
+    RAISE EXCEPTION 'authenticated unexpectedly updated through account_balances';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO public.account_balances(id,balance) VALUES (gen_random_uuid(),0);
+    RAISE EXCEPTION 'authenticated unexpectedly inserted through account_balances';
+  EXCEPTION WHEN insufficient_privilege OR feature_not_supported THEN NULL;
+  END;
+  BEGIN
+    DELETE FROM public.account_balances WHERE false;
+    RAISE EXCEPTION 'authenticated unexpectedly deleted through account_balances';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+RESET ROLE;
+SELECT pass('authenticated INSERT, UPDATE, and DELETE attempts through account_balances are denied');
 
 SELECT * FROM finish();
 ROLLBACK;

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, CreditCard, Users, LayoutDashboard, Wallet, Receipt, Settings, ArrowRightLeft, CalendarDays, Landmark, Menu, X, CloudUpload, ChartNoAxesCombined } from 'lucide-react'
+import { Plus, CreditCard, Users, LayoutDashboard, Wallet, Receipt, Settings, ArrowRightLeft, CalendarDays, Landmark, Menu, X, CloudUpload, ChartNoAxesCombined, Calculator, PiggyBank, ShoppingBasket, HeartPulse } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
-import TransactionModal from './TransactionModal'
+import TransactionModal, { type TransactionDraft } from './TransactionModal'
 import AddDebtModal from './AddDebtModal'
+import { useOptionalFeatures } from '../lib/optionalFeatures'
+import PageGuidance from './PageGuidance'
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [isFabOpen, setIsFabOpen] = useState(false)
@@ -10,9 +12,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [isDebtModalOpen, setIsDebtModalOpen] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [sharedFile, setSharedFile] = useState<File | null>(null)
+  const [transactionDraft, setTransactionDraft] = useState<TransactionDraft | null>(null)
   const modalHistoryRef = React.useRef(false)
   
   const location = useLocation()
+  const { flags } = useOptionalFeatures()
+
+  useEffect(() => {
+    const openDraft = (event: Event) => {
+      const draft = (event as CustomEvent<TransactionDraft>).detail
+      if (!draft || !['expense', 'income', 'transfer'].includes(draft.type)) return
+      setTransactionDraft(draft)
+      setIsTxModalOpen(true)
+    }
+    window.addEventListener('rr:transaction-draft', openDraft)
+    return () => window.removeEventListener('rr:transaction-draft', openDraft)
+  }, [])
 
   useEffect(() => {
     const modalOpen = isTxModalOpen || isDebtModalOpen
@@ -52,6 +67,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: 'Accounts', path: '/accounts', icon: Wallet },
     { name: 'Debts', path: '/debts', icon: Receipt },
     { name: 'Contacts', path: '/contacts', icon: Users },
+    ...(flags.budgets ? [{ name: 'Budgets', path: '/budgets', icon: Wallet }] : []),
+    ...(flags.calculators ? [{ name: 'Calculators', path: '/calculators', icon: Calculator }] : []),
+    ...(flags.savings_goals ? [{ name: 'Savings goals', path: '/savings-goals', icon: PiggyBank }] : []),
+    ...(flags.shopping_lists ? [{ name: 'Shopping lists', path: '/shopping-lists', icon: ShoppingBasket }] : []),
+    ...(flags.financial_health_score ? [{ name: 'Financial wellness', path: '/financial-health', icon: HeartPulse }] : []),
     { name: 'Settings', path: '/settings', icon: Settings },
   ]
 
@@ -69,6 +89,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: 'Debts', path: '/debts', icon: Receipt },
     { name: 'Contacts', path: '/contacts', icon: Users },
     { name: 'Offline Queue', path: '/offline', icon: CloudUpload },
+    ...(flags.budgets ? [{ name: 'Budgets', path: '/budgets', icon: Wallet }] : []),
+    ...(flags.calculators ? [{ name: 'Calculators', path: '/calculators', icon: Calculator }] : []),
+    ...(flags.savings_goals ? [{ name: 'Savings goals', path: '/savings-goals', icon: PiggyBank }] : []),
+    ...(flags.shopping_lists ? [{ name: 'Shopping lists', path: '/shopping-lists', icon: ShoppingBasket }] : []),
+    ...(flags.financial_health_score ? [{ name: 'Financial wellness', path: '/financial-health', icon: HeartPulse }] : []),
     { name: 'Settings', path: '/settings', icon: Settings },
   ]
 
@@ -126,6 +151,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 h-screen overflow-y-auto relative z-0 pb-28 md:pb-0">
+        <PageGuidance page={location.pathname} />
         {children}
       </main>
 
@@ -212,7 +238,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </button>
       </div>
 
-      <TransactionModal isOpen={isTxModalOpen} onClose={() => { setIsTxModalOpen(false); setSharedFile(null) }} initialFile={sharedFile} />
+      <TransactionModal isOpen={isTxModalOpen} onClose={() => { setIsTxModalOpen(false); setSharedFile(null); setTransactionDraft(null) }} initialFile={sharedFile} initialDraft={transactionDraft} />
       <AddDebtModal isOpen={isDebtModalOpen} onClose={() => setIsDebtModalOpen(false)} />
     </div>
   )

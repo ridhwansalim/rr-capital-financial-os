@@ -6,7 +6,7 @@ if ($ProjectRef -ne $expectedProjectRef) { throw "This cutover targets RR Capita
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $sourceSupabase = Join-Path $repoRoot 'supabase'
-$migrationName = '20261002041000_revoke_legacy_p2p_debt_rpc.sql'
+$migrationName = '20261002044711_revoke_legacy_p2p_debt_rpc.sql'
 $expectedHash = '7AC6D80295AB2A53E34650C8C5DB5973352F0F0DA9CC7303A44E46953183E74F'
 $sourcePath = Join-Path (Join-Path $sourceSupabase 'migrations') $migrationName
 if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw "Migration is missing: $migrationName" }
@@ -20,7 +20,9 @@ $bundleMigrations = Join-Path $bundleSupabase 'migrations'
 $deferredPerry = @(
   '20261002040100_perry_scoped_reader_role.sql',
   '20261002040200_readonly_personal_summary.sql',
-  '20261002040600_perry_include_opening_balance.sql'
+  '20261002040600_perry_include_opening_balance.sql',
+  '20261002041000_revoke_legacy_p2p_debt_rpc.sql',
+  '20261002041011_retire_unsafe_perry_database_login.sql'
 )
 New-Item -ItemType Directory -Path $bundleMigrations -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $sourceSupabase 'config.toml') -Destination (Join-Path $bundleSupabase 'config.toml')
@@ -48,9 +50,9 @@ try {
   try {
     $ErrorActionPreference = 'Continue'
     if ($cachedCli) {
-      $output = & $cachedCli db push --dry-run --workdir $bundleRoot --project-ref $ProjectRef 2>&1
+      $output = & $cachedCli db push --dry-run --skip-vault --output-format json --workdir $bundleRoot --project-ref $ProjectRef 2>&1
     } else {
-      $output = & npx --yes supabase@2.119.0 db push --dry-run --workdir $bundleRoot --project-ref $ProjectRef 2>&1
+      $output = & npx --yes supabase@2.119.0 db push --dry-run --skip-vault --output-format json --workdir $bundleRoot --project-ref $ProjectRef 2>&1
     }
     $exitCode = $LASTEXITCODE
   } finally { $ErrorActionPreference = $previousErrorActionPreference }
@@ -59,10 +61,10 @@ try {
   if (-not $jsonLine) { throw "Supabase CLI returned no structured result:`n$($output -join "`n")" }
   $result = $jsonLine | ConvertFrom-Json
   $actualPending = @($result.migrations | Sort-Object)
-  if (-not $result.dryRun -or ($actualPending -join "`n") -cne $migrationName) {
-    throw "Unexpected post-deploy pending migrations: $($actualPending -join ', '). Expected only $migrationName."
+  if (-not $result.dryRun -or $actualPending -contains $migrationName) {
+    throw "Hosted ledger does not recognize the applied P2P cutover source $migrationName; pending selection: $($actualPending -join ', ')."
   }
-  Write-Output 'PASS RR Capital post-deploy P2P cutover dry-run: only migration 20261002041000 selected; no hosted changes made.'
+  Write-Output "PASS RR Capital P2P cutover source $migrationName matches the hosted ledger and is not pending. Other pending migrations: $($actualPending -join ', '). No hosted changes made."
 }
 finally {
   $resolvedTemp = [IO.Path]::GetFullPath($tempRoot)

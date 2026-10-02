@@ -6,6 +6,7 @@ import { retryOutboxItem, retryOutboxItems } from '../lib/sync'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDateTime } from '../lib/financeDate'
 import { cacheForOwner, visibleOfflineItems } from '../lib/offlineOwnership'
+import PageHeader from '../components/PageHeader'
 
 export default function OfflineQueue() {
   const [ownerId, setOwnerId] = useState<string | null>(null)
@@ -62,10 +63,7 @@ export default function OfflineQueue() {
   }
 
   return <div className="p-4 sm:p-6 w-full max-w-4xl mx-auto text-white pb-32">
-    <div className="flex flex-wrap items-start justify-between gap-4 mb-8">
-      <div><h1 className="text-3xl font-bold">Offline transactions</h1><p className="text-slate-400 mt-1">Transactions saved on this device until the server confirms them.</p></div>
-      <button onClick={() => void retry()} disabled={!online || busy || !visibleItems.length} className="flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 font-semibold"><RefreshCw className={`w-4 h-4 ${busy ? 'animate-spin' : ''}`} />Retry all</button>
-    </div>
+    <PageHeader title="Offline transactions" description="Transactions saved on this device until the server confirms them." action={<button onClick={() => void retry()} disabled={!online || busy || !visibleItems.length} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 font-semibold hover:bg-emerald-500 disabled:opacity-40 sm:w-auto sm:py-2"><RefreshCw className={`w-4 h-4 ${busy ? 'animate-spin' : ''}`} />Retry all</button>} />
     {!online && <div className="flex items-center gap-2 p-4 mb-5 rounded-xl bg-amber-500/10 text-amber-300 border border-amber-500/20"><WifiOff className="w-5 h-5" />You are offline. Retry is available when your connection returns.</div>}
     {message && <p role="alert" className="text-rose-300 mb-4">{message}</p>}
     <p className="text-sm text-slate-400 mb-4">{visibleItems.length} awaiting confirmation{visibleItems.length ? ` · ${visibleItems.filter(item => item.sync_status === 'failed').length} need attention` : ''}</p>
