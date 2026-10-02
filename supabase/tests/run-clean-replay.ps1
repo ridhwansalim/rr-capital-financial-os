@@ -58,7 +58,7 @@ if ($CoreOnly) {
   # RR Capital release. Prove the financial schema replays alone.
   $migrations = @($migrations | Where-Object { $_.BaseName -notmatch $perryMigrationPattern })
   $testFiles = @($testFiles | Where-Object {
-    $_.Name -notin @('perry_summary_security.test.sql', 'perry_login_retirement.test.sql')
+    $_.Name -ne 'perry_summary_security.test.sql'
   })
 } elseif ($StagedThenPerry) {
   $perryMigrations = @($migrations | Where-Object { $_.BaseName -match $perryMigrationPattern })
