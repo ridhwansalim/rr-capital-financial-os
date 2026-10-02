@@ -75,6 +75,7 @@ export default function Calendar() {
   
   const [isStartPopoverOpen, setIsStartPopoverOpen] = useState(false)
   const [isEndPopoverOpen, setIsEndPopoverOpen] = useState(false)
+  const [showEmiAdvanced, setShowEmiAdvanced] = useState(false)
   const popoverRef = useRef<HTMLDivElement>(null)
   const resetEmiForm = () => {
     setEmiType('personal')
@@ -90,6 +91,7 @@ export default function Calendar() {
     setIsFocused(false)
     setIsStartPopoverOpen(false)
     setIsEndPopoverOpen(false)
+    setShowEmiAdvanced(false)
   }
   const emiFormDirty = Boolean(
     newEmi.name || newEmi.amount || principal || processingFee || selectedEntity || newShadowName || searchQuery ||
@@ -486,16 +488,19 @@ export default function Calendar() {
 
       {/* ADD EMI MODAL */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="w-full max-w-md p-4 sm:p-5 rounded-3xl backdrop-blur-2xl bg-slate-900 border border-white/20 shadow-2xl relative animate-in zoom-in-95 text-white max-h-[calc(100dvh-2rem)] overflow-y-auto" ref={popoverRef}>
-            <button onClick={() => { if (!emiFormDirty || window.confirm('Discard this recurring payment form?')) { resetEmiForm(); setIsAddModalOpen(false) } }} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10"><X className="w-5 h-5" /></button>
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-md max-h-[min(88dvh,44rem)] flex flex-col rounded-t-3xl sm:rounded-3xl backdrop-blur-2xl bg-slate-900 border border-white/20 shadow-2xl relative animate-in slide-in-from-bottom-4 sm:zoom-in-95 text-white" ref={popoverRef}>
+            <div className="shrink-0 px-4 pt-4 pb-3 sm:px-5 border-b border-white/10">
+            <button onClick={() => { if (!emiFormDirty || window.confirm('Discard this recurring payment form?')) { resetEmiForm(); setIsAddModalOpen(false) } }} className="absolute top-3 right-3 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10"><X className="w-5 h-5" /></button>
             
             <div className="flex items-center mb-4 pr-10">
               <div className="p-2.5 bg-indigo-500/20 rounded-2xl mr-3 border border-indigo-500/20"><CalendarDays className="w-5 h-5 text-indigo-400" /></div>
               <div><h2 className="text-lg font-bold">New EMI Schedule</h2><p className="text-xs text-white/45">Set the payment and schedule dates</p></div>
             </div>
 
-            <form onSubmit={handleAddEMI} className="space-y-3">
+            </div>
+            <form onSubmit={handleAddEMI} className="min-h-0 flex flex-col">
+            <div className="min-h-0 overflow-y-auto overscroll-contain px-4 py-3 sm:px-5 space-y-3">
               <div className="flex p-1 bg-black/20 rounded-xl backdrop-blur-sm border border-white/10">
                 {(['personal', 'lent', 'borrowed'] as const).map((t) => (
                   <button key={t} type="button" onClick={() => setEmiType(t)} className={`flex-1 py-2 text-xs md:text-sm font-bold rounded-lg capitalize transition-all duration-200 ${emiType === t ? 'bg-indigo-500 text-white shadow-sm' : 'text-white/50 hover:text-white/80'}`}>
@@ -596,7 +601,7 @@ export default function Calendar() {
               </div>
 
               {emiType === 'personal' && (
-                <details className="group rounded-xl border border-white/10 bg-black/15 px-3 py-2">
+                <details className="group rounded-xl border border-white/10 bg-black/15 px-3 py-2" open={showEmiAdvanced} onToggle={event => setShowEmiAdvanced((event.currentTarget as HTMLDetailsElement).open)}>
                   <summary className="cursor-pointer list-none text-xs font-semibold text-white/65 [&::-webkit-details-marker]:hidden">Advanced · credit balance tracking <span className="float-right text-white/35 transition-transform group-open:rotate-180">⌄</span></summary>
                   <div className="pt-3 space-y-1">
                     <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Credit or Pay Later account (optional)</label>
@@ -609,9 +614,12 @@ export default function Calendar() {
                 </details>
               )}
 
-              <button type="submit" disabled={isSubmitting} className="w-full flex items-center justify-center py-3 mt-1 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)] disabled:opacity-50">
+            </div>
+              <div className="shrink-0 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 border-t border-white/10 bg-slate-900/95">
+              <button type="submit" disabled={isSubmitting} className="w-full flex items-center justify-center py-3 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)] disabled:opacity-50">
                 {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : emiType === 'personal' ? 'Save Personal EMI' : 'Send EMI Request'}
               </button>
+              </div>
             </form>
           </div>
         </div>
