@@ -82,7 +82,7 @@ export default function Settings() {
               if (error) throw error
               setGeminiKeyConfigured(keyStatus?.configured === true)
             })
-            .catch(error => console.warn('Could not check Gemini key status:', error))
+            .catch(() => console.warn('Could not check Gemini key status'))
             .finally(() => setGeminiStatusLoading(false))
 
           const { data } = await supabase.from('profiles').select('full_name, username, theme_mode, theme_accent, ai_model, ai_persona, telegram_chat_id, is_biometric_enabled, registered_devices').eq('id', user.id).single()
@@ -105,11 +105,11 @@ export default function Settings() {
         // Keep the settings page responsive while it runs.
         setHasPinConfigured(hasAppPinConfigured())
         void migrateLegacyAppPin().then(() => setHasPinConfigured(hasAppPinConfigured()))
-          .catch(error => console.warn('Could not migrate the local app PIN:', error))
+          .catch(() => console.warn('Could not migrate the local app PIN'))
         setSavedPin('')
 
-      } catch (error) {
-        console.error('Error fetching settings:', error)
+      } catch {
+        console.error('Could not load settings')
       } finally {
         setIsLoading(false)
       }

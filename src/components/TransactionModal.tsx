@@ -156,8 +156,8 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
         }
         
         setSearchResults(combined)
-      } catch (err) {
-        console.error('Search error:', err)
+      } catch {
+        console.error('Transaction contact and profile search failed')
       } finally {
         setIsSearching(false)
       }

@@ -43,8 +43,8 @@ export default function Settings() {
         const savedAutoLock = localStorage.getItem('financial_os_autolock') === 'true'
         setAutoLock(savedAutoLock)
 
-      } catch (error) {
-        console.error('Error fetching settings:', error)
+      } catch {
+        console.error('Could not load profile settings')
       } finally {
         setIsLoading(false)
       }
@@ -69,8 +69,8 @@ export default function Settings() {
 
       if (error) throw error
       setOriginalProfile(draftProfile)
-    } catch (error) {
-      console.error('Error saving profile:', error)
+    } catch {
+      console.error('Could not save profile')
     } finally {
       setIsSavingProfile(false)
     }

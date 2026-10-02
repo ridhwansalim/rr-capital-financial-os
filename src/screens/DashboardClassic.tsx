@@ -38,17 +38,17 @@ export default function Dashboard() {
           supabase.from('recurring_emis').select('amount, start_date, end_date'),
           supabase.from('chittis').select('monthly_installment, start_date, duration_months').eq('status', 'ACTIVE'),
         ])
-        if (balanceResult.error) console.warn('Could not fetch balances:', balanceResult.error)
-        if (accountResult.error) console.warn('Could not fetch accounts:', accountResult.error)
-        if (emiResult.error) console.warn('Could not fetch recurring commitments:', emiResult.error)
-        if (chittiResult.error) console.warn('Could not fetch active chittis:', chittiResult.error)
+        if (balanceResult.error) console.warn('Could not fetch dashboard balances')
+        if (accountResult.error) console.warn('Could not fetch dashboard accounts')
+        if (emiResult.error) console.warn('Could not fetch recurring commitments')
+        if (chittiResult.error) console.warn('Could not fetch active chittis')
         balData = balanceResult.data || []
         accData = accountResult.data || []
         emiData = emiResult.data || []
         chittiData = chittiResult.data || []
         setNetWorth(balData.reduce((sum, acc) => sum + Number(acc.balance), 0))
-      } catch (err) {
-        console.warn('Could not fetch dashboard account and commitment summaries:', err)
+      } catch {
+        console.warn('Could not fetch dashboard account and commitment summaries')
       }
 
       let currentLiquid = 0
@@ -61,8 +61,8 @@ export default function Dashboard() {
         })
         setAccounts(merged)
         setLiquidCash(currentLiquid)
-      } catch (err) {
-        console.warn('Could not fetch accounts:', err)
+      } catch {
+        console.warn('Could not assemble dashboard accounts')
       } finally {
         setAccountsLoaded(true)
       }
@@ -104,8 +104,8 @@ export default function Dashboard() {
         }
 
         setUpcomingOutflow(totalOutflow)
-      } catch (err) {
-        console.warn('Could not fetch obligations for forecast:', err)
+      } catch {
+        console.warn('Could not calculate dashboard forecast')
       }
 
       // Start the recent-activity request before paging the selected date range,
@@ -145,8 +145,8 @@ export default function Dashboard() {
           byDay.set(day, row)
         })
         setCashFlowDays([...byDay.values()].slice(-31))
-      } catch (err) {
-        console.warn('Could not fetch this month\'s cash flow:', err)
+      } catch {
+        console.warn('Could not calculate dashboard cash flow')
       }
 
       try {
@@ -183,8 +183,8 @@ export default function Dashboard() {
           })
           setRecentTx(formattedTx)
         }
-      } catch (err) {
-        console.error('Failed to fetch transactions:', err)
+      } catch {
+        console.error('Could not load recent dashboard activity')
       }
     }
     fetchDashboardData()

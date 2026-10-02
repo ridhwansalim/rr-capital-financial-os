@@ -150,8 +150,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             store.delete('latest-image')
           }
         }
-      } catch (err) {
-        console.log('No shared files found or DB error:', err)
+      } catch {
+        console.log('No shared file is available to import')
       }
     }
     checkSharedFiles()

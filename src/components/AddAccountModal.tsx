@@ -62,7 +62,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
       handleClose(true)
       onSuccess()
     } catch (error: any) {
-      console.error('Error creating account:', error.message)
+      console.error('Account creation failed')
       alert(`Failed to create account: ${error.message}`)
     } finally {
       setIsSubmitting(false)

@@ -95,8 +95,8 @@ export default function Ledger() {
       })
 
       setTransactions(formattedData)
-    } catch (error) {
-      console.error('Error fetching transactions:', error)
+    } catch {
+      console.error('Could not load ledger entries')
     } finally {
       setIsLoading(false)
     }

@@ -138,7 +138,7 @@ export default function Calendar() {
       const { data: emiData, error: emiError } = emiResult
       if (emiError) throw emiError
       if (emiData) setEmis(emiData)
-    } catch (error) { console.error(error) } finally { setIsLoading(false) }
+    } catch { console.error('Could not load calendar data') } finally { setIsLoading(false) }
   }
 
   useEffect(() => { fetchEngineData() }, [])
@@ -167,7 +167,7 @@ export default function Calendar() {
           })
         }
         setSearchResults(combined)
-      } catch (err) { console.error(err) } finally { setIsSearching(false) }
+      } catch { console.error('Calendar counterparty search failed') } finally { setIsSearching(false) }
     }, 500)
     return () => clearTimeout(delayDebounceFn)
   }, [searchQuery, selectedEntity, newShadowName, currentUserId])

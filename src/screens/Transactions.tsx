@@ -21,7 +21,7 @@ export default function Transactions() {
     async function loadAccounts() {
       // FIX: Removed the invalid 'AS' keyword. Just fetching 'id' directly.
       const { data, error } = await supabase.from('accounts').select('id, name, type')
-      if (error) console.error("Error fetching accounts:", error)
+      if (error) console.error('Could not load transaction account choices')
       if (data) setAccounts(data)
     }
     loadAccounts()

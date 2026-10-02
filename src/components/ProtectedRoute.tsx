@@ -28,8 +28,8 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   // page's initial bundle and startup work smaller.
   useEffect(() => {
     if (!isAuthenticated) return
-    void import('../lib/sync').catch(error => {
-      console.error('Could not start offline transaction sync:', error)
+    void import('../lib/sync').catch(() => {
+      console.error('Could not start offline transaction sync')
     })
   }, [isAuthenticated])
 

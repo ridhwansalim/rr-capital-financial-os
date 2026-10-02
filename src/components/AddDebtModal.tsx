@@ -75,8 +75,8 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
         })
         setAccounts(merged)
       }
-    } catch (err) {
-      console.error(err)
+    } catch {
+      console.error('Could not load debt form choices')
     }
   }
 
@@ -107,8 +107,8 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
           })
         }
         setSearchResults(combined)
-      } catch (err) {
-        console.error('Search error:', err)
+      } catch {
+        console.error('Debt counterparty search failed')
       } finally {
         setIsSearching(false)
       }
@@ -198,7 +198,7 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
       handleClose(true)
       if (window.location.pathname === '/debts') window.location.reload()
     } catch (error: any) {
-      console.error('Error saving obligation:', error)
+      console.error('Debt or IOU submission failed')
       alert(`Failed to save obligation: ${error.message}`)
     } finally {
       setIsSubmitting(false)

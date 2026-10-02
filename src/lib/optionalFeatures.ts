@@ -38,8 +38,8 @@ export function useOptionalFeatures() {
         const nextFlags = await fetchFeatureFlags(force)
         if (!active || revision !== requestRevision) return
         setFlags(nextFlags)
-      } catch (error) {
-        console.warn('Could not load optional feature settings:', error)
+      } catch {
+        console.warn('Could not load optional feature settings')
         if (active && revision === requestRevision) setFlags({})
       } finally {
         if (active && revision === requestRevision) setLoading(false)

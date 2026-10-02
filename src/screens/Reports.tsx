@@ -97,9 +97,9 @@ export default function Reports() {
         return { ...tx, amount: Number(tx.amount), fee_amount: Number(tx.fee_amount || 0), kind, category: category?.name || 'Uncategorized', color: category?.color || '#64748b', running }
       }))
       setError('')
-    } catch (cause) {
+    } catch {
       if (request !== requestVersion.current) return
-      console.error('Could not load report:', cause)
+      console.error('Could not load report data')
       setError('Reports could not be loaded. Please check your connection and try again.')
     } finally { if (request === requestVersion.current) setLoadedRange(rangeKey) }
   })

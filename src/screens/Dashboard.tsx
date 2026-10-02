@@ -62,10 +62,10 @@ function DashboardEditorial() {
           supabase.from('recurring_emis').select('name, amount, start_date, end_date, status').eq('status', 'ACTIVE'),
           supabase.from('chittis').select('id, name, monthly_installment, start_date, duration_months, months_paid, payout_received, received_month_number').eq('status', 'ACTIVE'),
         ])
-        if (balanceResult.error) console.warn('Could not fetch balances:', balanceResult.error)
-        if (accountResult.error) console.warn('Could not fetch accounts:', accountResult.error)
-        if (emiResult.error) console.warn('Could not fetch recurring commitments:', emiResult.error)
-        if (chittiResult.error) console.warn('Could not fetch active chittis:', chittiResult.error)
+        if (balanceResult.error) console.warn('Could not fetch dashboard balances')
+        if (accountResult.error) console.warn('Could not fetch dashboard accounts')
+        if (emiResult.error) console.warn('Could not fetch recurring commitments')
+        if (chittiResult.error) console.warn('Could not fetch active chittis')
         balData = balanceResult.data || []
         accData = accountResult.data || []
         emiData = emiResult.data || []
@@ -73,8 +73,8 @@ function DashboardEditorial() {
         setActiveEmis(emiData)
         setActiveChittis(chittiData)
         setNetWorth(balData.reduce((sum, acc) => sum + Number(acc.balance), 0))
-      } catch (err) {
-        console.warn('Could not fetch dashboard account and commitment summaries:', err)
+      } catch {
+        console.warn('Could not fetch dashboard account and commitment summaries')
       }
 
       let currentLiquid = 0
@@ -87,8 +87,8 @@ function DashboardEditorial() {
         })
         setAccounts(merged)
         setLiquidCash(currentLiquid)
-      } catch (err) {
-        console.warn('Could not fetch accounts:', err)
+      } catch {
+        console.warn('Could not assemble dashboard accounts')
       } finally {
         setAccountsLoaded(true)
       }
@@ -141,8 +141,8 @@ function DashboardEditorial() {
         setChittiOutflow(totalChittiOutflow)
         setUpcomingOutflow(totalEmiOutflow + totalChittiOutflow)
         setNextMonthOutflow(projectedOutflow)
-      } catch (err) {
-        console.warn('Could not fetch obligations for forecast:', err)
+      } catch {
+        console.warn('Could not calculate dashboard forecast')
       }
 
       // Start the recent-activity request before paging the selected date range,
@@ -181,8 +181,8 @@ function DashboardEditorial() {
         })), rangeStart, rangeEnd)
         setCashFlowGranularity(cashFlow.granularity)
         setCashFlowDays(cashFlow.buckets)
-      } catch (err) {
-        console.warn('Could not fetch this month\'s cash flow:', err)
+      } catch {
+        console.warn('Could not calculate dashboard cash flow')
       }
 
       try {
@@ -219,8 +219,8 @@ function DashboardEditorial() {
           })
           setRecentTx(formattedTx)
         }
-      } catch (err) {
-        console.error('Failed to fetch transactions:', err)
+      } catch {
+        console.error('Could not load recent dashboard activity')
       }
     }
     fetchDashboardData()

@@ -81,7 +81,7 @@ export default function PendingRequests() {
       setRequests(enrich(allIncoming))
       setDeclinedAlerts(enrich(allDeclined))
 
-    } catch (error) { console.error("Inbox Error:", error) } finally { setIsLoading(false) }
+    } catch { console.error('Could not load request inbox') } finally { setIsLoading(false) }
   }, [])
 
   useEffect(() => { void fetchInboxData() }, [fetchInboxData])

@@ -23,8 +23,8 @@ self.addEventListener('fetch', (event) => {
           tx.objectStore('shared-files').put(image, 'latest-image')
           await new Promise(resolve => tx.oncomplete = resolve)
         }
-      } catch (err) {
-        console.error('Share target interception failed:', err)
+      } catch {
+        console.error('Share target interception failed')
       }
       
       return Response.redirect('/', 303)

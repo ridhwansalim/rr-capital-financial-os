@@ -106,8 +106,8 @@ export default function Debts() {
       const sortedDebts = Object.values(grouped).sort((a, b) => Math.abs(b.netBalance) - Math.abs(a.netBalance))
       setDebts(sortedDebts)
 
-    } catch (error: any) {
-      console.error('Error fetching debts:', error)
+    } catch {
+      console.error('Could not load debts and IOUs')
     } finally {
       setIsLoading(false)
     }

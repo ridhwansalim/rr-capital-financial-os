@@ -62,7 +62,7 @@ export default function EditAccountModal({ isOpen, onClose, onSuccess, account }
       handleClose(true)
       onSuccess()
     } catch (error: any) {
-      console.error('Error updating account:', error.message)
+      console.error('Account update failed')
       alert(`Failed to update account: ${error.message}`)
     } finally {
       setIsSubmitting(false)
@@ -91,7 +91,7 @@ export default function EditAccountModal({ isOpen, onClose, onSuccess, account }
       handleClose(true)
       onSuccess()
     } catch (error: any) {
-      console.error('Error deleting account:', error.message)
+      console.error('Account deletion failed')
       alert(`Delete Failed: ${error.message}`)
       setIsConfirmingDelete(false)
     } finally {

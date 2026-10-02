@@ -48,7 +48,7 @@ export default function Accounts() {
       }
 
       const balData = balanceResult.error ? [] : (balanceResult.data || [])
-      if (balanceResult.error) console.warn('View error (balances skipped):', balanceResult.error)
+      if (balanceResult.error) console.warn('Account balances are temporarily unavailable')
 
       const merged = accData.map(acc => {
         const matchedBalance = balData.find(b => b.id === acc.id)
@@ -68,8 +68,8 @@ export default function Accounts() {
       } else {
         setHealthSettings({})
       }
-    } catch (error) {
-      console.error('Error fetching accounts:', error)
+    } catch {
+      console.error('Could not load accounts')
     } finally {
       setIsLoading(false)
     }

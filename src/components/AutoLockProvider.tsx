@@ -57,8 +57,8 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
-    void migrateLegacyAppPin().catch((migrationError) => {
-      console.error('Could not upgrade the stored app PIN.', migrationError)
+    void migrateLegacyAppPin().catch(() => {
+      console.error('Could not upgrade the stored app PIN')
     })
 
     const handleActivity = () => {
@@ -169,8 +169,8 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
       setIsLocked(false)
       setPinInput('')
       localStorage.setItem('financial_os_last_active', Date.now().toString())
-    } catch (err: any) {
-      console.warn("Biometric auth failed", err)
+    } catch {
+      console.warn('Biometric authentication failed')
       setError(true)
       setTimeout(() => setError(false), 800)
     }

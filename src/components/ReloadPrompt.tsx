@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { RefreshCw, X, ArrowDownToLine } from 'lucide-react'
 
@@ -19,8 +19,8 @@ export default function ReloadPrompt() {
         })
       }
     },
-    onRegisterError(error) {
-      console.error('SW registration error', error)
+    onRegisterError() {
+      console.error('Service worker registration failed')
     }
   })
 

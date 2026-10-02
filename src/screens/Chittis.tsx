@@ -81,8 +81,8 @@ export default function Chittis() {
 
       if (chittiRes.data) setChittis(chittiRes.data)
       if (accRes.data) setAccounts(accRes.data)
-    } catch (error) {
-      console.error('Error fetching chittis:', error)
+    } catch {
+      console.error('Could not load Chitti plans')
     } finally {
       setIsLoading(false)
     }
@@ -148,7 +148,7 @@ export default function Chittis() {
 
       handleCloseModal(true)
       fetchData()
-    } catch (err) {
+    } catch {
       alert("Failed to save Chitti plan.")
     } finally {
       setIsSubmitting(false)
@@ -178,7 +178,7 @@ export default function Chittis() {
       setClaimFee('')
       setClaimAccountId('')
       fetchData()
-    } catch (err) {
+    } catch {
       alert("Failed to claim pot.")
     } finally {
       setIsSubmitting(false)
@@ -210,8 +210,8 @@ export default function Chittis() {
       setPayAccountId('')
       setPayDate(toIndiaDateInputValue())
       fetchData()
-    } catch (err: any) {
-      console.error(err)
+    } catch {
+      console.error('Chitti installment payment failed')
       alert("Failed to log installment. Please ensure an account is selected.")
     } finally {
       setIsSubmitting(false)
@@ -245,7 +245,7 @@ export default function Chittis() {
       const { error } = await supabase.from('chittis').delete().eq('id', id)
       if (error) throw error
       fetchData()
-    } catch (err) {
+    } catch {
       alert("Failed to delete Chitti plan.")
     }
   }

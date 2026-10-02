@@ -46,8 +46,8 @@ export default function Contacts() {
 
       if (error) throw error
       if (data) setContacts(data)
-    } catch (error) {
-      console.error('Error fetching contacts:', error)
+    } catch {
+      console.error('Could not load contacts')
     } finally {
       setIsLoading(false)
     }
@@ -108,8 +108,8 @@ export default function Contacts() {
         const { data, error } = await supabase.rpc('search_users', { search_term: searchQuery.trim() })
         if (error) throw error
         if (data) setSearchResults(data.slice(0, 5))
-      } catch (error) {
-        console.error('Search error:', error)
+      } catch {
+        console.error('Contact counterparty search failed')
       } finally {
         setIsSearching(false)
       }
