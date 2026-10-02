@@ -13,7 +13,10 @@ INSERT INTO auth.users(id, email, raw_user_meta_data) VALUES
 INSERT INTO public.accounts(id, owner_id, name, type, credit_limit, opening_balance, opening_date) VALUES
   ('10000000-0000-4000-a000-000000000423', '00000000-0000-4000-a000-000000000420', 'Other user Pay Later', 'pay_later', 100, 0, current_date);
 INSERT INTO public.recurring_emis(id, owner_id, name, amount, start_date, end_date, type, status, initiator_account_id, credit_account_id)
-VALUES ('20000000-0000-4000-a000-000000000419', '00000000-0000-4000-a000-000000000419', 'Pay Later purchase EMI', 25, current_date, current_date + interval '1 month', 'personal', 'ACTIVE', '10000000-0000-4000-a000-000000000419', '10000000-0000-4000-a000-000000000421');
+VALUES ('20000000-0000-4000-a000-000000000419', '00000000-0000-4000-a000-000000000419', 'Pay Later purchase EMI', 25,
+        (statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date,
+        ((statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date + interval '1 month')::date,
+        'personal', 'ACTIVE', '10000000-0000-4000-a000-000000000419', '10000000-0000-4000-a000-000000000421');
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-a000-000000000419', true);
 SET LOCAL ROLE authenticated;
 
