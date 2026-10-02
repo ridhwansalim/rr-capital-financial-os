@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { readReceiptPayload } from "../_shared/receiptPayload.ts"
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -7,8 +8,6 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 })
 
-const maxImageBytes = 8 * 1024 * 1024
-const allowedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"])
 const allowedOrigins = new Set([
   "https://financial-os-orcin-ten.vercel.app",
   "http://localhost:5173",
@@ -57,31 +56,13 @@ serve(async (req) => {
     return jsonResponse({ error: "Add your Gemini API key in Settings to scan receipts." }, 409, headers)
   }
 
-  const contentLength = Number(req.headers.get("content-length") || 0)
-  if (contentLength > 11_500_000) return jsonResponse({ error: "Receipt image is too large." }, 413, headers)
-
-  let payload: { mimeType?: unknown; imageBase64?: unknown }
-  try {
-    const raw = await req.text()
-    if (new TextEncoder().encode(raw).byteLength > 11_500_000) {
-      return jsonResponse({ error: "Receipt image is too large." }, 413, headers)
-    }
-    payload = JSON.parse(raw)
-  } catch {
-    return jsonResponse({ error: "Invalid request." }, 400, headers)
+  const parsed = await readReceiptPayload(req)
+  if (!parsed.ok) {
+    return jsonResponse({ error: parsed.status === 413
+      ? "Receipt image must be smaller than 8 MB."
+      : "Choose a supported receipt image." }, parsed.status, headers)
   }
-
-  if (typeof payload.mimeType !== "string" || !allowedMimeTypes.has(payload.mimeType) ||
-      typeof payload.imageBase64 !== "string" ||
-      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(payload.imageBase64)) {
-    return jsonResponse({ error: "Choose a supported receipt image." }, 400, headers)
-  }
-
-  const padding = payload.imageBase64.endsWith("==") ? 2 : payload.imageBase64.endsWith("=") ? 1 : 0
-  const imageBytes = Math.floor(payload.imageBase64.length * 3 / 4) - padding
-  if (imageBytes < 1 || imageBytes > maxImageBytes) {
-    return jsonResponse({ error: "Receipt image must be smaller than 8 MB." }, 413, headers)
-  }
+  const payload = parsed.value
 
   const { data: allowed, error: quotaError } = await supabase.rpc("consume_receipt_scan_quota", {
     p_user_id: user.id,
