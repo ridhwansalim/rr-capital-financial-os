@@ -16,6 +16,7 @@ interface EMI {
   end_date: string | null
   account_id: string | null
   initiator_account_id: string | null
+  credit_account_id: string | null
   status: string
   type: string
   owner_id: string
@@ -55,7 +56,7 @@ export default function Calendar() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   const [emiType, setEmiType] = useState<'personal' | 'lent' | 'borrowed'>('personal')
-  const [newEmi, setNewEmi] = useState({ name: '', amount: '', account_id: '' })
+  const [newEmi, setNewEmi] = useState({ name: '', amount: '', account_id: '', credit_account_id: '' })
   const [principal, setPrincipal] = useState('')
   const [processingFee, setProcessingFee] = useState('')
   const [startDate, setStartDate] = useState<Date | undefined>(() => new Date(`${toIndiaDateInputValue()}T12:00:00`))
@@ -96,7 +97,7 @@ export default function Calendar() {
       if (!user) return
       setCurrentUserId(user.id)
 
-      const { data: accData } = await supabase.from('accounts').select('id, name').order('name')
+      const { data: accData } = await supabase.from('accounts').select('id, name, type').order('name')
       if (accData) {
         setAccounts(accData)
         if (accData.length > 0 && !newEmi.account_id) setNewEmi(prev => ({ ...prev, account_id: accData[0].id }))
@@ -161,7 +162,8 @@ export default function Calendar() {
         const payload = {
           owner_id: user.id, type: 'personal', name: newEmi.name,
           amount: parseFloat(newEmi.amount), start_date: format(startDate, 'yyyy-MM-dd'), end_date: format(endDate, 'yyyy-MM-dd'),
-          initiator_account_id: newEmi.account_id || null, status: 'ACTIVE', owner_months_paid: 0, counterparty_months_paid: 0
+          initiator_account_id: newEmi.account_id || null, status: 'ACTIVE', owner_months_paid: 0,
+          counterparty_months_paid: 0, credit_account_id: newEmi.credit_account_id || null
         }
         const { error } = await supabase.from('recurring_emis').insert(payload)
         if (error) throw error
@@ -187,7 +189,7 @@ export default function Calendar() {
       }
 
       setIsAddModalOpen(false)
-      setNewEmi({ name: '', amount: '', account_id: accounts[0]?.id || '' })
+      setNewEmi({ name: '', amount: '', account_id: accounts[0]?.id || '', credit_account_id: '' })
       setPrincipal(''); setProcessingFee(''); setStartDate(new Date(`${toIndiaDateInputValue()}T12:00:00`)); setEndDate(undefined); setSelectedEntity(null); setNewShadowName(''); setSearchQuery('')
       fetchEngineData()
     } catch (error: any) { alert(error.message) } finally { setIsSubmitting(false) }
@@ -582,6 +584,17 @@ export default function Calendar() {
                 </select>
               </div>
 
+              {emiType === 'personal' && (
+                <div className="flex flex-col space-y-1 pt-1">
+                  <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Pay down a credit or Pay Later account (optional)</label>
+                  <select value={newEmi.credit_account_id} onChange={e => setNewEmi({...newEmi, credit_account_id: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50 appearance-none" disabled={isSubmitting}>
+                    <option value="">Record EMI as expense</option>
+                    {accounts.filter(acc => ['credit', 'credit_card', 'pay_later'].includes(acc.type)).map(acc => <option key={acc.id} value={acc.id} className="text-slate-900">{acc.name}</option>)}
+                  </select>
+                  <p className="text-[11px] text-white/40">For a purchase already recorded in full, link its credit account here. Each EMI will reduce that balance without adding another expense.</p>
+                </div>
+              )}
+
               <button type="submit" disabled={isSubmitting} className="w-full flex items-center justify-center py-3.5 mt-4 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-lg transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)] disabled:opacity-50">
                 {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : emiType === 'personal' ? 'Save Personal EMI' : 'Send EMI Request'}
               </button>
@@ -598,7 +611,7 @@ export default function Calendar() {
               {payEmiData.role === 'bank' ? <ArrowUpRight className="w-5 h-5 mr-2 text-rose-400" /> : <ArrowRightLeft className="w-5 h-5 mr-2 text-amber-400" />}
               {payEmiData.role === 'bank' ? 'Log Bank Payment' : 'Send Payment to Peer'}
             </h2>
-            <p className="text-sm text-slate-400 mb-6">Logging monthly payment of <strong className="text-white">₹{Number(payEmiData.emi.amount).toLocaleString('en-IN')}</strong> for {payEmiData.emi.name}.</p>
+            <p className="text-sm text-slate-400 mb-6">Logging monthly payment of <strong className="text-white">₹{Number(payEmiData.emi.amount).toLocaleString('en-IN')}</strong> for {payEmiData.emi.name}.{payEmiData.emi.credit_account_id ? ' This transfers your payment to the linked credit account and reduces its outstanding balance.' : ''}</p>
             
             <form onSubmit={handlePayInstallment} className="space-y-4">
               {payEmiData.emi.type === 'personal' && payEmiData.role === 'bank' && (

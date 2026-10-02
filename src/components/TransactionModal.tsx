@@ -52,6 +52,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
   const [isCreatingAccount, setIsCreatingAccount] = useState(false)
   const [newAccName, setNewAccName] = useState('')
   const [newAccType, setNewAccType] = useState('bank')
+  const [newAccCreditLimit, setNewAccCreditLimit] = useState('')
   const [newAccOpeningBalance, setNewAccOpeningBalance] = useState('0')
   const [newAccOpeningDate, setNewAccOpeningDate] = useState(() => toIndiaDateInputValue())
 
@@ -63,6 +64,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
       setTransactionDate(toIndiaDateInputValue())
       setNewAccName('')
       setNewAccType('bank')
+      setNewAccCreditLimit('')
       setNewAccOpeningBalance('0')
       setNewAccOpeningDate(toIndiaDateInputValue())
       setMyContacts([])
@@ -154,7 +156,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
     try {
       if (!navigator.onLine) throw new Error('Offline')
       const [accResult, balResult] = await Promise.all([
-        supabase.from('accounts').select('id, name, type, opening_date').eq('owner_id', ownerId).order('name'),
+        supabase.from('accounts').select('id, name, type, opening_date, credit_limit').eq('owner_id', ownerId).order('name'),
         supabase.from('account_balances').select('id, balance')
       ])
       if (accResult.error) throw accResult.error
@@ -184,7 +186,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
   }
 
   const handleClose = (discard = false) => {
-    if (!discard && (amount || feeAmount || description || searchQuery || isCreatingAccount || newAccName || newAccOpeningBalance !== '0' || newAccOpeningDate !== toIndiaDateInputValue() || transactionDate !== toIndiaDateInputValue()) &&
+    if (!discard && (amount || feeAmount || description || searchQuery || isCreatingAccount || newAccName || newAccCreditLimit || newAccOpeningBalance !== '0' || newAccOpeningDate !== toIndiaDateInputValue() || transactionDate !== toIndiaDateInputValue()) &&
         !window.confirm('You have unsaved transaction details. Discard them and close?')) return
     setType('expense')
     setAmount('')
@@ -193,6 +195,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
     setTransactionDate(toIndiaDateInputValue())
     setNewAccName('')
     setNewAccType('bank')
+    setNewAccCreditLimit('')
     setNewAccOpeningBalance('0')
     setNewAccOpeningDate(toIndiaDateInputValue())
     setSearchQuery('')
@@ -262,14 +265,14 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
   }
 
   useEffect(() => {
-    if (!isOpen || !(amount || feeAmount || description || searchQuery || isCreatingAccount || newAccName || newAccOpeningBalance !== '0' || newAccOpeningDate !== toIndiaDateInputValue() || transactionDate !== toIndiaDateInputValue())) return
+    if (!isOpen || !(amount || feeAmount || description || searchQuery || isCreatingAccount || newAccName || newAccCreditLimit || newAccOpeningBalance !== '0' || newAccOpeningDate !== toIndiaDateInputValue() || transactionDate !== toIndiaDateInputValue())) return
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault()
       event.returnValue = ''
     }
     window.addEventListener('beforeunload', warnBeforeUnload)
     return () => window.removeEventListener('beforeunload', warnBeforeUnload)
-  }, [isOpen, amount, feeAmount, description, searchQuery, isCreatingAccount, newAccName, newAccOpeningBalance, newAccOpeningDate, transactionDate])
+  }, [isOpen, amount, feeAmount, description, searchQuery, isCreatingAccount, newAccName, newAccCreditLimit, newAccOpeningBalance, newAccOpeningDate, transactionDate])
 
   useEffect(() => {
     if (!isOpen) return
@@ -306,6 +309,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
         owner_id: user.id,
         name: newAccName,
         type: newAccType,
+        credit_limit: newAccType === 'credit' || newAccType === 'pay_later' ? parseFloat(newAccCreditLimit || '0') : 0,
         opening_balance: openingBalanceForAccountType(newAccOpeningBalance, newAccType),
         opening_date: newAccOpeningDate
       }]).select().single()
@@ -321,6 +325,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
       setNewAccName('')
       setNewAccType('bank')
       setNewAccOpeningBalance('0')
+      setNewAccCreditLimit('')
       setNewAccOpeningDate(toIndiaDateInputValue())
     } catch (err: any) {
       setError(err.message)
@@ -354,7 +359,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
         if (selectedEntity.type === 'contact') finalContactId = selectedEntity.id
       }
 
-      const isCreditCardSource = sourceAcc?.type === 'credit_card' || sourceAcc?.type === 'credit'
+      const isCreditCardSource = sourceAcc?.type === 'credit_card' || sourceAcc?.type === 'credit' || sourceAcc?.type === 'pay_later'
       const appliedFee = (type === 'transfer' && isCreditCardSource) ? parseFloat(feeAmount || '0') : 0
       if (!Number.isFinite(appliedFee) || appliedFee < 0 ||
           appliedFee !== Math.round(appliedFee * 100) / 100) {
@@ -431,7 +436,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
   if (!isOpen) return null
 
   const selectedAccountObj = accounts.find(a => a.id === selectedAccount)
-  const isCreditCardSource = selectedAccountObj?.type === 'credit_card' || selectedAccountObj?.type === 'credit'
+  const isCreditCardSource = selectedAccountObj?.type === 'credit_card' || selectedAccountObj?.type === 'credit' || selectedAccountObj?.type === 'pay_later'
   const showFeeInput = type === 'transfer' && isCreditCardSource
 
   return (
@@ -467,10 +472,15 @@ export default function TransactionModal({ isOpen, onClose, initialFile }: Trans
                 <option value="wallet" className="text-slate-900">Digital Wallet</option>
                 <option value="cash" className="text-slate-900">Physical Cash</option>
                 <option value="credit" className="text-slate-900">Credit Card</option>
+                <option value="pay_later" className="text-slate-900">Pay Later</option>
               </select>
             </div>
+            {(newAccType === 'credit' || newAccType === 'pay_later') && <div>
+              <label className="text-xs font-semibold text-slate-400 uppercase">Approved credit limit</label>
+              <input type="number" min="0.01" max="9999999999.99" step="0.01" required value={newAccCreditLimit} onChange={event => setNewAccCreditLimit(event.target.value)} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50" />
+            </div>}
             <div>
-              <label className="text-xs font-semibold text-slate-400 uppercase">{newAccType === 'credit' ? 'Outstanding balance' : 'Starting balance'}</label>
+              <label className="text-xs font-semibold text-slate-400 uppercase">{newAccType === 'credit' || newAccType === 'pay_later' ? 'Outstanding balance' : 'Starting balance'}</label>
               <input type="number" min="0" max="9999999999.99" step="0.01" required value={newAccOpeningBalance} onChange={event => setNewAccOpeningBalance(event.target.value)} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50" />
             </div>
             <div>

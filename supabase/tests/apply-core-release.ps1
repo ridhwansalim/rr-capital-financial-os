@@ -6,22 +6,10 @@ $ErrorActionPreference = 'Stop'
 $expectedProjectRef = 'hnebvwfgsotrknxpgpmv'
 if ($ProjectRef -cne $expectedProjectRef) { throw 'This release bundle is pinned to RR Capital only.' }
 $expectedPending = @(
-  '20261002040000_revoke_authenticated_nonrow_privileges.sql',
-  '20261002040300_ledger_retry_and_api_privilege_hardening.sql',
-  '20261002040400_dated_account_opening_balances.sql',
-  '20261002040500_installment_history_tracking.sql',
-  '20261002040700_chronological_liquid_balance_validation.sql',
-  '20261002040800_dated_settlement_payments.sql',
-  '20261002040900_idempotent_p2p_debt_requests.sql'
+  '20261002040956_add_pay_later_credit_line.sql'
 )
 $expectedHashes = @{
-  '20261002040000_revoke_authenticated_nonrow_privileges.sql' = '856BCE61488012F511C5F75628AC1412FB11FF42098F26F49F9422B2F93E964F'
-  '20261002040300_ledger_retry_and_api_privilege_hardening.sql' = '2DA283857916827D52B55AA7C2725BD030153C26C9D6BB9FE66596B3834C5915'
-  '20261002040400_dated_account_opening_balances.sql' = '68981CC57F518E117A9CC400CDFDE518A01AB9DC11C817710FC3B2097A3E0F62'
-  '20261002040500_installment_history_tracking.sql' = '3BAE7F02F745EA16BCE437FBEE4E2AD504EBCEFAE0F922B6DF85E9B24C7DDA2B'
-  '20261002040700_chronological_liquid_balance_validation.sql' = '5162208615DA7C8D024F717851DD44C28541C3683B0A6B6EE65755FA8BED7933'
-  '20261002040800_dated_settlement_payments.sql' = '82BAEEECEFCFEE348EFA522E6A3998EBB2E7E5123AC149F443689B1E9D1A2646'
-  '20261002040900_idempotent_p2p_debt_requests.sql' = '31B66570E17070CC7BF3193F52D985FFF16DAC42EA55E945FDE375E1681BB8F6'
+  '20261002040956_add_pay_later_credit_line.sql' = '2A40CE95238D93F2C7CEF75AB0850109EE18B0210ADAC94AA7E19418D1236EE3'
 }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $sourceSupabase = Join-Path $repoRoot 'supabase'
@@ -64,7 +52,7 @@ try {
   $expected = @($expectedPending | Sort-Object)
   $nl = [Environment]::NewLine
   if (-not $result.dryRun -or ($actual -join $nl) -cne ($expected -join $nl)) { throw 'Pending migration selection mismatch; apply stopped.' }
-  Write-Output 'PASS: seven reviewed core migrations selected; Perry and 410 excluded.'
+  Write-Output 'PASS: the reviewed Pay Later migration alone is selected; Perry and 410 excluded.'
   if (-not $Apply) {
     Write-Output 'DRY RUN ONLY: pass -Apply to execute the reviewed bundle.'
     return

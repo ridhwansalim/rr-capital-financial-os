@@ -6,6 +6,7 @@ export interface CachedAccount {
   type: string
   balance: number
   opening_date?: string
+  credit_limit?: number
 }
 
 export interface CachedContact {

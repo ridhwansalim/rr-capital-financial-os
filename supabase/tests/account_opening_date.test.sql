@@ -5,10 +5,10 @@ BEGIN;
 
 INSERT INTO auth.users(id, email, raw_user_meta_data) VALUES
   ('00000000-0000-4000-a000-000000000404', 'opening-date@example.invalid', '{}');
-INSERT INTO public.accounts(id, owner_id, name, type, opening_balance, opening_date) VALUES
-  ('10000000-0000-4000-a000-000000000404', '00000000-0000-4000-a000-000000000404', 'Opening bank', 'bank', 1000, (statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date),
-  ('10000000-0000-4000-a000-000000000405', '00000000-0000-4000-a000-000000000404', 'Earlier bank', 'bank', 400, (statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date - 1),
-  ('10000000-0000-4000-a000-000000000406', '00000000-0000-4000-a000-000000000404', 'Opening card', 'credit_card', -12000, (statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date);
+INSERT INTO public.accounts(id, owner_id, name, type, credit_limit, opening_balance, opening_date) VALUES
+  ('10000000-0000-4000-a000-000000000404', '00000000-0000-4000-a000-000000000404', 'Opening bank', 'bank', 0, 1000, (statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date),
+  ('10000000-0000-4000-a000-000000000405', '00000000-0000-4000-a000-000000000404', 'Earlier bank', 'bank', 0, 400, (statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date - 1),
+  ('10000000-0000-4000-a000-000000000406', '00000000-0000-4000-a000-000000000404', 'Opening card', 'credit_card', 20000, -12000, (statement_timestamp() AT TIME ZONE 'Asia/Kolkata')::date);
 INSERT INTO public.contacts(id, owner_id, name) VALUES
   ('20000000-0000-4000-a000-000000000404', '00000000-0000-4000-a000-000000000404', 'Synthetic contact');
 

@@ -13,7 +13,7 @@ interface AddAccountModalProps {
 export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccountModalProps) {
   const [name, setName] = useState('')
   // FIXED: The database expects exactly 'credit_card', not 'credit'
-  const [type, setType] = useState<'bank' | 'cash' | 'credit_card'>('bank')
+  const [type, setType] = useState<'bank' | 'cash' | 'credit_card' | 'pay_later'>('bank')
   const [creditLimit, setCreditLimit] = useState('')
   const [openingBalance, setOpeningBalance] = useState('0')
   const [openingDate, setOpeningDate] = useState(() => toIndiaDateInputValue())
@@ -49,7 +49,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
         type,
         owner_id: user.id,
         // Match the check for the new exact string
-        credit_limit: type === 'credit_card' ? parseFloat(creditLimit || '0') : 0,
+        credit_limit: type === 'credit_card' || type === 'pay_later' ? parseFloat(creditLimit || '0') : 0,
         opening_balance: openingBalanceForAccountType(openingBalance, type),
         opening_date: openingDate
       }
@@ -86,7 +86,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
           
           {/* Account Type Selector */}
           <div className="flex p-1 bg-black/20 rounded-xl backdrop-blur-sm border border-white/10">
-            {(['bank', 'cash', 'credit_card'] as const).map((t) => (
+            {(['bank', 'cash', 'credit_card', 'pay_later'] as const).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -99,8 +99,8 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
               >
                 {t === 'bank' && <Landmark className={`w-4 h-4 ${type === t ? 'text-indigo-400' : ''}`} />}
                 {t === 'cash' && <Wallet className={`w-4 h-4 ${type === t ? 'text-emerald-400' : ''}`} />}
-                {t === 'credit_card' && <CreditCard className={`w-4 h-4 ${type === t ? 'text-rose-400' : ''}`} />}
-                <span>{t === 'credit_card' ? 'Credit' : t}</span>
+                {(t === 'credit_card' || t === 'pay_later') && <CreditCard className={`w-4 h-4 ${type === t ? 'text-rose-400' : ''}`} />}
+                <span>{t === 'credit_card' ? 'Credit Card' : t === 'pay_later' ? 'Pay Later' : t === 'cash' ? 'Cash in Hand' : t}</span>
               </button>
             ))}
           </div>
@@ -109,7 +109,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
             <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Account Name</label>
             <input 
               type="text"
-              placeholder={type === 'credit_card' ? 'e.g., HDFC Millennia' : 'e.g., SBI Savings'}
+              placeholder={type === 'credit_card' ? 'e.g., HDFC Millennia' : type === 'pay_later' ? 'e.g., Amazon Pay Later' : type === 'cash' ? 'e.g., Wallet Cash' : 'e.g., SBI Savings'}
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/20 outline-none focus:border-indigo-500/50 transition-colors"
@@ -118,7 +118,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
             />
           </div>
 
-          {type === 'credit_card' && (
+          {(type === 'credit_card' || type === 'pay_later') && (
             <div className="flex flex-col space-y-1">
               <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Total Credit Limit</label>
               <div className="relative">
@@ -137,12 +137,12 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
           )}
 
           <div className="flex flex-col space-y-1">
-            <label htmlFor="account-opening-balance" className="text-xs font-semibold tracking-wide text-white/50 uppercase">{type === 'credit_card' ? 'Outstanding balance' : 'Starting balance'}</label>
+            <label htmlFor="account-opening-balance" className="text-xs font-semibold tracking-wide text-white/50 uppercase">{type === 'credit_card' || type === 'pay_later' ? 'Outstanding balance' : 'Starting balance'}</label>
             <div className="relative">
               <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
               <input id="account-opening-balance" type="number" min="0" max="9999999999.99" step="0.01" value={openingBalance} onChange={event => setOpeningBalance(event.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl pl-9 pr-4 py-3 text-white outline-none focus:border-indigo-500/50 transition-colors appearance-none" required disabled={isSubmitting} />
             </div>
-            <p className="text-[11px] text-white/40">{type === 'credit_card' ? 'Enter the amount currently owed; it will reduce the available balance.' : 'Balance held at the start of the selected date.'}</p>
+            <p className="text-[11px] text-white/40">{type === 'credit_card' || type === 'pay_later' ? 'Enter the amount currently owed; it will reduce the available balance.' : 'Balance held at the start of the selected date.'}</p>
           </div>
 
           <div className="flex flex-col space-y-1">

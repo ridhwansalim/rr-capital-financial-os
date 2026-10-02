@@ -80,7 +80,7 @@ export function openingBalanceForAccountType(value: string, type: string): numbe
   if (!Number.isFinite(amount) || amount > 9_999_999_999.99) {
     throw new Error('Opening balance is outside the supported range.')
   }
-  return type === 'credit' || type === 'credit_card' ? -amount : amount
+  return type === 'credit' || type === 'credit_card' || type === 'pay_later' ? -amount : amount
 }
 
 export function monthlyInstallmentDate(startDate: string, installmentNumber: number): string {

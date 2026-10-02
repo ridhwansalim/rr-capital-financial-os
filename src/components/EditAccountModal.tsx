@@ -48,7 +48,7 @@ export default function EditAccountModal({ isOpen, onClose, onSuccess, account }
 
     try {
       const payload: any = { name }
-      if (account.type === 'credit_card' || account.type === 'credit') {
+      if (account.type === 'credit_card' || account.type === 'credit' || account.type === 'pay_later') {
         payload.credit_limit = parseFloat(creditLimit || '0')
       }
 
@@ -159,7 +159,7 @@ export default function EditAccountModal({ isOpen, onClose, onSuccess, account }
               />
             </div>
 
-            {(account.type === 'credit_card' || account.type === 'credit') && (
+            {(account.type === 'credit_card' || account.type === 'credit' || account.type === 'pay_later') && (
               <div className="flex flex-col space-y-1">
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Total Credit Limit</label>
                 <div className="relative">

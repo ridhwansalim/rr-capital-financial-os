@@ -79,3 +79,8 @@ Post-deployment P2P cutover migration, deferred until the new client is deployed
 | `20261002041000_revoke_legacy_p2p_debt_rpc.sql` | `7AC6D80295AB2A53E34650C8C5DB5973352F0F0DA9CC7303A44E46953183E74F` |
 
 Recompute hashes immediately before any hosted apply; this document is evidence of the reviewed file set, not an execution authorization.
+# Pay Later staged release update — 2026-10-02
+
+The staged RR Capital core bundle now includes `20261002040956_add_pay_later_credit_line.sql` after migration `20261002040955`. It adds Pay Later as an approved-limit credit line and optionally links a personal bank EMI schedule to its destination liability account. The full purchase remains a dated expense; linked EMI payments become transfers from the selected payment account to the credit account. Credit-line accounts require a positive limit and completed postings cannot exceed it. Cash continues to use the existing liquid account behavior and is labeled “Cash in Hand” in setup.
+
+The migration hash pinned by `supabase/tests/apply-core-release.ps1` is `2A40CE95238D93F2C7CEF75AB0850109EE18B0210ADAC94AA7E19418D1236EE3`. The isolated core replay passed 39 migrations, 22 SQL test files, and 53 pgTAP assertions on 2026-10-02. This documents release preparation only; hosted migration status must be checked from the apply script dry-run and then verified in the hosted ledger.

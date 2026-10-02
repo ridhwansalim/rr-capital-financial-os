@@ -7,7 +7,7 @@ import EditAccountModal from '../components/EditAccountModal' // <-- New Import
 interface Account {
   id: string
   name: string
-  type: 'bank' | 'cash' | 'credit_card' | string
+  type: 'bank' | 'cash' | 'credit_card' | 'pay_later' | string
   balance: number
   credit_limit: number
 }
@@ -65,7 +65,7 @@ export default function Accounts() {
   }, [])
 
   const liquidAccounts = accounts.filter(a => a.type === 'bank' || a.type === 'cash' || a.type === 'wallet')
-  const creditAccounts = accounts.filter(a => a.type === 'credit' || a.type === 'credit_card')
+  const creditAccounts = accounts.filter(a => a.type === 'credit' || a.type === 'credit_card' || a.type === 'pay_later')
 
   const totalLiquid = liquidAccounts.reduce((sum, acc) => sum + Number(acc.balance), 0)
   const totalDebt = creditAccounts.reduce((sum, acc) => sum + Math.abs(Number(acc.balance)), 0)
@@ -110,12 +110,12 @@ export default function Accounts() {
                 <div key={acc.id} className="p-5 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-md hover:bg-white/10 transition-colors group">
                   <div className="flex items-center justify-between mb-4">
                     <div className="p-3 rounded-full bg-indigo-500/20">
-                      {acc.type === 'bank' ? <Landmark className="w-5 h-5 text-indigo-400" /> : <Wallet className="w-5 h-5 text-emerald-400" />}
+                  {acc.type === 'bank' ? <Landmark className="w-5 h-5 text-indigo-400" /> : <Wallet className="w-5 h-5 text-emerald-400" />}
                     </div>
                     
                     <div className="flex items-center space-x-2">
                       <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-black/40 text-slate-400 rounded-md">
-                        {acc.type.replace('_', ' ')}
+                        {acc.type === 'cash' ? 'Cash in Hand' : acc.type === 'pay_later' ? 'Pay Later' : acc.type.replace('_', ' ')}
                       </span>
                       {/* NEW EDIT BUTTON */}
                       <button 
@@ -143,7 +143,7 @@ export default function Accounts() {
           {/* CREDIT CARDS */}
           <section>
             <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-2">
-              <h2 className="text-xl font-bold text-slate-200">Credit Cards</h2>
+              <h2 className="text-xl font-bold text-slate-200">Credit & Pay Later</h2>
               <span className="text-rose-400 font-bold tracking-wider">
                 - ₹{totalDebt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </span>
@@ -209,7 +209,7 @@ export default function Accounts() {
                   </div>
                 )
               })}
-              {creditAccounts.length === 0 && <p className="text-slate-500 text-sm">No credit cards logged.</p>}
+              {creditAccounts.length === 0 && <p className="text-slate-500 text-sm">No credit or Pay Later accounts logged.</p>}
             </div>
           </section>
 

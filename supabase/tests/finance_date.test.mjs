@@ -54,6 +54,7 @@ test('opening balances use the same sign convention as account balances', async 
   assert.equal(openingBalanceForAccountType('1250.50', 'bank'), 1250.5)
   assert.equal(openingBalanceForAccountType('1250.50', 'cash'), 1250.5)
   assert.equal(openingBalanceForAccountType('1250.50', 'credit_card'), -1250.5)
+  assert.equal(openingBalanceForAccountType('1250.50', 'pay_later'), -1250.5)
   assert.throws(() => openingBalanceForAccountType('1.234', 'bank'), /two decimal places/)
   assert.throws(() => openingBalanceForAccountType('-1', 'bank'), /two decimal places/)
 })
