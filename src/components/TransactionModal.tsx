@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { localDB, type CachedAccount, type LocalTransaction } from '../lib/db'
 import { postQueuedTransaction } from '../lib/sync'
 import { indiaDateInputToIso, isDateBeforeOpeningDate, openingBalanceForAccountType, toIndiaDateInputValue } from '../lib/financeDate'
+import { offlineAccountChoices } from '../lib/offlineOwnership'
 
 interface TransactionModalProps {
   isOpen: boolean
@@ -12,7 +13,7 @@ interface TransactionModalProps {
   initialDraft?: TransactionDraft | null
 }
 
-type Account = CachedAccount
+type Account = CachedAccount & { balance?: number; credit_limit?: number }
 type TransactionTemplate = { id: string; name: string; transaction_type: 'expense' | 'income' | 'transfer'; amount: number | null; fee_amount: number; description: string; from_account_id: string | null; to_account_id: string | null }
 export type TransactionDraft = { type: 'expense' | 'income' | 'transfer'; amount: string; feeAmount: string; description: string; selectedAccount: string; targetAccount: string }
 
@@ -30,6 +31,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
   const [description, setDescription] = useState('')
   const [transactionDate, setTransactionDate] = useState(() => toIndiaDateInputValue())
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [accountBalancesAvailable, setAccountBalancesAvailable] = useState(false)
   const [templates, setTemplates] = useState<TransactionTemplate[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState('')
   const [templateName, setTemplateName] = useState('')
@@ -66,6 +68,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
   useEffect(() => {
     if (isOpen) {
       setAccounts([])
+      setAccountBalancesAvailable(false)
       setTemplates([])
       setSelectedTemplateId('')
       setTemplateName('')
@@ -181,8 +184,9 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
         const matched = balResult.data?.find(b => b.id === acc.id)
         return { ...acc, balance: matched ? Number(matched.balance) : 0 }
       })
-      await localDB.accountCache.put({ owner_id: ownerId, accounts: merged })
+      await localDB.accountCache.put({ owner_id: ownerId, accounts: offlineAccountChoices(merged) })
       setAccounts(merged)
+      setAccountBalancesAvailable(true)
       setTemplates(templateResult.error ? [] : (templateResult.data || []) as TransactionTemplate[])
       if (merged.length > 0 && !merged.some(a => a.id === selectedAccount)) {
         const preferredId = localStorage.getItem(`rr:last-account:${ownerId}`)
@@ -197,6 +201,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
         return
       }
       setAccounts(cached.accounts)
+      setAccountBalancesAvailable(false)
       setTemplates([])
       if (cached.accounts.length > 0 && !cached.accounts.some(a => a.id === selectedAccount)) {
         const preferredId = localStorage.getItem(`rr:last-account:${ownerId}`)
@@ -618,7 +623,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
                     if (e.target.value === 'NEW') setIsCreatingAccount(true)
                     else setSelectedAccount(e.target.value)
                   }} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50 transition-colors appearance-none" required disabled={isSubmitting}>
-                    {accounts.map(acc => <option key={acc.id} value={acc.id} className="text-slate-900">{acc.name} (₹{acc.balance.toLocaleString('en-IN')})</option>)}
+                    {accounts.map(acc => <option key={acc.id} value={acc.id} className="text-slate-900">{acc.name}{accountBalancesAvailable && Number.isFinite(acc.balance) ? ` (₹${Number(acc.balance).toLocaleString('en-IN')})` : ''}</option>)}
                     <option value="NEW" className="font-bold text-indigo-400">+ Create New Account</option>
                   </select>
                 </div>
@@ -629,7 +634,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
                       if (e.target.value === 'NEW') setIsCreatingAccount(true)
                       else setTargetAccount(e.target.value)
                     }} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50 transition-colors appearance-none" required disabled={isSubmitting}>
-                      {accounts.map(acc => <option key={acc.id} value={acc.id} className="text-slate-900">{acc.name} (₹{acc.balance.toLocaleString('en-IN')})</option>)}
+                      {accounts.map(acc => <option key={acc.id} value={acc.id} className="text-slate-900">{acc.name}{accountBalancesAvailable && Number.isFinite(acc.balance) ? ` (₹${Number(acc.balance).toLocaleString('en-IN')})` : ''}</option>)}
                       <option value="NEW" className="font-bold text-indigo-400">+ Create New Account</option>
                     </select>
                   </div>

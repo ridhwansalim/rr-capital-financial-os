@@ -4,9 +4,7 @@ export interface CachedAccount {
   id: string
   name: string
   type: string
-  balance: number
   opening_date?: string
-  credit_limit?: number
 }
 
 export interface CachedContact {
@@ -49,6 +47,23 @@ export class FinancialDatabase extends Dexie {
       outbox: '++id, sync_status, created_at',
       accountCache: 'owner_id',
       contactCache: 'owner_id'
+    })
+    this.version(6).stores({
+      outbox: '++id, sync_status, created_at',
+      accountCache: 'owner_id',
+      contactCache: 'owner_id'
+    }).upgrade(async transaction => {
+      // Remove financial amounts from caches created by versions <= 5 while
+      // preserving account choices and every pending outbox transaction.
+      await transaction.table('accountCache').toCollection().modify((cache: { accounts?: Array<Record<string, unknown>> }) => {
+        if (!Array.isArray(cache.accounts)) return
+        cache.accounts = cache.accounts.map(account => ({
+          id: String(account.id ?? ''),
+          name: String(account.name ?? ''),
+          type: String(account.type ?? ''),
+          ...(typeof account.opening_date === 'string' ? { opening_date: account.opening_date } : {})
+        }))
+      })
     })
   }
 }

@@ -1,5 +1,14 @@
 type OwnedRecord = { owner_id: string }
 
+export type OfflineAccountChoice = { id: string; name: string; type: string; opening_date?: string }
+
+export function offlineAccountChoices<T extends OfflineAccountChoice>(accounts: T[]): OfflineAccountChoice[] {
+  return accounts.map(({ id, name, type, opening_date }) => ({
+    id, name, type,
+    ...(opening_date ? { opening_date } : {})
+  }))
+}
+
 export function visibleOfflineItems<T extends OwnedRecord & { sync_status: string }>(
   items: T[] | undefined | null,
   ownerId: string | null

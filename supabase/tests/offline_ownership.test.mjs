@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { cacheForOwner, visibleOfflineItems } from '../../src/lib/offlineOwnership.ts'
+import { cacheForOwner, offlineAccountChoices, visibleOfflineItems } from '../../src/lib/offlineOwnership.ts'
 import { ensureOfflineRequestId } from '../../src/lib/offlineRequestId.ts'
 
 test('offline queue hides previous owners and already completed records', () => {
@@ -19,6 +19,12 @@ test('offline account labels are used only for the matching signed-in owner', ()
   assert.equal(cacheForOwner(cache, 'ridhu'), cache)
   assert.equal(cacheForOwner(cache, 'family'), undefined)
   assert.equal(cacheForOwner(cache, null), undefined)
+})
+
+test('offline account cache omits balances and credit limits', () => {
+  assert.deepEqual(offlineAccountChoices([
+    { id: 'a', name: 'Everyday', type: 'bank', opening_date: '2026-01-01', balance: 12500, credit_limit: 50000 }
+  ]), [{ id: 'a', name: 'Everyday', type: 'bank', opening_date: '2026-01-01' }])
 })
 
 test('concurrent tabs atomically persist and reuse one legacy outbox request ID', async () => {
