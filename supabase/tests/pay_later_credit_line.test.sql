@@ -1,4 +1,4 @@
-SELECT plan(1);
+SELECT plan(2);
 BEGIN;
 INSERT INTO auth.users(id, email, raw_user_meta_data) VALUES
   ('00000000-0000-4000-a000-000000000419', 'pay-later@example.invalid', '{}');
@@ -100,4 +100,8 @@ END $$;
 RESET ROLE;
 ROLLBACK;
 SELECT pass('credit-line purchases respect limits, repayments reduce Pay Later debt, and failed writes are atomic');
+SELECT ok(EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'private'
+  AND tablename = 'emi_bank_action_requests'
+  AND indexname = 'emi_bank_action_requests_credit_account_id_idx'),
+  'Pay Later action request credit-account foreign key has a covering index');
 SELECT * FROM finish();
