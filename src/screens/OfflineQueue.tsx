@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { RefreshCw, WifiOff } from 'lucide-react'
+import { RefreshCw, Trash2, WifiOff } from 'lucide-react'
 import { localDB, type LocalTransaction } from '../lib/db'
-import { retryOutboxItem, retryOutboxItems } from '../lib/sync'
+import { discardFailedOutboxItem, retryOutboxItem, retryOutboxItems } from '../lib/sync'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDateTime } from '../lib/financeDate'
 import { cacheForOwner, visibleOfflineItems } from '../lib/offlineOwnership'
@@ -62,6 +62,20 @@ export default function OfflineQueue() {
     } finally { setBusy(false) }
   }
 
+  const discard = async (item: LocalTransaction) => {
+    if (!ownerId || item.id === undefined || item.sync_status !== 'failed' || busy) return
+    const confirmed = window.confirm('Discard this failed transaction from this device? The server rejected it. Pending network retries cannot be discarded here.')
+    if (!confirmed) return
+    setBusy(true)
+    setMessage('')
+    try {
+      const removed = await discardFailedOutboxItem(item.id, ownerId)
+      setMessage(removed ? 'Failed entry discarded from this device.' : 'This entry changed state, so it was not discarded.')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'The failed entry could not be discarded.')
+    } finally { setBusy(false) }
+  }
+
   return <div className="p-4 sm:p-6 w-full max-w-4xl mx-auto text-white pb-32">
     <PageHeader title="Offline transactions" description="Transactions saved on this device until the server confirms them." action={<button onClick={() => void retry()} disabled={!online || busy || !visibleItems.length} className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 font-semibold hover:bg-emerald-500 disabled:opacity-40 sm:w-auto sm:py-2"><RefreshCw className={`w-4 h-4 ${busy ? 'animate-spin' : ''}`} />Retry all</button>} />
     {!online && <div className="flex items-center gap-2 p-4 mb-5 rounded-xl bg-amber-500/10 text-amber-300 border border-amber-500/20"><WifiOff className="w-5 h-5" />You are offline. Retry is available when your connection returns.</div>}
@@ -73,8 +87,8 @@ export default function OfflineQueue() {
         <p className="text-sm text-slate-400 mt-1">{accountName(item.from_account_id)} → {accountName(item.to_account_id)} · {formatIndiaDateTime(item.created_at)}</p>
         {item.last_error && <p className="text-sm text-rose-300 mt-2 break-words" role="alert">{item.last_error}</p>}
       </div>
-      <div className="flex items-center gap-3 shrink-0"><span className="font-semibold">₹{Number(item.amount).toLocaleString('en-IN')}</span><button onClick={() => item.id !== undefined && void retry(item.id)} disabled={!online || busy} className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-40">Retry</button></div>
+      <div className="flex items-center gap-3 shrink-0"><span className="font-semibold">₹{Number(item.amount).toLocaleString('en-IN')}</span><button onClick={() => item.id !== undefined && void retry(item.id)} disabled={!online || busy} className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-40">Retry</button>{item.sync_status === 'failed' && <button type="button" onClick={() => void discard(item)} disabled={busy} aria-label="Discard failed transaction" className="rounded-xl border border-rose-500/30 px-3 py-2 text-sm text-rose-400 hover:bg-rose-500/10 disabled:opacity-40"><Trash2 className="h-4 w-4" />Discard</button>}</div>
     </div>)}</div>
-    <p className="text-xs text-slate-500 mt-6">Keep this browser's site data until every transaction is confirmed. Retrying uses the same request ID to avoid duplicate ledger entries.</p>
+    <p className="text-xs text-slate-500 mt-6">Keep this browser's site data until every transaction is confirmed. Retrying uses the same request ID to avoid duplicates. Only failed entries with a definite server rejection can be discarded; pending network retries stay protected because the server may already have received them.</p>
   </div>
 }

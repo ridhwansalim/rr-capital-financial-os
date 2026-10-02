@@ -1,6 +1,7 @@
 import { localDB, type LocalTransaction } from './db'
 import { supabase } from './supabase'
 import { ensureOfflineRequestId } from './offlineRequestId'
+import { discardFailedOutboxItem as discardFailedItem } from './offlineQueueActions'
 
 let activeSync: Promise<void> | null = null
 
@@ -94,6 +95,12 @@ export async function retryOutboxItems(ids: number[], ownerId: string): Promise<
     }
   })
   await syncOutbox()
+}
+
+export async function discardFailedOutboxItem(id: number, ownerId: string): Promise<boolean> {
+  const { data, error } = await supabase.auth.getUser()
+  if (error || data.user?.id !== ownerId) throw new Error('Your sign-in changed. Reload the queue and try again.')
+  return discardFailedItem<LocalTransaction>(localDB, id, ownerId)
 }
 
 window.addEventListener('online', () => { void syncOutbox() })

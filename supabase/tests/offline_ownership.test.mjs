@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { cacheForOwner, offlineAccountChoices, visibleOfflineItems } from '../../src/lib/offlineOwnership.ts'
 import { ensureOfflineRequestId } from '../../src/lib/offlineRequestId.ts'
+import { discardFailedOutboxItem } from '../../src/lib/offlineQueueActions.ts'
 
 test('offline queue hides previous owners and already completed records', () => {
   const records = [
@@ -54,4 +55,26 @@ test('concurrent tabs atomically persist and reuse one legacy outbox request ID'
   assert.equal(first.request_id, second.request_id)
   assert.equal(records.get(7).request_id, first.request_id)
   assert.equal(await ensureOfflineRequestId(database, 7, 'family', makeId), undefined)
+})
+
+test('discard removes only failed transactions owned by the current user', async () => {
+  const records = new Map([
+    [1, { id: 1, owner_id: 'ridhu', sync_status: 'failed' }],
+    [2, { id: 2, owner_id: 'ridhu', sync_status: 'pending' }],
+    [3, { id: 3, owner_id: 'family', sync_status: 'failed' }]
+  ])
+  const outbox = {
+    async get(id) { return records.get(id) },
+    async delete(id) { records.delete(id) }
+  }
+  const database = {
+    outbox,
+    async transaction(_mode, _table, callback) { return callback() }
+  }
+  assert.equal(await discardFailedOutboxItem(database, 1, 'ridhu'), true)
+  assert.equal(await discardFailedOutboxItem(database, 2, 'ridhu'), false)
+  assert.equal(await discardFailedOutboxItem(database, 3, 'ridhu'), false)
+  assert.equal(records.has(1), false)
+  assert.equal(records.has(2), true)
+  assert.equal(records.has(3), true)
 })
