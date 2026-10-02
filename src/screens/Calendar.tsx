@@ -76,8 +76,27 @@ export default function Calendar() {
   const [isStartPopoverOpen, setIsStartPopoverOpen] = useState(false)
   const [isEndPopoverOpen, setIsEndPopoverOpen] = useState(false)
   const popoverRef = useRef<HTMLDivElement>(null)
-  const emiFormDirty = Boolean(newEmi.name || newEmi.amount || principal || processingFee || selectedEntity || newShadowName)
-  useModalBack(isAddModalOpen, () => setIsAddModalOpen(false), emiFormDirty, 'Discard this recurring payment form?')
+  const resetEmiForm = () => {
+    setEmiType('personal')
+    setNewEmi({ name: '', amount: '', account_id: accounts[0]?.id || '', credit_account_id: '' })
+    setPrincipal('')
+    setProcessingFee('')
+    setStartDate(new Date(`${toIndiaDateInputValue()}T12:00:00`))
+    setEndDate(undefined)
+    setSelectedEntity(null)
+    setNewShadowName('')
+    setSearchQuery('')
+    setSearchResults([])
+    setIsFocused(false)
+    setIsStartPopoverOpen(false)
+    setIsEndPopoverOpen(false)
+  }
+  const emiFormDirty = Boolean(
+    newEmi.name || newEmi.amount || principal || processingFee || selectedEntity || newShadowName || searchQuery ||
+    emiType !== 'personal' || newEmi.account_id !== (accounts[0]?.id || '') || newEmi.credit_account_id ||
+    !startDate || format(startDate, 'yyyy-MM-dd') !== toIndiaDateInputValue() || endDate
+  )
+  useModalBack(isAddModalOpen, () => { resetEmiForm(); setIsAddModalOpen(false) }, emiFormDirty, 'Discard this recurring payment form?')
   useModalBack(!!payEmiData, () => setPayEmiData(null), Boolean(payAccountId || payDate !== toIndiaDateInputValue()), 'Discard this payment form?')
 
   useEffect(() => {
@@ -190,8 +209,7 @@ export default function Calendar() {
       }
 
       setIsAddModalOpen(false)
-      setNewEmi({ name: '', amount: '', account_id: accounts[0]?.id || '', credit_account_id: '' })
-      setPrincipal(''); setProcessingFee(''); setStartDate(new Date(`${toIndiaDateInputValue()}T12:00:00`)); setEndDate(undefined); setSelectedEntity(null); setNewShadowName(''); setSearchQuery('')
+      resetEmiForm()
       fetchEngineData()
     } catch (error: any) { alert(error.message) } finally { setIsSubmitting(false) }
   }
@@ -469,16 +487,16 @@ export default function Calendar() {
       {/* ADD EMI MODAL */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="w-full max-w-md p-6 rounded-3xl backdrop-blur-2xl bg-slate-900 border border-white/20 shadow-2xl relative animate-in zoom-in-95 text-white max-h-[90vh] overflow-y-auto" ref={popoverRef}>
-            <button onClick={() => { if (!emiFormDirty || window.confirm('Discard this recurring payment form?')) setIsAddModalOpen(false) }} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10"><X className="w-5 h-5" /></button>
+          <div className="w-full max-w-md p-4 sm:p-5 rounded-3xl backdrop-blur-2xl bg-slate-900 border border-white/20 shadow-2xl relative animate-in zoom-in-95 text-white max-h-[calc(100dvh-2rem)] overflow-y-auto" ref={popoverRef}>
+            <button onClick={() => { if (!emiFormDirty || window.confirm('Discard this recurring payment form?')) { resetEmiForm(); setIsAddModalOpen(false) } }} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10"><X className="w-5 h-5" /></button>
             
-            <div className="flex items-center justify-center mb-6">
-              <div className="p-3 bg-indigo-500/20 rounded-full mr-3 border border-indigo-500/20"><CalendarDays className="w-5 h-5 text-indigo-400" /></div>
-              <h2 className="text-xl font-bold">New EMI Schedule</h2>
+            <div className="flex items-center mb-4 pr-10">
+              <div className="p-2.5 bg-indigo-500/20 rounded-2xl mr-3 border border-indigo-500/20"><CalendarDays className="w-5 h-5 text-indigo-400" /></div>
+              <div><h2 className="text-lg font-bold">New EMI Schedule</h2><p className="text-xs text-white/45">Set the payment and schedule dates</p></div>
             </div>
 
-            <form onSubmit={handleAddEMI} className="space-y-4">
-              <div className="flex p-1 bg-black/20 rounded-xl backdrop-blur-sm border border-white/10 mb-2">
+            <form onSubmit={handleAddEMI} className="space-y-3">
+              <div className="flex p-1 bg-black/20 rounded-xl backdrop-blur-sm border border-white/10">
                 {(['personal', 'lent', 'borrowed'] as const).map((t) => (
                   <button key={t} type="button" onClick={() => setEmiType(t)} className={`flex-1 py-2 text-xs md:text-sm font-bold rounded-lg capitalize transition-all duration-200 ${emiType === t ? 'bg-indigo-500 text-white shadow-sm' : 'text-white/50 hover:text-white/80'}`}>
                     {t === 'personal' ? 'Personal EMI' : t === 'lent' ? 'Proxy (I Pay)' : 'Proxy (They Pay)'}
@@ -488,7 +506,7 @@ export default function Calendar() {
 
               <div className="flex flex-col space-y-1">
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Name / Item</label>
-                <input type="text" required placeholder="e.g., iPhone 15 Pro" value={newEmi.name} onChange={(e) => setNewEmi({...newEmi, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50" disabled={isSubmitting} />
+                <input type="text" required placeholder="e.g., Phone installment" value={newEmi.name} onChange={(e) => setNewEmi({...newEmi, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-indigo-500/50" disabled={isSubmitting} />
               </div>
 
               {emiType !== 'personal' && (
@@ -497,7 +515,7 @@ export default function Calendar() {
                     <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Who is this for?</label>
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
-                      <input type="text" placeholder="Search user or add contact..." value={selectedEntity ? selectedEntity.name : (newShadowName || searchQuery)} onChange={(e) => { setSelectedEntity(null); setNewShadowName(''); setSearchQuery(e.target.value) }} onFocus={() => setIsFocused(true)} onBlur={() => setTimeout(() => setIsFocused(false), 200)} className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-10 py-3 text-white outline-none focus:border-indigo-500/50" required disabled={isSubmitting} />
+                    <input type="text" placeholder="Search user or add contact..." value={selectedEntity ? selectedEntity.name : (newShadowName || searchQuery)} onChange={(e) => { setSelectedEntity(null); setNewShadowName(''); setSearchQuery(e.target.value) }} onFocus={() => setIsFocused(true)} onBlur={() => setTimeout(() => setIsFocused(false), 200)} className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-10 py-2.5 text-white outline-none focus:border-indigo-500/50" required disabled={isSubmitting} />
                       {(selectedEntity || newShadowName) && <button type="button" onClick={() => { setSelectedEntity(null); setNewShadowName(''); setSearchQuery(''); }} className="absolute inset-y-0 right-0 pr-3 flex items-center text-white/40 hover:text-white"><X className="h-4 w-4" /></button>}
                     </div>
 
@@ -541,13 +559,13 @@ export default function Calendar() {
 
               <div className="flex flex-col space-y-1">
                 <label className="text-xs font-semibold tracking-wide text-indigo-400 uppercase">Monthly EMI (₹)</label>
-                <input type="number" step="0.01" required placeholder="5000" value={newEmi.amount} onChange={(e) => setNewEmi({...newEmi, amount: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-rose-400 font-bold outline-none focus:border-indigo-500/50" disabled={isSubmitting} />
+                <input type="number" step="0.01" required placeholder="5000" value={newEmi.amount} onChange={(e) => setNewEmi({...newEmi, amount: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-rose-400 font-bold outline-none focus:border-indigo-500/50" disabled={isSubmitting} />
               </div>
 
               <div className="grid grid-cols-2 gap-3 relative">
                 <div className="flex flex-col space-y-1">
                   <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Start Date</label>
-                  <button type="button" onClick={() => { setIsStartPopoverOpen(!isStartPopoverOpen); setIsEndPopoverOpen(false); }} className="w-full flex items-center justify-between bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-indigo-500/50 text-left" disabled={isSubmitting}>
+                  <button type="button" onClick={() => { setIsStartPopoverOpen(!isStartPopoverOpen); setIsEndPopoverOpen(false); }} className="w-full flex items-center justify-between bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-indigo-500/50 text-left" disabled={isSubmitting}>
                     {startDate ? format(startDate, "MMM d, yyyy") : <span>Pick a date</span>} <CalendarIcon className="w-4 h-4 text-white/50" />
                   </button>
                   {isStartPopoverOpen && (
@@ -559,7 +577,7 @@ export default function Calendar() {
 
                 <div className="flex flex-col space-y-1">
                   <label className="text-xs font-semibold tracking-wide text-rose-400 uppercase">End Date *</label>
-                  <button type="button" onClick={() => { setIsEndPopoverOpen(!isEndPopoverOpen); setIsStartPopoverOpen(false); }} className="w-full flex items-center justify-between bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-sm text-white outline-none focus:border-rose-500/50 text-left" disabled={isSubmitting}>
+                  <button type="button" onClick={() => { setIsEndPopoverOpen(!isEndPopoverOpen); setIsStartPopoverOpen(false); }} className="w-full flex items-center justify-between bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-rose-500/50 text-left" disabled={isSubmitting}>
                     {endDate ? format(endDate, "MMM d, yyyy") : <span className="text-white/50">Required</span>} <CalendarIcon className="w-4 h-4 text-white/50" />
                   </button>
                   {isEndPopoverOpen && (
@@ -572,24 +590,27 @@ export default function Calendar() {
 
               <div className="flex flex-col space-y-1 pt-2">
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Deducted From</label>
-                <select value={newEmi.account_id} onChange={(e) => setNewEmi({...newEmi, account_id: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50 appearance-none" required disabled={isSubmitting}>
+                <select value={newEmi.account_id} onChange={(e) => setNewEmi({...newEmi, account_id: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-indigo-500/50 appearance-none" required disabled={isSubmitting}>
                   {accounts.map(acc => <option key={acc.id} value={acc.id} className="text-slate-900">{acc.name}</option>)}
                 </select>
               </div>
 
               {emiType === 'personal' && (
-                <div className="flex flex-col space-y-1 pt-1">
-                  <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Pay down a credit or Pay Later account (optional)</label>
-                  <select value={newEmi.credit_account_id} onChange={e => setNewEmi({...newEmi, credit_account_id: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50 appearance-none" disabled={isSubmitting}>
-                    <option value="">Record EMI as expense</option>
-                    {accounts.filter(acc => ['credit', 'credit_card', 'pay_later'].includes(acc.type)).map(acc => <option key={acc.id} value={acc.id} className="text-slate-900">{acc.name}</option>)}
-                  </select>
-                  <p className="text-[11px] text-white/40">For a purchase already recorded in full, link its credit account here. Each EMI will reduce that balance without adding another expense.</p>
-                </div>
+                <details className="group rounded-xl border border-white/10 bg-black/15 px-3 py-2">
+                  <summary className="cursor-pointer list-none text-xs font-semibold text-white/65 [&::-webkit-details-marker]:hidden">Advanced · credit balance tracking <span className="float-right text-white/35 transition-transform group-open:rotate-180">⌄</span></summary>
+                  <div className="pt-3 space-y-1">
+                    <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Credit or Pay Later account (optional)</label>
+                    <select value={newEmi.credit_account_id} onChange={e => setNewEmi({...newEmi, credit_account_id: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-indigo-500/50 appearance-none" disabled={isSubmitting}>
+                      <option value="">Record EMI as expense</option>
+                      {accounts.filter(acc => ['credit', 'credit_card', 'pay_later'].includes(acc.type)).map(acc => <option key={acc.id} value={acc.id} className="text-slate-900">{acc.name}</option>)}
+                    </select>
+                    <p className="text-[11px] text-white/40">Link a purchase already recorded in full. Each EMI reduces that balance without adding another expense.</p>
+                  </div>
+                </details>
               )}
 
-              <button type="submit" disabled={isSubmitting} className="w-full flex items-center justify-center py-3.5 mt-4 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-lg transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)] disabled:opacity-50">
-                {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : emiType === 'personal' ? 'Save Personal EMI' : 'Send EMI Request'}
+              <button type="submit" disabled={isSubmitting} className="w-full flex items-center justify-center py-3 mt-1 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)] disabled:opacity-50">
+                {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : emiType === 'personal' ? 'Save Personal EMI' : 'Send EMI Request'}
               </button>
             </form>
           </div>
