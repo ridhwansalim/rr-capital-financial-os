@@ -11,6 +11,7 @@ import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { isGuidedHelpEnabled, replayGuidance, setGuidedHelpEnabled } from '../lib/guidedHelp'
 import PageHeader from '../components/PageHeader'
 import { currentRelease, type ReleaseNotes } from '../lib/releaseNotes'
+import LiquidSwitch from '../components/ui/LiquidSwitch'
 
 // WebAuthn Helper to encode hardware keys
 const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
@@ -615,31 +616,31 @@ export default function Settings() {
           </div>
           <div className="mt-5 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4">
             <div><h3 className="font-semibold">Budgets and envelopes</h3><p className="text-xs text-slate-400 mt-1 max-w-xl">Compare categorized personal expenses with monthly plans. Turning this off hides the page and keeps your saved envelopes.</p></div>
-            <button type="button" role="switch" aria-checked={Boolean(featureFlags.budgets)} disabled={featureBusy} onClick={() => void toggleBudgets()} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors disabled:opacity-50 ${featureFlags.budgets ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${featureFlags.budgets ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+            <LiquidSwitch label="Budgets" checked={Boolean(featureFlags.budgets)} disabled={featureBusy} onCheckedChange={() => void toggleBudgets()} />
           </div>
           <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4">
             <div><h3 className="font-semibold">Account health context</h3><p className="text-xs text-slate-400 mt-1 max-w-xl">Set your own liquid-account minimums and credit statement/due days. Optional warnings appear on Accounts; balances and bills are never changed or inferred.</p></div>
-            <button type="button" role="switch" aria-checked={Boolean(featureFlags.account_health)} disabled={featureBusy} onClick={() => void toggleAccountHealth()} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors disabled:opacity-50 ${featureFlags.account_health ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${featureFlags.account_health ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+            <LiquidSwitch label="Account health context" checked={Boolean(featureFlags.account_health)} disabled={featureBusy} onCheckedChange={() => void toggleAccountHealth()} />
           </div>
           <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4">
             <div><h3 className="font-semibold">Calculators</h3><p className="text-xs text-slate-400 mt-1 max-w-xl">Estimate loan payments, compare extra-payoff scenarios, and model savings growth. Inputs are not saved and results do not change your records.</p></div>
-            <button type="button" role="switch" aria-checked={Boolean(featureFlags.calculators)} disabled={featureBusy} onClick={() => void toggleCalculators()} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors disabled:opacity-50 ${featureFlags.calculators ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${featureFlags.calculators ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+            <LiquidSwitch label="Calculators" checked={Boolean(featureFlags.calculators)} disabled={featureBusy} onCheckedChange={() => void toggleCalculators()} />
           </div>
           <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4">
             <div><h3 className="font-semibold">Savings goals</h3><p className="text-xs text-slate-400 mt-1 max-w-xl">Track private targets with explicit contributions. They are planning values only and never link to accounts or transactions.</p></div>
-            <button type="button" role="switch" aria-checked={Boolean(featureFlags.savings_goals)} disabled={featureBusy} onClick={() => void toggleSavingsGoals()} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors disabled:opacity-50 ${featureFlags.savings_goals ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${featureFlags.savings_goals ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+            <LiquidSwitch label="Savings goals" checked={Boolean(featureFlags.savings_goals)} disabled={featureBusy} onCheckedChange={() => void toggleSavingsGoals()} />
           </div>
           <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4">
             <div><h3 className="font-semibold">Shopping lists</h3><p className="text-xs text-slate-400 mt-1 max-w-xl">Plan items and expected costs. Purchased state stays inside the list and does not post to the ledger.</p></div>
-            <button type="button" role="switch" aria-checked={Boolean(featureFlags.shopping_lists)} disabled={featureBusy} onClick={() => void toggleShoppingLists()} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors disabled:opacity-50 ${featureFlags.shopping_lists ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${featureFlags.shopping_lists ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+            <LiquidSwitch label="Shopping lists" checked={Boolean(featureFlags.shopping_lists)} disabled={featureBusy} onCheckedChange={() => void toggleShoppingLists()} />
           </div>
           <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4">
             <div><h3 className="font-semibold">Financial wellness indicator</h3><p className="text-xs text-slate-400 mt-1 max-w-xl">A private, read-only score based on eligible personal balances and activity. No score is stored; this is not a credit score or financial advice.</p></div>
-            <button type="button" role="switch" aria-checked={Boolean(featureFlags.financial_health_score)} disabled={featureBusy} onClick={() => void toggleFinancialHealthScore()} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors disabled:opacity-50 ${featureFlags.financial_health_score ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${featureFlags.financial_health_score ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+            <LiquidSwitch label="Financial wellness indicator" checked={Boolean(featureFlags.financial_health_score)} disabled={featureBusy} onCheckedChange={() => void toggleFinancialHealthScore()} />
           </div>
           <div className="mt-3 flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/10 p-4">
             <div><h3 className="font-semibold">Guided page tips</h3><p className="text-xs text-slate-400 mt-1 max-w-xl">Show a short dismissible hint the first time you visit each page on this device.</p></div>
-            <button type="button" role="switch" aria-checked={guidedHelpEnabled} onClick={toggleGuidedHelp} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors ${guidedHelpEnabled ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${guidedHelpEnabled ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+            <LiquidSwitch label="Guided page tips" checked={guidedHelpEnabled} onCheckedChange={toggleGuidedHelp} />
           </div>
           <div className="flex justify-end"><button type="button" disabled={!guidedHelpEnabled || !userId} onClick={() => userId && replayGuidance(userId)} className="rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/5 disabled:opacity-40">Replay page tips</button></div>
           {featureBusy && <p className="mt-3 text-xs text-slate-400">Saving feature settingâ€¦</p>}
@@ -840,12 +841,7 @@ export default function Settings() {
                     </h3>
                     <p className="text-sm text-slate-400 mt-1">Local convenience lock only. Use an app PIN or a registered device screen lock (biometric or device passcode).</p>
                   </div>
-                  <button 
-                    onClick={toggleAutoLock}
-                    className={`w-14 h-8 rounded-full transition-colors relative flex-shrink-0 ${autoLock ? 'bg-amber-500' : 'bg-slate-700'}`}
-                  >
-                    <div className={`w-6 h-6 bg-white rounded-full absolute top-1 transition-transform ${autoLock ? 'translate-x-7' : 'translate-x-1'}`}></div>
-                  </button>
+                  <LiquidSwitch label="Auto-Lock Interface" checked={autoLock} onCheckedChange={toggleAutoLock} />
                 </div>
 
                 {autoLock && (

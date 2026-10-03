@@ -129,6 +129,7 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
 
 async function installSyntheticBackend(page: Page, themeMode: 'light' | 'dark' = 'dark'): Promise<MockEvidence> {
   const evidence: MockEvidence = { unexpectedOrigins: [], blockedBrowserExtensionOrigins: [], tableMutations: [], unexpectedRpcs: [] }
+  let featureFlags = [...enabledFeatures]
 
   await page.addInitScript(({ storageKey, session }) => {
     localStorage.setItem(storageKey, JSON.stringify(session))
@@ -170,7 +171,18 @@ async function installSyntheticBackend(page: Page, themeMode: 'light' | 'dark' =
     }
 
     if (path === '/rest/v1/user_feature_flags' && method === 'GET') {
-      await fulfillJson(route, enabledFeatures)
+      const requestedFeature = url.searchParams.get('feature_key')?.replace(/^eq\./, '')
+      await fulfillJson(route, requestedFeature ? featureFlags.filter(flag => flag.feature_key === requestedFeature) : featureFlags)
+      return
+    }
+
+    if (path === '/rest/v1/user_feature_flags' && ['POST', 'PATCH'].includes(method)) {
+      const body = request.postDataJSON() as { feature_key?: string; enabled?: boolean } | Array<{ feature_key?: string; enabled?: boolean }> | null
+      const requestedFeature = url.searchParams.get('feature_key')?.replace(/^eq\./, '')
+      const updates = (Array.isArray(body) ? body : body ? [body] : []).map(update => ({ ...update, feature_key: update.feature_key ?? requestedFeature }))
+      featureFlags = featureFlags.filter(flag => !updates.some(update => update.feature_key === flag.feature_key))
+      featureFlags.push(...updates.filter((update): update is { feature_key: string; enabled: boolean } => typeof update.feature_key === 'string' && typeof update.enabled === 'boolean'))
+      await fulfillJson(route, [], method === 'POST' ? 201 : 200)
       return
     }
 
@@ -260,7 +272,72 @@ test('desktop navigation follows the page matrix and logo opens the creator prof
     await expect(menu.getByRole('link', { name: new RegExp(label) })).toBeVisible()
   }
   await expect(menu.getByRole('link', { name: 'Calendar' })).toHaveCount(0)
+  const addButton = page.locator('button.app-desktop-fab')
+  await expect(addButton).toBeVisible()
+  await expect(addButton).toHaveClass(/app-desktop-fab/)
+  await expect(addButton).toHaveClass(/rounded-full/)
+  await addButton.click()
+  const addActions = page.getByRole('button', { name: 'Transaction' })
+  await expect(addActions).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Debt / IOU' })).toBeVisible()
+  await expect(page.locator('nav[aria-label="Mobile navigation"]')).toBeHidden()
+  await addButton.click()
+  const dashboardHeading = page.getByRole('heading', { name: 'Financial overview' })
+  await expect(dashboardHeading).toBeVisible()
+  const headingGap = await dashboardHeading.evaluate(element => {
+    const main = element.closest('main')
+    if (!main) throw new Error('Dashboard heading is outside the app main region')
+    return element.getBoundingClientRect().top - main.getBoundingClientRect().top
+  })
+  expect(headingGap).toBeLessThan(180)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440)
+})
+
+test('liquid preference switches preserve native switch semantics and keyboard control', async ({ page }) => {
+  const evidence = await installSyntheticBackend(page)
+  await page.goto('/settings?section=modules')
+  const budgets = page.getByRole('switch', { name: 'Budgets' })
+  await expect(budgets).toBeVisible()
+  await expect(budgets).toHaveClass(/liquid-switch/)
+  await expect(budgets).toHaveAttribute('aria-checked', 'true')
+  page.once('dialog', dialog => void dialog.accept())
+  await budgets.click()
+  await expect(budgets).toHaveAttribute('aria-checked', 'false')
+  const guidedTips = page.getByRole('switch', { name: 'Guided page tips' })
+  await expect(guidedTips).toHaveClass(/liquid-switch/)
+  expect(evidence.unexpectedOrigins).toEqual([])
+  expect(evidence.tableMutations).toEqual([])
+})
+
+test('native range keeps keyboard support and glass styling', async ({ page }) => {
+  await page.goto('/')
+  await page.evaluate(() => {
+    const label = document.createElement('label')
+    label.htmlFor = 'glass-range'
+    label.textContent = 'Glass range'
+    const input = document.createElement('input')
+    input.id = 'glass-range'
+    input.className = 'liquid-range'
+    input.type = 'range'
+    input.min = '0'
+    input.max = '100'
+    input.value = '40'
+    input.style.setProperty('--range-progress', '40%')
+    document.body.append(label, input)
+  })
+  const slider = page.getByRole('slider', { name: 'Glass range' })
+  await expect(slider).toHaveValue('40')
+  const initialStyle = await slider.evaluate(element => ({
+    className: element.className,
+    progress: getComputedStyle(element).getPropertyValue('--range-progress').trim(),
+    minHeight: getComputedStyle(element).minHeight,
+  }))
+  expect(initialStyle.className).toContain('liquid-range')
+  expect(initialStyle.progress).toBe('40%')
+  expect(initialStyle.minHeight).toBe('28px')
+  await slider.focus()
+  await page.keyboard.press('ArrowRight')
+  await expect(slider).toHaveValue('41')
 })
 
 test('mobile navigation uses the five fixed slots and grouped More drawer', async ({ page }) => {

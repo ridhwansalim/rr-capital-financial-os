@@ -1,0 +1,2 @@
+-- Intentionally empty: clean local resets must not create demo financial data.
+-- Add deterministic, clearly synthetic fixtures only to isolated test databases.

@@ -3,6 +3,7 @@ import { Settings as SettingsIcon, Search, User, Key, Lock, ShieldAlert, RotateC
 import { supabase } from '../lib/supabase'
 import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { hasAppPinConfigured } from '../lib/appPin'
+import LiquidSwitch from '../components/ui/LiquidSwitch'
 
 export default function Settings() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -303,12 +304,7 @@ export default function Settings() {
                   <h3 className="font-bold text-white">Auto-Lock Interface</h3>
                   <p className="text-sm text-slate-400">Blur screen after 3 minutes of inactivity.</p>
                 </div>
-                <button 
-                  onClick={toggleAutoLock}
-                  className={`w-14 h-8 rounded-full transition-colors relative ${autoLock ? 'bg-amber-500' : 'bg-slate-700'}`}
-                >
-                  <div className={`w-6 h-6 bg-white rounded-full absolute top-1 transition-transform ${autoLock ? 'translate-x-7' : 'translate-x-1'}`}></div>
-                </button>
+                <LiquidSwitch label="Auto-Lock Interface" checked={autoLock} onCheckedChange={toggleAutoLock} />
               </div>
             </div>
           </section>
