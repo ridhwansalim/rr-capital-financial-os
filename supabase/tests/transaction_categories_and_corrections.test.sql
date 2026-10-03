@@ -50,6 +50,19 @@ BEGIN
     '20000000-0000-4000-a000-000000000061',80,'Corrected income',now(),'Wrong amount entered'
   );
   IF replacement IS DISTINCT FROM retry THEN RAISE EXCEPTION 'Correction retry changed ID'; END IF;
+  BEGIN
+    PERFORM public.correct_ledger_transaction(
+      '40000000-0000-4000-a000-000000000061',
+      '20000000-0000-4000-a000-000000000061',81,'Changed correction retry',now(),'Wrong amount entered'
+    );
+    RAISE EXCEPTION 'Correction retry accepted changed replacement data';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  IF (SELECT count(*) FROM public.transactions
+       WHERE owner_id='00000000-0000-4000-a000-000000000061'
+         AND client_request_id='40000000-0000-4000-a000-000000000061') <> 1 THEN
+    RAISE EXCEPTION 'Changed correction retry created another ledger entry';
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM public.transactions WHERE id='20000000-0000-4000-a000-000000000061' AND status='VOIDED')
      OR NOT EXISTS (SELECT 1 FROM public.transactions WHERE id=replacement AND amount=80
                     AND category_id='30000000-0000-4000-a000-000000000061') THEN

@@ -6,6 +6,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { formatIndiaDate, indiaDateExclusiveEndToIso, indiaDateStartToIso, toIndiaDateInputValue } from '../lib/financeDate'
 import { buildReportPath } from '../lib/reportNavigation'
 import PageHeader from '../components/PageHeader'
+import PageGuidance from '../components/PageGuidance'
 import { buildCashFlowBuckets, type CashFlowBucket } from '../lib/dashboardCashFlow'
 
 const DashboardClassic = React.lazy(() => import('./DashboardClassic'))
@@ -13,7 +14,7 @@ const DashboardClassic = React.lazy(() => import('./DashboardClassic'))
 export default function Dashboard() {
   const location = useLocation()
   if (new URLSearchParams(location.search).get('layout') === 'classic') {
-    return <Suspense fallback={<div className="page-shell">Opening the previous dashboard…</div>}><DashboardClassic /></Suspense>
+    return <Suspense fallback={<div className="page-shell">Opening the previous dashboard…</div>}><DashboardClassic showGuidance /></Suspense>
   }
   return <DashboardEditorial />
 }
@@ -291,6 +292,7 @@ function EditorialBoard(p: any) {
     : `${bucket.start} through ${bucket.end}`
   return <div className="page-shell dashboard-editorial mx-auto w-full max-w-[1500px] pb-32">
     <PageHeader eyebrow="RR CAPITAL · YOUR MONEY" title="Financial overview" description="A clear view of what you have, what is committed, and where it is going." icon={<TrendingUp />} />
+    <PageGuidance page="/" />
     {p.accountsLoaded && p.accounts.length === 0 && <section className="dashboard-onboarding ed-panel mb-5 grid gap-5 rounded-[1.35rem] p-5 sm:grid-cols-[1fr_auto] sm:items-center sm:p-6">
       <div className="flex items-start gap-4"><span className="dashboard-onboarding-mark"><Landmark className="h-5 w-5" /></span><div><p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-accent-400">A clear start</p><h2 className="text-lg font-semibold text-[var(--ink)]">Add your first account</h2><p className="mt-1 max-w-xl text-sm leading-6 text-[var(--muted)]">Set a bank, wallet, cash, or credit line with its starting balance. Your dashboard fills in as you record activity.</p></div></div>
       <Link to="/accounts" className="dashboard-onboarding-link liquid-action inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold"><Landmark className="h-4 w-4" /> Create an account</Link>

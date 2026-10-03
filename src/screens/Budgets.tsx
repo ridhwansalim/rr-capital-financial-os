@@ -8,6 +8,7 @@ import { buildReportPath } from '../lib/reportNavigation'
 import { calculateBudgetPeriod } from '../lib/budgetMath'
 import { safeBackendErrorMessage } from '../lib/safeErrorMessages'
 import PageHeader from '../components/PageHeader'
+import LiquidSwitch from '../components/ui/LiquidSwitch'
 
 type Category = { id: string; name: string; color: string }
 type Envelope = { id: string; category_id: string; monthly_limit: number; rollover_enabled: boolean; created_at: string }
@@ -154,7 +155,7 @@ export default function Budgets() {
         <label className="text-xs text-slate-400">Monthly amount<input inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} placeholder="0.00" className="mt-1 w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-3 text-sm text-white" /></label>
         <button type="button" disabled={saving || !categoryId || !amount} onClick={() => void saveEnvelope()} className="h-11 rounded-xl bg-emerald-500 px-5 font-semibold text-slate-950 disabled:opacity-40">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save envelope'}</button>
       </div>
-      <label className="mt-4 flex items-start gap-3 text-sm text-slate-300"><input type="checkbox" checked={rollover} onChange={event => setRollover(event.target.checked)} className="mt-1 accent-emerald-400" /><span className="flex gap-2"><RotateCcw className="w-4 h-4 text-slate-400 shrink-0" /><span>Carry unused amount into the next month. Off by default; only positive unused allowance carries forward.</span></span></label>
+      <div className="mt-4 flex items-center justify-between gap-4 text-sm text-slate-300"><span className="flex items-start gap-2"><RotateCcw className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" /><span>Carry unused amount into the next month. Off by default; only positive unused allowance carries forward.</span></span><LiquidSwitch label="Carry unused amount into the next month" checked={rollover} onCheckedChange={setRollover} /></div>
     </section>
   </div>
 }

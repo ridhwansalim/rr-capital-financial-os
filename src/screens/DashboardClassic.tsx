@@ -6,8 +6,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { formatIndiaDate, indiaDateExclusiveEndToIso, indiaDateStartToIso, toIndiaDateInputValue } from '../lib/financeDate'
 import { buildReportPath } from '../lib/reportNavigation'
 import PageHeader from '../components/PageHeader'
+import PageGuidance from '../components/PageGuidance'
 
-export default function Dashboard() {
+export default function Dashboard({ showGuidance = false }: { showGuidance?: boolean }) {
   const navigate = useNavigate()
   const [netWorth, setNetWorth] = useState(0)
   const [liquidCash, setLiquidCash] = useState(0)
@@ -211,6 +212,7 @@ export default function Dashboard() {
     <div className="page-shell w-full max-w-7xl mx-auto animate-in fade-in duration-300 pb-32">
 
       <PageHeader eyebrow="RR CAPITAL · YOUR MONEY" title="Financial overview" description="Balances, commitments, and everyday activity, all in one place." icon={<TrendingUp />} />
+      {showGuidance && <PageGuidance page="/" />}
 
       {/* P2P APPROVALS INBOX INJECTED HERE */}
       <PendingRequests />

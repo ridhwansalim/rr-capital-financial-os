@@ -3,6 +3,7 @@ import { BellOff, CalendarClock, Loader2, Save, ShieldAlert } from 'lucide-react
 import { supabase } from '../lib/supabase'
 import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { formatDueDate, nextMonthlyDueDate, type AccountHealthSetting } from '../lib/accountHealth'
+import LiquidSwitch from './ui/LiquidSwitch'
 
 interface Props {
   accountId: string
@@ -93,7 +94,7 @@ export default function AccountHealthControls({ accountId, accountType, balance,
             <label className="text-xs text-slate-300">Statement day<input type="number" min="1" max="31" step="1" inputMode="numeric" value={statementDay} onChange={event => setStatementDay(event.target.value)} className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white" placeholder="1–31" /></label>
             <label className="text-xs text-slate-300">Due day<input type="number" min="1" max="31" step="1" inputMode="numeric" value={dueDay} onChange={event => setDueDay(event.target.value)} className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white" placeholder="1–31" /></label>
           </div>}
-          <label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" checked={showNotices} onChange={event => setShowNotices(event.target.checked)} /> Show threshold and due-day warnings on Accounts</label>
+          <div className="flex items-center justify-between gap-3 text-xs text-slate-300"><span>Show threshold and due-day warnings on Accounts</span><LiquidSwitch label="Show threshold and due-day warnings on Accounts" checked={showNotices} onCheckedChange={setShowNotices} /></div>
           {error && <p role="alert" className="text-xs text-rose-300">{error}</p>}
           <div className="flex items-center gap-2"><button type="button" disabled={busy} onClick={() => void save()} className="inline-flex items-center gap-1 rounded-lg bg-indigo-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Save</button><button type="button" disabled={busy} onClick={() => { setEditing(false); setError('') }} className="rounded-lg border border-white/10 px-3 py-2 text-xs text-slate-300">Cancel</button>{setting && <button type="button" disabled={busy} onClick={() => void clear()} className="ml-auto text-xs text-rose-300 disabled:opacity-50">Clear</button>}</div>
         </div>

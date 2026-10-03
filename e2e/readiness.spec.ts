@@ -289,7 +289,7 @@ test('desktop navigation follows the page matrix and logo opens the creator prof
     if (!main) throw new Error('Dashboard heading is outside the app main region')
     return element.getBoundingClientRect().top - main.getBoundingClientRect().top
   })
-  expect(headingGap).toBeLessThan(180)
+  expect(headingGap).toBeLessThan(64)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440)
 })
 

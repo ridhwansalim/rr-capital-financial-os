@@ -61,9 +61,16 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
         role="dialog"
         aria-modal="true"
         aria-labelledby="creator-profile-title"
-        className="surface-panel relative grid w-full max-w-2xl overflow-hidden rounded-3xl shadow-2xl sm:grid-cols-[minmax(180px,0.8fr)_1.2fr]"
+        className="creator-profile-glass relative grid max-h-[min(90dvh,46rem)] w-full max-w-2xl overflow-x-hidden overflow-y-auto rounded-3xl shadow-2xl sm:max-h-[85dvh] sm:grid-cols-[minmax(180px,0.8fr)_1.2fr] sm:overflow-hidden"
       >
-        <div className="relative min-h-52 overflow-hidden bg-[var(--surface-dark)] sm:min-h-[390px]">
+        <svg className="creator-profile-glass__filter" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <filter id="creator-glass-bend" x="-20%" y="-20%" width="140%" height="140%" colorInterpolationFilters="sRGB">
+            <feTurbulence type="fractalNoise" baseFrequency="0.003 0.007" numOctaves="1" result="turbulence" />
+            <feGaussianBlur in="turbulence" stdDeviation="2" result="softMap" />
+            <feDisplacementMap in="SourceGraphic" in2="softMap" scale="26" xChannelSelector="R" yChannelSelector="G" />
+          </filter>
+        </svg>
+        <div className="creator-profile-glass__photo relative min-h-52 overflow-hidden bg-[var(--surface-dark)] sm:min-h-[390px]">
           <img
             src="/ridhwan-creator.jpg"
             alt="Ridhwan S., creator of RR Capital"
@@ -75,7 +82,7 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
           </div>
         </div>
 
-        <div className="relative flex flex-col p-5 text-[var(--ink)] sm:p-7">
+        <div className="creator-profile-glass__content relative flex flex-col p-5 text-[var(--ink)] sm:p-7">
           <button
             ref={closeButtonRef}
             type="button"
