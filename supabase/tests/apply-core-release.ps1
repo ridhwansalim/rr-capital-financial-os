@@ -6,8 +6,8 @@ $ErrorActionPreference = 'Stop'
 $expectedProjectRef = 'hnebvwfgsotrknxpgpmv'
 if ($ProjectRef -cne $expectedProjectRef) { throw 'This release bundle is pinned to RR Capital only.' }
 $expectedPending = @(
-  '20261004120000_enforce_chronological_credit_line_limits',
-  '20261004130000_protect_telegram_destination'
+  '20261004120000_enforce_chronological_credit_line_limits.sql',
+  '20261004130000_protect_telegram_destination.sql'
 )
 $expectedHashes = @{
   '20261002195439_match_obligation_on_ledger_retry.sql' = '2A202E37171F2FF09F88AD43018C7F705D87DEFDA1719505D015EF593C084FDD'
@@ -28,11 +28,10 @@ $excluded = @(
   '20261002041011_retire_unsafe_perry_database_login.sql'
 )
 foreach ($name in $expectedPending) {
-  $fileName = "$name.sql"
-  $path = Join-Path (Join-Path $sourceSupabase 'migrations') $fileName
-  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Reviewed migration missing: $fileName" }
+  $path = Join-Path (Join-Path $sourceSupabase 'migrations') $name
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Reviewed migration missing: $name" }
   $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
-  if ($hash -cne $expectedHashes[$fileName]) { throw "Hash mismatch for reviewed migration: $fileName" }
+  if ($hash -cne $expectedHashes[$name]) { throw "Hash mismatch for reviewed migration: $name" }
 }
 New-Item -ItemType Directory -Path $bundleMigrations -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $sourceSupabase 'config.toml') -Destination (Join-Path $bundleSupabase 'config.toml')
@@ -74,7 +73,7 @@ try {
   $expected = @($expectedPending | Sort-Object)
   $nl = [Environment]::NewLine
   if (-not $result.dryRun -or ($actual -join $nl) -cne ($expected -join $nl)) { throw 'Pending migration selection mismatch; apply stopped.' }
-  Write-Output 'PASS: no core migration is pending; hosted ledger retry obligation-match fix is already recorded.'
+  Write-Output "PASS: reviewed core migration set matches the hosted pending set ($($actual.Count) migrations)."
   if (-not $Apply) {
     Write-Output 'DRY RUN ONLY: no hosted changes made.'
     return

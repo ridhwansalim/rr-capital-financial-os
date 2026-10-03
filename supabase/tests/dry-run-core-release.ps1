@@ -24,8 +24,8 @@ $supersededTimestampMigrations = @(
   '20261002041011_retire_unsafe_perry_database_login.sql'
 )
 $expectedPending = @(
-  '20261004120000_enforce_chronological_credit_line_limits',
-  '20261004130000_protect_telegram_destination'
+  '20261004120000_enforce_chronological_credit_line_limits.sql',
+  '20261004130000_protect_telegram_destination.sql'
 )
 $expectedHashes = @{
   '20261002103816_retire_unsafe_perry_database_login_after_live_ledger.sql' = '95528FF9472A0DEF4864553E859E035A4D208A60C7ACF62A96F52D35D9C22CB0'
