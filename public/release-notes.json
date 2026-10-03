@@ -1,7 +1,7 @@
 {
-  "version": "2026.10.03.1",
-  "releasedAt": "2026-10-03T07:05:35+05:30",
-  "brief": "A more visible floating Add button, better spacing on short phones, and clearer light-theme accents.",
+  "version": "2026.10.03.2",
+  "releasedAt": "2026-10-03T07:22:20+05:30",
+  "brief": "The floating Add button now opens both forms correctly on mobile, and light-mode form hints are easier to read.",
   "details": [
     "Desktop navigation keeps Dashboard, Calendar, Ledger, Reports, and Accounts in the top bar, with the Add action beside them.",
     "Mobile navigation keeps Dashboard, Ledger, Add, Chittis, and More in the bottom bar; the More drawer groups the remaining pages.",
@@ -9,6 +9,8 @@
     "The RR Capital logo opens the creator profile with a photo and social links.",
     "When a new app build is available, the notice points to Settings. Settings checks for updates and shows the release date, brief, and detailed notes.",
     "The mobile Add control is a raised coral circle centered above the navigation bar. Its Transaction and Debt / IOU actions remain inside short phone viewports, with clear separation from the Add button.",
-    "Light theme preserves white action icons on their colored circles, and page guidance uses a readable theme-aware accent."
+    "Light theme preserves white action icons on their colored circles, and page guidance uses a readable theme-aware accent.",
+    "Tapping Transaction or Debt / IOU from the centered floating Add button now opens the selected form reliably.",
+    "Transaction and Debt / IOU form placeholders use readable contrast in light mode."
   ]
 }

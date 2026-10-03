@@ -137,6 +137,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const modalHistoryRef = React.useRef(false)
   const desktopMoreRef = useRef<HTMLDivElement>(null)
   const desktopAddRef = useRef<HTMLDivElement>(null)
+  const mobileAddActionsRef = useRef<HTMLDivElement>(null)
   const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(null)
   const location = useLocation()
   const navigate = useNavigate()
@@ -180,7 +181,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const closeOutside = (event: PointerEvent) => {
       const target = event.target as Node
       if (isDesktopMenuOpen && !desktopMoreRef.current?.contains(target)) setIsDesktopMenuOpen(false)
-      if (isFabOpen && !desktopAddRef.current?.contains(target)) setIsFabOpen(false)
+      if (isFabOpen && !desktopAddRef.current?.contains(target) && !mobileAddActionsRef.current?.contains(target)) setIsFabOpen(false)
     }
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { setIsDesktopMenuOpen(false); setIsFabOpen(false) }
@@ -298,7 +299,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <button type="button" aria-label={isMobileMenuOpen ? 'Close more pages' : 'Open more pages'} aria-expanded={isMobileMenuOpen} onClick={() => { setIsFabOpen(false); setIsMobileMenuOpen(!isMobileMenuOpen) }} className={`relative z-50 flex flex-col items-center justify-center gap-1 py-2 ${isMobileMenuOpen ? 'text-[var(--brand-primary-active)]' : 'text-[var(--muted)]'}`}><Menu className="h-5 w-5" /><span className="text-[10px] font-medium">More</span></button>
       </nav>
 
-      <div role="group" aria-label="Quick add actions" aria-hidden={!isFabOpen} className={`md:hidden fixed bottom-[calc(100px+env(safe-area-inset-bottom))] left-1/2 z-40 flex -translate-x-1/2 flex-col items-center gap-3 transition-all duration-200 ${isFabOpen ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-2 opacity-0 pointer-events-none'}`}>
+      <div ref={mobileAddActionsRef} role="group" aria-label="Quick add actions" aria-hidden={!isFabOpen} className={`md:hidden fixed bottom-[calc(100px+env(safe-area-inset-bottom))] left-1/2 z-40 flex -translate-x-1/2 flex-col items-center gap-3 transition-all duration-200 ${isFabOpen ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-2 opacity-0 pointer-events-none'}`}>
         <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={openTransaction} className="flex items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--app-panel-strong)] px-4 py-2 text-[var(--ink)] shadow-xl"><span className="text-sm font-medium">Transaction</span><span className="rounded-full bg-[var(--brand-primary)] p-2 text-[#fff]"><CreditCard className="h-4 w-4" /></span></button>
         <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={openDebt} className="flex items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--app-panel-strong)] px-4 py-2 text-[var(--ink)] shadow-xl"><span className="text-sm font-medium">Add Debt / IOU</span><span className="rounded-full bg-emerald-600 p-2 text-[#fff]"><Users className="h-4 w-4" /></span></button>
       </div>

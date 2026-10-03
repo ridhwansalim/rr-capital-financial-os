@@ -310,6 +310,9 @@ html[data-theme="light"] button.bg-indigo-500.text-white,
 html[data-theme="light"] button.bg-accent-500.text-white { color: #fff !important; }
 html[data-theme="light"] button.bg-indigo-500.text-white .text-white,
 html[data-theme="light"] button.bg-accent-500.text-white .text-white { color: #fff !important; }
+html[data-theme="light"] .app-financial-entry-modal input::placeholder,
+html[data-theme="light"] .app-financial-entry-modal textarea::placeholder { color: #59574f !important; opacity: 1 !important; }
+html[data-theme="light"] .app-financial-entry-modal input[type="date"] { color-scheme: light !important; }
 
 :where(button, a, input, select, textarea, [tabindex]):focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 2px; }
 @media (max-width: 767px) {
