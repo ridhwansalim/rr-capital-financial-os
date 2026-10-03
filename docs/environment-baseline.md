@@ -1,19 +1,19 @@
 # RR Capital Environment Baseline
 
-## Current verified state — 2026-10-03
+## Current verified state (2026-10-03)
 
 This is the authoritative current snapshot. Later dated sections are historical implementation notes; when they disagree with this snapshot, use this section. RR Capital is the production target. Financial OS v2 is a separate legacy/test project and must not receive RR Capital migrations.
 
 | Environment | Supabase project | Project ref | Verified state |
 | --- | --- | --- | --- |
-| Local app and linked Supabase project | RR Capital | `hnebvwfgsotrknxpgpmv` | `supabase/config.toml` targets `financial-os`; linked-project identity was verified as RR Capital. The latest functional app change is commit `e29552a70a5b25b0e67c7c1f37037cad7a8ab4e7`; this environment note records later metadata-only verification. |
-| Production database | RR Capital | `hnebvwfgsotrknxpgpmv` | `ACTIVE_HEALTHY`, Postgres 17.6.1; fresh metadata query on 2026-10-03 returned 54 migrations through `20261002195439_match_obligation_on_ledger_retry`. |
-| Production web app | RR Capital | Vercel `financial-os` | The production alias `financial-os-orcin-ten.vercel.app` is `READY` and serves the latest functional app changes from commit `e29552a70a5b25b0e67c7c1f37037cad7a8ab4e7`. The subsequent commits only refresh readiness documentation. |
-| Separate legacy/test database | Financial OS v2 | `guvkfuxniprtqdsqlqtx` | `ACTIVE_HEALTHY`; schema and migration history remain separate. |
+| Local app and linked Supabase project | RR Capital | `hnebvwfgsotrknxpgpmv` | `supabase/config.toml` exposes only `public` and `graphql_public`; local project ref and hosted target are RR Capital. Current source is commit `9315cb2925f4212884b9030f5482ce37d848b8f1`. |
+| Production database | RR Capital | `hnebvwfgsotrknxpgpmv` | `ACTIVE_HEALTHY`, Postgres 17.6.1; fresh query returned 54 migrations through `20261002195439_match_obligation_on_ledger_retry`. Finance tables checked for reset scope remain empty. |
+| Production web app | RR Capital | Vercel `financial-os` | Deployment `dpl_5KbDQWStGzYQiRSWF3PmCcgqGT8U` is `READY` at commit `9315cb2925f4212884b9030f5482ce37d848b8f1`; aliases include `financial-os-ridhwansalims-projects.vercel.app` and `financial-os-git-master-ridhwansalims-projects.vercel.app`. `/release-notes.json` returned HTTP 200 with version `2026.10.03.3`. |
+| Separate legacy/test database | Financial OS v2 | `guvkfuxniprtqdsqlqtx` | `ACTIVE_HEALTHY`, zero Auth users/profiles/finance records in the current aggregate check; its schema and two-migration history remain separate. Do not receive RR Capital migrations. |
 
 ### Verified reset scope
 
-Fresh aggregate-only SQL checks on 2026-10-03 read no finance rows. RR Capital has one Auth user and one profile (the preserved owner login), with zero accounts, contacts, parties, transactions, obligations, obligation payments, recurring EMIs, Chittis, settlements, transaction categories, budgets, savings goals, shopping lists, transaction templates, and account-health settings. Six `user_feature_flags` rows preserve the owner's optional-module choices; these are preferences, not financial records. Financial OS v2 has zero Auth users, profiles, accounts, contacts, transactions, obligations, obligation payments, recurring EMIs, and Chittis.
+Fresh aggregate-only SQL checks on 2026-10-03 read no finance rows. RR Capital has one Auth user and one profile (the preserved owner login), with zero accounts, contacts, parties, transactions, obligations, obligation payments, recurring EMIs, Chittis, settlements, transaction categories, budgets, savings goals, shopping lists, transaction templates, and account-health settings. Six `user_feature_flags` rows preserve the owner's optional-module choices; these are preferences, not financial records. A fresh repeat query reconfirmed one Auth user/profile and zero accounts, contacts, transactions, obligations, obligation payments, EMIs, Chittis, and settlements. Financial OS v2 has zero Auth users, profiles, accounts, contacts, transactions, obligations, obligation payments, recurring EMIs, and Chittis.
 
 ### Migration boundary
 
@@ -41,7 +41,7 @@ Prior code and database tests cover owner-scoped access, atomic/idempotent ledge
 
 On 2026-10-03, ACL review found the active checkout `.env.local` and an additional backup checkout `.env.local` inherited access for Authenticated Users and other local SIDs. Both files' ACLs were narrowed to the current owner account, SYSTEM, and Administrators; contents were not read or changed. The backup checkout is outside the active repo and remains a separate archived copy that has not been otherwise audited.
 
-The repeatable manual Free-plan export runner `supabase/Backup-RR-Capital.ps1` was tested with a mock CLI and used for a fresh RR Capital logical export on 2026-10-03. The completed snapshot's manifest, file sizes, hashes, current-owner ownership, and inherited owner/SYSTEM/Administrators ACL were verified without reading dump contents. An earlier failed attempt remains marked `in_progress` and must not be restored. The snapshots remain in one local recovery location; no off-site copy or full-project restore is verified.
+The repeatable manual Free-plan export runner `supabase/Backup-RR-Capital.ps1` was tested with a mock CLI and used for a fresh RR Capital logical export on 2026-10-03. The completed snapshot `20261003-052929-323` is marked `complete`; current SHA-256 and byte-count checks match all three manifest entries (`roles.sql`, `schema.sql`, `data.sql`). The active Supabase local DB container reports healthy but Docker's Windows service is stopped and its named pipe is unavailable in this sandbox, so a full snapshot restore rehearsal was not performed. An earlier failed attempt remains marked `in_progress` and must not be restored. The snapshots remain in one local recovery location; no off-site copy or full-project restore is verified.
 
 ## Security implementation notes
 
