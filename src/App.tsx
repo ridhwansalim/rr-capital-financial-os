@@ -5,25 +5,12 @@ import { AutoLockProvider } from './components/AutoLockProvider'
 import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
 import ReloadPrompt from './components/ReloadPrompt'
+import { AUTH_ROUTE, ROUTE_COMPONENT_LOADERS, ROUTE_REGISTRY } from './lib/routeRegistry'
 
 // Load only the active screen immediately; keep the established route and layout flow.
 const Auth = lazy(() => import('./screens/Auth'))
-const Dashboard = lazy(() => import('./screens/Dashboard'))
-const Ledger = lazy(() => import('./screens/Ledger'))
-const Accounts = lazy(() => import('./screens/Accounts'))
-const Debts = lazy(() => import('./screens/Debts'))
-const Contacts = lazy(() => import('./screens/Contacts'))
-const Settings = lazy(() => import('./screens/Settings'))
-const OfflineQueue = lazy(() => import('./screens/OfflineQueue'))
-const Calendar = lazy(() => import('./screens/Calendar'))
-const Chittis = lazy(() => import('./screens/Chittis'))
-const Reports = lazy(() => import('./screens/Reports'))
-const Budgets = lazy(() => import('./screens/Budgets'))
-const Calculators = lazy(() => import('./screens/Calculators'))
-const SavingsGoals = lazy(() => import('./screens/SavingsGoals'))
-const ShoppingLists = lazy(() => import('./screens/ShoppingLists'))
-const FinancialHealthScore = lazy(() => import('./screens/FinancialHealthScore'))
 const FeatureRoute = lazy(() => import('./components/FeatureRoute'))
+const ROUTE_COMPONENTS = Object.fromEntries(Object.entries(ROUTE_COMPONENT_LOADERS).map(([path, loader]) => [path, lazy(loader)]))
 
 function ScreenLoading() {
   return <div className="app-loading-state min-h-[58vh] px-6 flex items-center justify-center text-sm text-slate-400" role="status" aria-live="polite" aria-busy="true">
@@ -41,15 +28,35 @@ function ScreenLoading() {
   </div>
 }
 
+function LiquidToggleFilters() {
+  return (
+    <svg aria-hidden="true" className="liquid-toggle-filters" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="liquid-goo">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur" />
+          <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 16 -10" result="goo" />
+          <feComposite in="goo" operator="atop" />
+        </filter>
+        <filter id="liquid-remove-black" colorInterpolationFilters="sRGB">
+          <feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 -255 -255 -255 0 1" result="black-pixels" />
+          <feMorphology in="black-pixels" operator="dilate" radius="0.5" result="smoothed" />
+          <feComposite in="SourceGraphic" in2="smoothed" operator="out" />
+        </filter>
+      </defs>
+    </svg>
+  )
+}
+
 export default function App() {
   return (
     <ThemeProvider>
       <AutoLockProvider>
+        <LiquidToggleFilters />
         <Router>
           <ReloadPrompt />
             <Routes>
               {/* Public Route */}
-              <Route path="/auth" element={<Suspense fallback={<ScreenLoading />}><Auth /></Suspense>} />
+              <Route path={AUTH_ROUTE.path} element={<Suspense fallback={<ScreenLoading />}><Auth /></Suspense>} />
 
               {/* Protected Application Routes */}
               <Route path="/*" element={
@@ -57,25 +64,13 @@ export default function App() {
                   <Layout>
                     <Suspense fallback={<ScreenLoading />}>
                     <Routes>
-                      <Route path="/" element={<Dashboard />} />
-                      <Route path="/ledger" element={<Ledger />} />
-                      <Route path="/reports" element={<Reports />} />
-                      <Route path="/budgets" element={<FeatureRoute feature="budgets"><Budgets /></FeatureRoute>} />
-                      <Route path="/calculators" element={<FeatureRoute feature="calculators"><Calculators /></FeatureRoute>} />
-                      <Route path="/savings-goals" element={<FeatureRoute feature="savings_goals"><SavingsGoals /></FeatureRoute>} />
-                      <Route path="/shopping-lists" element={<FeatureRoute feature="shopping_lists"><ShoppingLists /></FeatureRoute>} />
-                      <Route path="/financial-health" element={<FeatureRoute feature="financial_health_score"><FinancialHealthScore /></FeatureRoute>} />
-                      <Route path="/accounts" element={<Accounts />} />
-                      <Route path="/debts" element={<Debts />} />
-                      <Route path="/contacts" element={<Contacts />} />
-                      <Route path="/settings" element={<Settings />} />
-                      <Route path="/offline" element={<OfflineQueue />} />
-                      <Route path="/calendar" element={<Calendar />} />
-                      
-                      {/* FIRED UP THE ENGINE */}
-                      <Route path="/chittis" element={<Chittis />} />
-                      
-                      {/* Fallback */}
+                      {ROUTE_REGISTRY.map(route => {
+                        const Screen = ROUTE_COMPONENTS[route.path]
+                        const screen = <Screen />
+                        return <Route key={route.path} path={route.path} element={route.optionalFeature
+                          ? <FeatureRoute feature={route.optionalFeature}>{screen}</FeatureRoute>
+                          : screen} />
+                      })}
                       <Route path="*" element={<Navigate to="/" replace state={{ routeNotice: 'That page does not exist. You are back on the Dashboard.' }} />} />
                     </Routes>
                     </Suspense>

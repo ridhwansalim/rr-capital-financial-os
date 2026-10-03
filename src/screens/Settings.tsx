@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Settings as SettingsIcon, Search, User, Key, Lock, RotateCcw, Save, Trash2, Loader2, Palette, Bot, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut, Sun, Moon, RefreshCw, Download } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Settings as SettingsIcon, Search, User, Key, Lock, RotateCcw, Save, Trash2, Loader2, Palette, Bot, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut, Sun, Moon, RefreshCw, Download, ArrowLeftRight, LayoutGrid } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDate } from '../lib/financeDate'
 import { normalizeThemeMode, useTheme } from '../components/ThemeProvider'
@@ -12,6 +12,10 @@ import { isGuidedHelpEnabled, replayGuidance, setGuidedHelpEnabled } from '../li
 import PageHeader from '../components/PageHeader'
 import { currentRelease, type ReleaseNotes } from '../lib/releaseNotes'
 import LiquidSwitch from '../components/ui/LiquidSwitch'
+import LiquidGlassSwitcher from '../components/ui/LiquidGlassSwitcher'
+import { liquidGlassItemProps } from '../components/ui/liquidGlassSwitcherItem'
+import { ROUTE_REGISTRY, getGroupedSettingsRoutes, type RoutePlacement } from '../lib/routeRegistry'
+import { useWorkspaceLayoutContext } from '../lib/workspaceLayoutContext'
 
 // WebAuthn Helper to encode hardware keys
 const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
@@ -23,6 +27,7 @@ export default function Settings() {
   const telegramBotUsername = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'ridhwans_fin_bot').replace(/^@/, '')
   const { themeMode, setTheme } = useTheme()
   const { flags: featureFlags } = useOptionalFeatures()
+  const workspace = useWorkspaceLayoutContext()
   const [checkingAppUpdate, setCheckingAppUpdate] = useState(false)
   const [appUpdateStatus, setAppUpdateStatus] = useState('')
   const [lastAppUpdateCheck, setLastAppUpdateCheck] = useState('')
@@ -547,6 +552,7 @@ export default function Settings() {
   const showIntegration = 'ai key openai gemini claude chatgpt integration telegram bot'.includes(query) || query === ''
   const showSecurity = 'security lock auto password biometric danger delete pin time faceid touchid'.includes(query) || query === ''
   const showModules = 'optional features modules budgets envelopes planning calculators guided help tips savings goals shopping lists account health minimum balance due date credit financial wellness score'.includes(query) || query === ''
+  const settingsSections = getGroupedSettingsRoutes(workspace.placements, featureFlags, workspace.isMobile)
 
   if (isLoading) {
     return (
@@ -559,7 +565,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="page-shell w-full max-w-4xl mx-auto animate-in fade-in duration-300 pb-32">
+    <div className="page-shell w-full max-w-7xl mx-auto animate-in fade-in duration-300 pb-32">
       
       <PageHeader title="Settings" description="Manage your identity, integrations, and security." icon={<SettingsIcon className="text-emerald-400" />} action={<div className="relative w-full md:w-72">
           <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -571,6 +577,39 @@ export default function Settings() {
             className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:border-emerald-500/50 transition-colors placeholder:text-slate-500"
           />
         </div>} actionClassName="md:w-72" />
+
+      <section className="surface-panel mb-6 rounded-3xl p-5 md:p-7" aria-labelledby="workspace-launcher-title">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><LayoutGrid className="h-5 w-5" /></span><div><h2 id="workspace-launcher-title" className="text-lg font-bold">Workspace & modules</h2><p className="mt-1 text-sm text-[var(--muted)]">Your Settings pages are grouped by purpose. Move any page to the navbar whenever you need faster access.</p></div></div>
+          <span className="shrink-0 rounded-full border border-[var(--line)] bg-[var(--surface-soft)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[.12em] text-[var(--muted)]">{workspace.isMobile ? 'Mobile layout' : 'Desktop layout'}</span>
+        </div>
+        {settingsSections.length ? <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {settingsSections.map(section => <section key={section.group} className="rounded-2xl border border-[var(--line)] bg-[var(--surface-soft)] p-4" aria-label={section.group}>
+            <h3 className="text-xs font-bold uppercase tracking-[.12em] text-[var(--muted)]">{section.group}</h3>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {section.routes.map(route => <div key={route.path} className="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-card)] p-3">
+                <Link to={route.path} className="flex min-w-0 flex-1 items-center gap-2.5 text-sm font-semibold text-[var(--ink)] hover:text-[var(--brand-primary-active)]"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><route.icon className="h-4 w-4" /></span><span className="truncate">{route.title}</span></Link>
+                <button type="button" aria-label={`Move ${route.title} to navbar`} title="Move to navbar" onClick={() => workspace.setPlacement(route.path, 'navbar')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--brand-primary-active)]"><ArrowLeftRight className="h-4 w-4" /></button>
+              </div>)}
+            </div>
+          </section>)}
+        </div> : <p className="mt-5 rounded-2xl border border-dashed border-[var(--line)] px-4 py-5 text-sm text-[var(--muted)]">All available pages are currently on your navbar. Use the layout controls below to move a page back here.</p>}
+      </section>
+
+      <section className="surface-panel mb-6 rounded-3xl p-5 md:p-7" aria-labelledby="layout-controller-title">
+        <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><ArrowLeftRight className="h-5 w-5" /></span><div><h2 id="layout-controller-title" className="text-lg font-bold">Navbar layout</h2><p className="mt-1 text-sm text-[var(--muted)]">Changes are saved to this signed-in workspace and update navigation immediately.</p></div></div>
+        <div className="mt-5 space-y-2">
+          {ROUTE_REGISTRY.filter(route => route.path !== '/' && route.path !== '/settings' && (!route.optionalFeature || Boolean(featureFlags[route.optionalFeature]))).map(route => {
+            const current = workspace.getPlacement(route.path)
+            return <div key={route.path} className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-soft)] p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--surface-card)] text-[var(--brand-primary-active)]"><route.icon className="h-4 w-4" /></span><div className="min-w-0"><p className="truncate text-sm font-semibold">{route.title}</p><p className="truncate text-xs text-[var(--muted)]">{route.settingsGroup}{route.optionalFeature ? ' · Optional module' : ''}</p></div></div>
+              <div className="flex shrink-0 rounded-full border border-[var(--line)] bg-[var(--surface-card)] p-1" role="group" aria-label={`${route.title} placement`}>
+                {(['navbar', 'settings'] as const).map(placement => <button key={placement} type="button" aria-pressed={current === placement} onClick={() => workspace.setPlacement(route.path, placement as RoutePlacement)} className={`min-h-8 rounded-full px-3 text-xs font-semibold transition-colors ${current === placement ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink)]'}`}>{placement === 'navbar' ? 'In Navbar' : 'Inside Settings'}</button>)}
+              </div>
+            </div>
+          })}
+        </div>
+      </section>
 
       {isProfileModified && (
         <div className="sticky top-4 z-50 mb-8 p-4 bg-indigo-500/10 border border-indigo-500/30 backdrop-blur-xl rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl animate-in slide-in-from-top-4">
@@ -706,16 +745,16 @@ export default function Settings() {
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase flex justify-between">
                   <span>Theme</span> {renderUndo('theme_mode')}
                 </label>
-                <div role="radiogroup" aria-label="Color theme" className="grid grid-cols-2 gap-3">
+                <LiquidGlassSwitcher activeKey={draftProfile.theme_mode} label="Color theme" className="liquid-theme-switcher">
                   {(['light', 'dark'] as const).map(mode => {
                     const selected = draftProfile.theme_mode === mode
                     const Icon = mode === 'light' ? Sun : Moon
-                    return <button key={mode} type="button" role="radio" aria-checked={selected} onClick={() => setDraftProfile({ ...draftProfile, theme_mode: mode, theme_accent: 'coral' })} className={`flex min-h-24 flex-col items-start justify-between rounded-xl border p-4 text-left transition-colors ${selected ? 'border-[var(--brand-primary)] bg-[var(--brand-tint)]' : 'border-[var(--line)] bg-[var(--surface-card)]'}`}>
+                    return <button key={mode} type="button" {...liquidGlassItemProps(mode, selected, 'flex min-h-24 min-w-24 flex-col items-start justify-between px-4 py-3 text-left')} role="radio" aria-checked={selected} onClick={() => setDraftProfile({ ...draftProfile, theme_mode: mode, theme_accent: 'coral' })}>
                       <Icon className="h-5 w-5 text-[var(--brand-primary)]" />
                       <span className="font-medium">{mode === 'light' ? 'Light' : 'Dark'}</span>
                     </button>
                   })}
-                </div>
+                </LiquidGlassSwitcher>
               </div>
             </div>
           </section>

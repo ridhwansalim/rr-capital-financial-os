@@ -7,6 +7,7 @@ $TempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimE
 $TestRoot = Join-Path $TempRoot ('rr capital backup selftest-' + [guid]::NewGuid().ToString('N'))
 $BackupRoot = Join-Path $TestRoot 'snapshots'
 $MockPowerShell = Join-Path $TestRoot 'mock-npx.ps1'
+$MockAclPowerShell = Join-Path $TestRoot 'mock-acl-powershell.ps1'
 $MockNpx = Join-Path $TestRoot 'npx.cmd'
 $CallLog = Join-Path $TestRoot 'calls.txt'
 
@@ -18,23 +19,72 @@ function Assert-True {
 function Invoke-BackupVerifier {
   param([string]$Path, [string]$OutputPath)
   $errorPath = $OutputPath + '.stderr'
-  $argumentLine = '-NoProfile -ExecutionPolicy Bypass -File "' + $VerifyScript + '" -SnapshotPath "' + $Path + '"'
-  $process = Start-Process -FilePath $PowerShellExe -ArgumentList $argumentLine -RedirectStandardOutput $OutputPath -RedirectStandardError $errorPath -Wait -PassThru -NoNewWindow
-  return $process.ExitCode
+  $previousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $MockAclPowerShell $VerifyScript -SnapshotPath $Path 1> $OutputPath 2> $errorPath
+  $exitCode = $LASTEXITCODE
+  $ErrorActionPreference = $previousErrorActionPreference
+  return $exitCode
 }
 
 try {
   [void](New-Item -ItemType Directory -Path $TestRoot)
   [void](New-Item -ItemType Directory -Path $BackupRoot)
-  $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
-  $testAcl = [System.Security.AccessControl.DirectorySecurity]::new()
-  $testAcl.SetAccessRuleProtection($true, $false)
-  $inheritance = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
-  foreach ($sid in @($currentSid, [System.Security.Principal.SecurityIdentifier]::new('S-1-5-18'), [System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))) {
-    $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($sid, [System.Security.AccessControl.FileSystemRights]::FullControl, $inheritance, [System.Security.AccessControl.PropagationFlags]::None, [System.Security.AccessControl.AccessControlType]::Allow)
-    [void]$testAcl.AddAccessRule($rule)
+  @'
+$ErrorActionPreference = 'Stop'
+$target = $args[0]
+$targetArgs = @($args | Select-Object -Skip 1)
+function Get-Acl {
+  param([Parameter(Mandatory = $true)][string]$LiteralPath)
+  $root = [System.IO.Path]::GetFullPath($env:RR_BACKUP_SELFTEST_ACL_ROOT).TrimEnd('\')
+  $path = [System.IO.Path]::GetFullPath($LiteralPath).TrimEnd('\')
+  $isRoot = [string]::Equals($root, $path, [System.StringComparison]::OrdinalIgnoreCase)
+  $sids = @(
+    [System.Security.Principal.WindowsIdentity]::GetCurrent().User,
+    [System.Security.Principal.SecurityIdentifier]::new('S-1-5-18'),
+    [System.Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
+  )
+  $rules = @($sids | ForEach-Object {
+    [pscustomobject]@{
+      AccessControlType = [System.Security.AccessControl.AccessControlType]::Allow
+      FileSystemRights = [System.Security.AccessControl.FileSystemRights]::FullControl
+      IdentityReference = $_
+      IsInherited = -not $isRoot
+    }
+  })
+  [pscustomobject]@{
+    AreAccessRulesProtected = if ($isRoot -and $env:RR_BACKUP_SELFTEST_ACL_MODE -eq 'root-inherited') { $false } else { $isRoot }
+    Owner = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    Access = $rules
   }
-  Set-Acl -LiteralPath $BackupRoot -AclObject $testAcl
+}
+function Start-Process {
+  param(
+    [string]$FilePath,
+    [string]$ArgumentList,
+    [string]$RedirectStandardOutput,
+    [string]$RedirectStandardError,
+    [switch]$Wait,
+    [switch]$PassThru,
+    [switch]$NoNewWindow
+  )
+  $parsedArgs = @([regex]::Matches($ArgumentList, '"([^"]*)"|(\S+)') | ForEach-Object {
+    if ($_.Groups[1].Success) { $_.Groups[1].Value } else { $_.Groups[2].Value }
+  })
+  $stdout = @(& $FilePath @parsedArgs 2>&1 | ForEach-Object { [string]$_ })
+  $code = $LASTEXITCODE
+  if ($RedirectStandardOutput) { $stdout | Set-Content -LiteralPath $RedirectStandardOutput }
+  if ($RedirectStandardError) { Set-Content -LiteralPath $RedirectStandardError -Value '' }
+  [pscustomobject]@{ ExitCode = $code }
+}
+try {
+  & $target @targetArgs
+  exit 0
+} catch {
+  [Console]::Error.WriteLine($_.Exception.Message)
+  exit 1
+}
+'@ | Set-Content -LiteralPath $MockAclPowerShell -Encoding UTF8
   @'
 $all = @($args | ForEach-Object { [string]$_ })
 Add-Content -LiteralPath $env:RR_BACKUP_SELFTEST_CALL_LOG -Value ($all -join '|')
@@ -52,8 +102,25 @@ exit /b %errorlevel%
 '@ | Set-Content -LiteralPath $MockNpx -Encoding ASCII
 
   $env:RR_BACKUP_SELFTEST_CALL_LOG = $CallLog
-  $output = @(& $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $BackupScript -BackupRoot $BackupRoot -NpxExecutable $MockNpx 2>&1)
+  $env:RR_BACKUP_SELFTEST_ACL_ROOT = $BackupRoot
+  $env:RR_BACKUP_SELFTEST_ACL_MODE = 'root-inherited'
+  $previousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  $rejectedOutput = @(& $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $MockAclPowerShell $BackupScript -BackupRoot $BackupRoot -NpxExecutable $MockNpx 2>&1)
+  $rejectedExitCode = $LASTEXITCODE
+  $ErrorActionPreference = $previousErrorActionPreference
+  Assert-True ($rejectedExitCode -ne 0) 'Backup runner accepted a root with inherited permissions.'
+  $rejectedCalls = @(Get-Content -LiteralPath $CallLog)
+  Assert-True ($rejectedCalls.Count -eq 1) 'Invalid ACL must be rejected before any dump command; only the CLI version check is allowed.'
+  Assert-True (($rejectedCalls[0] -match '--version') -and ($rejectedCalls[0] -notmatch 'db\|dump')) 'Backup runner attempted a database dump before rejecting the invalid root ACL.'
+  Remove-Item -LiteralPath $CallLog -Force
+
+  $env:RR_BACKUP_SELFTEST_ACL_MODE = 'valid'
+  $previousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  $output = @(& $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $MockAclPowerShell $BackupScript -BackupRoot $BackupRoot -NpxExecutable $MockNpx 2>&1)
   $exitCode = $LASTEXITCODE
+  $ErrorActionPreference = $previousErrorActionPreference
   Assert-True ($exitCode -eq 0) "Backup runner self-test failed: $($output -join ' ')"
   Assert-True (($output -join ' ') -notmatch 'synthetic backup fixture') 'CLI fixture output leaked to the console.'
 
@@ -73,20 +140,17 @@ exit /b %errorlevel%
     Assert-True ($actual.Hash -eq $file.sha256) "Manifest hash mismatch for $($file.name)."
   }
 
-  $acl = Get-Acl -LiteralPath $BackupRoot
-  Assert-True ($acl.AreAccessRulesProtected) 'Backup directory ACL is inheriting permissions.'
-  $expectedSids = @([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18', 'S-1-5-32-544') | Sort-Object -Unique
-  $actualSids = @($acl.Access | ForEach-Object { $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value } | Sort-Object -Unique)
-  Assert-True (($actualSids -join ',') -eq ($expectedSids -join ',')) 'Backup directory ACL contains unexpected principals.'
-
   $calls = Get-Content -LiteralPath $CallLog
   Assert-True ($calls.Count -eq 4) 'Expected a version check and three dump invocations.'
   Assert-True (($calls -join "`n") -notmatch '--dry-run') 'The runner must never invoke Supabase CLI dry-run.'
+  Assert-True ((@($calls | Where-Object { $_ -notmatch '(^|\|)--offline(\||$)' }).Count) -eq 0) 'Pinned Supabase CLI calls must use the verified local npm cache without registry resolution.'
   Assert-True ((@($calls | Where-Object { $_ -match 'db\|dump\|--linked' }).Count) -eq 3) 'Expected three linked-project dump commands.'
   Assert-True (($calls -join "`n") -match '--role-only') 'Role-only export flag is missing.'
   Assert-True (($calls -join "`n") -match '--data-only') 'Data-only export flag is missing.'
-  Assert-True (($calls -join "`n") -match 'storage\.buckets_vectors') 'Managed vector bucket table exclusion is missing.'
-  Assert-True (($calls -join "`n") -match 'storage\.vector_indexes') 'Managed vector index table exclusion is missing.'
+  $dataDumpCalls = @($calls | Where-Object { $_ -match 'db\|dump\|--linked' -and $_ -match '--data-only' })
+  Assert-True ($dataDumpCalls.Count -eq 1) 'Expected exactly one data-only export command.'
+  Assert-True ($dataDumpCalls[0] -match '--schema\|public,private') 'Data export must be limited to application schemas.'
+  Assert-True ($dataDumpCalls[0] -notmatch '(^|\|)(auth|storage)($|\.)') 'Managed Auth/Storage schemas must not be exported.'
 
   $verifiedExitCode = Invoke-BackupVerifier -Path $snapshotPath -OutputPath (Join-Path $TestRoot 'verify-valid.stdout')
   Assert-True ($verifiedExitCode -eq 0) "Backup verifier rejected the valid synthetic snapshot: $(Get-Content -LiteralPath (Join-Path $TestRoot 'verify-valid.stdout.stderr') -Raw)"
@@ -113,6 +177,8 @@ exit /b %errorlevel%
 }
 finally {
   Remove-Item Env:\RR_BACKUP_SELFTEST_CALL_LOG -ErrorAction SilentlyContinue
+  Remove-Item Env:\RR_BACKUP_SELFTEST_ACL_ROOT -ErrorAction SilentlyContinue
+  Remove-Item Env:\RR_BACKUP_SELFTEST_ACL_MODE -ErrorAction SilentlyContinue
   $resolvedTestRoot = [System.IO.Path]::GetFullPath($TestRoot)
   $requiredPrefix = $TempRoot + [System.IO.Path]::DirectorySeparatorChar + 'rr capital backup selftest-'
   if ($resolvedTestRoot.StartsWith($requiredPrefix, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $resolvedTestRoot)) {

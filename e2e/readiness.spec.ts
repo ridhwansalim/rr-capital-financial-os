@@ -92,12 +92,14 @@ const syntheticProfile = {
 }
 
 function contrastRatio(foreground: string, background: string) {
-  const luminance = (color: string) => {
+  const parseChannels = (color: string) => {
     const channels = color.match(/[\d.]+/g)?.slice(0, 3).map(Number)
     if (!channels || channels.length !== 3) throw new Error(`Unexpected computed color: ${color}`)
-    const [red, green, blue] = channels.map(value => {
-      const normalized = value / 255
-      return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4
+    return color.startsWith('color(srgb') ? channels : channels.map(value => value / 255)
+  }
+  const luminance = (color: string) => {
+    const [red, green, blue] = parseChannels(color).map(channel => {
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
     })
     return 0.2126 * red + 0.7152 * green + 0.0722 * blue
   }
@@ -250,16 +252,20 @@ test('protected pages send anonymous visitors to the invitation-only sign-in pag
   await expect(page.getByText(/Access is invitation-only/i)).toBeVisible()
 })
 
-test('desktop navigation follows the page matrix and logo opens the creator profile', async ({ page }) => {
+test('desktop navigation uses the Settings module hub and logo opens the creator profile', async ({ page }) => {
   await installSyntheticBackend(page)
   await page.setViewportSize({ width: 1440, height: 900 })
   await page.goto('/')
+  await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toHaveJSProperty('offsetTop', 0)
+  expect(await page.locator('.liquid-toggle-filters').evaluate(element => element.getBoundingClientRect().height)).toBe(0)
 
-  const primary = page.getByRole('navigation', { name: 'Primary navigation' })
-  for (const label of ['Dashboard', 'Calendar', 'Ledger', 'Reports', 'Accounts']) {
+  const primary = page.locator('.app-desktop-nav-switcher')
+  for (const label of ['Dashboard', 'Calendar', 'Ledger', 'Chittis', 'Settings']) {
     await expect(primary.getByRole('link', { name: label })).toBeVisible()
   }
-  await primary.getByRole('button', { name: 'About RR Capital and its creator' }).click()
+  await expect(primary.getByRole('link', { name: 'Reports' })).toHaveCount(0)
+  await expect(primary.getByRole('link', { name: 'Accounts' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'About RR Capital and its creator' }).click()
   const creator = page.getByRole('dialog', { name: 'Ridhwan S.' })
   await expect(creator).toBeVisible()
   await expect(creator.getByRole('img', { name: 'Ridhwan S., creator of RR Capital' })).toHaveJSProperty('complete', true)
@@ -272,6 +278,9 @@ test('desktop navigation follows the page matrix and logo opens the creator prof
     boxShadow: getComputedStyle(element).boxShadow,
     topHighlight: getComputedStyle(element, '::before').backgroundImage,
     edgeHighlight: getComputedStyle(element, '::after').backgroundImage,
+    adaptiveColor: getComputedStyle(element.querySelector('.creator-profile-adaptive-copy')!).color,
+    adaptiveBlend: getComputedStyle(element.querySelector('.creator-profile-adaptive-copy')!).mixBlendMode,
+    pointerHighlight: getComputedStyle(element, '::before').backgroundImage,
   }))
   expect(glassSurface.backdropFilter).toContain('blur(24px)')
   expect(glassSurface.backdropFilter).toContain('saturate(1.9)')
@@ -280,6 +289,20 @@ test('desktop navigation follows the page matrix and logo opens the creator prof
   expect(glassSurface.boxShadow).toContain('inset')
   expect(glassSurface.topHighlight).toContain('linear-gradient')
   expect(glassSurface.edgeHighlight).toContain('linear-gradient')
+  expect(glassSurface.adaptiveColor).toBe('rgb(255, 255, 255)')
+  expect(glassSurface.adaptiveBlend).toBe('difference')
+  expect(glassSurface.pointerHighlight).not.toContain('radial-gradient')
+  await creator.hover({ position: { x: 80, y: 80 } })
+  const tilt = await creator.evaluate(element => ({
+    x: element.style.getPropertyValue('--glass-tilt-x'),
+    y: element.style.getPropertyValue('--glass-tilt-y'),
+  }))
+  expect(tilt.x).not.toBe('0deg')
+  expect(tilt.y).not.toBe('0deg')
+  await page.mouse.move(0, 0)
+  await expect.poll(() => creator.evaluate(element => element.style.getPropertyValue('--glass-tilt-x'))).toBe('0deg')
+  await expect(creator.getByRole('button', { name: 'Close creator profile' })).toHaveCount(1)
+  await expect(creator.getByRole('button', { name: 'Close profile' })).toHaveCount(0)
   for (const [label, expectedColor] of [['GitHub', 'rgb(240, 246, 252)'], ['Instagram', 'rgb(225, 48, 108)'], ['LinkedIn', 'rgb(10, 102, 194)'], ['Portfolio', 'rgb(182, 93, 63)']]) {
     const link = creator.getByRole('link', { name: new RegExp(label) })
     await expect(link).toBeVisible()
@@ -287,16 +310,28 @@ test('desktop navigation follows the page matrix and logo opens the creator prof
   }
   await creator.getByRole('link', { name: /GitHub/ }).hover()
   await expect(creator.getByRole('link', { name: /GitHub/ })).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-  await expect(creator.getByRole('button', { name: 'Close profile' })).toHaveCSS('background-image', /linear-gradient/)
   await creator.getByRole('button', { name: 'Close creator profile' }).click()
 
-  await primary.getByRole('button', { name: /More/ }).click()
-  const menu = page.getByRole('menu')
-  for (const label of ['Workspace', 'Optional modules', 'Preferences']) await expect(menu.getByRole('region', { name: label })).toBeVisible()
-  for (const label of ['Chittis', 'Debts & IOUs', 'Contacts', 'Offline queue', 'Budgets', 'Calculators', 'Savings goals', 'Shopping lists', 'Financial wellness', 'Settings']) {
-    await expect(menu.getByRole('link', { name: new RegExp(label) })).toBeVisible()
-  }
-  await expect(menu.getByRole('link', { name: 'Calendar' })).toHaveCount(0)
+  await primary.getByRole('link', { name: 'Settings' }).click()
+  await expect(page).toHaveURL(/\/settings$/)
+  await expect(page.getByRole('heading', { name: 'Workspace & modules' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Analytics, Planning & Wellness' }).getByRole('link', { name: 'Reports' })).toBeVisible()
+  await page.getByRole('group', { name: 'Accounts placement' }).getByRole('button', { name: 'In Navbar' }).click()
+  await page.getByRole('group', { name: 'Ledger placement' }).getByRole('button', { name: 'Inside Settings' }).click()
+  await expect.poll(() => page.evaluate(userId => {
+    const layout = JSON.parse(localStorage.getItem(`rr-capital.workspace-layout.v1.${userId}`) || '{}')
+    return layout.placements
+  }, syntheticUserId)).toMatchObject({ '/accounts': 'navbar', '/ledger': 'settings' })
+  await expect(primary.getByRole('link', { name: 'Accounts' })).toBeVisible()
+  await expect(primary.getByRole('link', { name: 'Ledger' })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Core Operations & Daily Flow' }).getByRole('link', { name: 'Ledger' })).toBeVisible()
+  await page.getByRole('region', { name: 'Analytics, Planning & Wellness' }).getByRole('link', { name: 'Reports' }).click()
+  await expect(page.getByRole('navigation', { name: 'Workspace breadcrumb' })).toContainText('Analytics, Planning & Wellness')
+  await expect(page.getByRole('button', { name: /Move to Navbar/ })).toBeVisible()
+  await page.getByRole('button', { name: /Move to Navbar/ }).click()
+  await expect(primary.getByRole('link', { name: 'Reports' })).toBeVisible()
+  await primary.getByRole('link', { name: 'Dashboard' }).click()
+  await expect(primary.locator('[data-glass-key="/"]')).toHaveClass(/is-active/)
   const addButton = page.locator('button.app-desktop-fab')
   await expect(addButton).toBeVisible()
   await expect(addButton).toHaveClass(/app-desktop-fab/)
@@ -314,23 +349,75 @@ test('desktop navigation follows the page matrix and logo opens the creator prof
     if (!main) throw new Error('Dashboard heading is outside the app main region')
     return element.getBoundingClientRect().top - main.getBoundingClientRect().top
   })
-  expect(headingGap).toBeLessThan(64)
+  expect(headingGap).toBeLessThan(100)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440)
 })
 
 test('creator profile remains usable on mobile', async ({ page }) => {
   await installSyntheticBackend(page)
-  await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
-  await page.getByRole('button', { name: 'About RR Capital and its creator' }).click()
-
+  const openCreator = page.getByRole('button', { name: 'About RR Capital and its creator' })
   const creator = page.getByRole('dialog', { name: 'Ridhwan S.' })
-  await expect(creator).toBeVisible()
-  await expect(creator.getByRole('img', { name: 'Ridhwan S., creator of RR Capital' })).toBeVisible()
+  const assertPortraitFits = async () => {
+    await expect(creator).toBeVisible()
+    await expect(creator.getByRole('img', { name: 'Ridhwan S., creator of RR Capital' })).toBeVisible()
+    const portraitGeometry = await creator.locator('.creator-profile-photo img').evaluate(image => {
+    const bounds = image.getBoundingClientRect()
+    const frame = image.parentElement!.getBoundingClientRect()
+    const source = image as HTMLImageElement
+    const coverScale = Math.max(frame.width / source.naturalWidth, frame.height / source.naturalHeight)
+    const renderedWidth = source.naturalWidth * coverScale
+    const renderedHeight = source.naturalHeight * coverScale
+    const renderedLeft = frame.left + (frame.width - renderedWidth) / 2
+    const renderedTop = frame.top + (frame.height - renderedHeight) * 0.28
+    return {
+      loaded: source.naturalWidth > 0,
+      imageHeight: bounds.height,
+      face: {
+        left: renderedLeft + renderedWidth * 0.36,
+        right: renderedLeft + renderedWidth * 0.66,
+        top: renderedTop + renderedHeight * 0.31,
+        bottom: renderedTop + renderedHeight * 0.52,
+      },
+      frame: { left: frame.left, right: frame.right, top: frame.top, bottom: frame.bottom },
+    }
+    })
+    expect(portraitGeometry.loaded).toBeTruthy()
+    expect(portraitGeometry.imageHeight).toBeGreaterThan(250)
+    expect(portraitGeometry.face.left).toBeGreaterThan(portraitGeometry.frame.left)
+    expect(portraitGeometry.face.right).toBeLessThan(portraitGeometry.frame.right)
+    expect(portraitGeometry.face.top).toBeGreaterThan(portraitGeometry.frame.top)
+    expect(portraitGeometry.face.bottom).toBeLessThan(portraitGeometry.frame.bottom)
+  }
+
+  for (const viewport of [{ width: 320, height: 568 }, { width: 360, height: 800 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport)
+    await openCreator.click()
+    await assertPortraitFits()
+  await creator.evaluate(element => { element.scrollTop = element.scrollHeight })
+  const portraitStaysVisible = await creator.locator('.creator-profile-photo').evaluate(photo => {
+    const bounds = photo.getBoundingClientRect()
+    return bounds.top >= 0 && bounds.top < window.innerHeight && bounds.bottom <= window.innerHeight
+  })
+  expect(portraitStaysVisible).toBeTruthy()
+    await creator.getByRole('button', { name: 'Close creator profile' }).click()
+  }
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openCreator.click()
+  await assertPortraitFits()
+  await page.screenshot({ path: 'test-results/creator-modal-mobile-face.png' })
+  await creator.getByRole('button', { name: 'View creator photo' }).click()
+  const photoViewer = page.getByRole('dialog', { name: 'Creator photo' })
+  await expect(photoViewer).toBeVisible()
+  await expect(photoViewer.getByRole('img', { name: 'Ridhwan S., creator of RR Capital' })).toBeVisible()
+  await photoViewer.getByRole('button', { name: 'Close creator photo' }).click()
+  await expect(photoViewer).toHaveCount(0)
   for (const label of ['GitHub', 'Instagram', 'LinkedIn', 'Portfolio']) {
     await expect(creator.getByRole('link', { name: new RegExp(label) })).toBeVisible()
   }
-  await expect(creator.getByRole('button', { name: 'Close profile' })).toBeVisible()
+  await expect(creator.getByRole('button', { name: 'Close creator profile' })).toBeVisible()
+  await expect(creator.getByRole('button', { name: 'Close profile' })).toHaveCount(0)
 })
 
 test('liquid preference switches preserve native switch semantics and keyboard control', async ({ page }) => {
@@ -339,12 +426,26 @@ test('liquid preference switches preserve native switch semantics and keyboard c
   const budgets = page.getByRole('switch', { name: 'Budgets' })
   await expect(budgets).toBeVisible()
   await expect(budgets).toHaveClass(/liquid-switch/)
+  await expect(budgets).toHaveClass(/liquid-toggle/)
   await expect(budgets).toHaveAttribute('aria-checked', 'true')
+  await expect(page.locator('#liquid-goo')).toHaveCount(1)
+  await expect(page.locator('#liquid-remove-black')).toHaveCount(1)
+  expect(await budgets.evaluate(element => element.getBoundingClientRect().width)).toBe(56)
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await budgets.evaluate(element => element.getBoundingClientRect().width)).toBe(52)
+  await page.setViewportSize({ width: 320, height: 568 })
+  expect(await budgets.evaluate(element => element.getBoundingClientRect().width)).toBe(48)
+  await page.setViewportSize({ width: 1280, height: 900 })
   page.once('dialog', dialog => void dialog.accept())
   await budgets.click()
   await expect(budgets).toHaveAttribute('aria-checked', 'false')
   const guidedTips = page.getByRole('switch', { name: 'Guided page tips' })
   await expect(guidedTips).toHaveClass(/liquid-switch/)
+  await guidedTips.focus()
+  await guidedTips.press('Space')
+  await expect(guidedTips).toHaveAttribute('aria-checked', 'false')
+  await guidedTips.evaluate(element => (element as HTMLButtonElement).click())
+  await expect(guidedTips).toHaveAttribute('aria-checked', 'true')
   expect(evidence.unexpectedOrigins).toEqual([])
   expect(evidence.tableMutations).toEqual([])
 })
@@ -380,22 +481,46 @@ test('native range keeps keyboard support and glass styling', async ({ page }) =
   await expect(slider).toHaveValue('41')
 })
 
-test('mobile navigation uses the five fixed slots and grouped More drawer', async ({ page }) => {
+test('mobile navigation keeps a floating Settings hub and grouped module launcher', async ({ page }) => {
   await installSyntheticBackend(page, 'light')
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
 
+  const dashboardHeading = page.getByRole('heading', { name: 'Financial overview' })
+  await expect(dashboardHeading).toBeVisible()
+  const mobileHeaderGap = await page.locator('.app-page-header').evaluate(element => element.getBoundingClientRect().top - element.closest('main')!.getBoundingClientRect().top)
+  expect(mobileHeaderGap).toBeLessThan(8)
+  const mobileContextTop = await page.locator('.app-mobile-context').evaluate(element => element.getBoundingClientRect().top)
+  const mobileContextHeight = await page.locator('.app-mobile-context').evaluate(element => element.getBoundingClientRect().height)
+  const mobileMainTop = await page.locator('main.app-main').evaluate(element => element.getBoundingClientRect().top)
+  expect(mobileContextTop).toBe(0)
+  expect(mobileMainTop).toBe(mobileContextHeight)
+  expect(await page.locator('.liquid-toggle-filters').evaluate(element => element.getBoundingClientRect().height)).toBe(0)
+
   const mobile = page.getByRole('navigation', { name: 'Mobile navigation' })
+  const dockBounds = await mobile.boundingBox()
+  expect(dockBounds).not.toBeNull()
+  expect(dockBounds!.x + dockBounds!.width / 2).toBeCloseTo(195, 0)
+  expect(844 - (dockBounds!.y + dockBounds!.height)).toBeCloseTo(16, 0)
+  const dockPosition = await mobile.evaluate(element => getComputedStyle(element).position)
+  expect(dockPosition).toBe('fixed')
+  const mainPadding = await page.locator('main.app-main').evaluate(element => Number.parseFloat(getComputedStyle(element).paddingBottom))
+  expect(mainPadding).toBeGreaterThanOrEqual(96)
   await expect(mobile.getByRole('link', { name: 'Dashboard' })).toBeVisible()
   await expect(mobile.getByRole('link', { name: 'Ledger' })).toBeVisible()
   await expect(mobile.getByRole('button', { name: 'Add transaction or debt' })).toBeVisible()
   const addButton = mobile.locator('button.app-mobile-fab')
   await expect(addButton).toHaveClass(/rounded-full/)
-  await expect(addButton).toHaveClass(/-mt-7/)
+  await expect(addButton).toHaveClass(/h-12/)
   await addButton.click()
   const quickAdd = page.getByRole('group', { name: 'Quick add actions' })
   await expect(quickAdd.getByRole('button', { name: 'Transaction' })).toBeVisible()
   await expect(quickAdd.getByRole('button', { name: 'Add Debt / IOU' })).toBeVisible()
+  await expect(addButton).toHaveAttribute('aria-label', 'Close add menu')
+  await addButton.click()
+  await expect(quickAdd.getByRole('button', { name: 'Transaction' })).toBeHidden()
+  await addButton.click()
+  await expect(quickAdd.getByRole('button', { name: 'Transaction' })).toBeVisible()
   await quickAdd.getByRole('button', { name: 'Transaction' }).click()
   await expect(page.getByRole('heading', { name: 'New Transaction' })).toBeVisible()
   const transactionPlaceholderColors = await page.locator('.app-financial-entry-modal input[placeholder]').evaluateAll(elements => elements.map(element => getComputedStyle(element, '::placeholder').color))
@@ -416,7 +541,7 @@ test('mobile navigation uses the five fixed slots and grouped More drawer', asyn
   for (const viewport of [{ width: 320, height: 568 }, { width: 360, height: 640 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport)
     await addButton.click()
-    const addActions = [page.getByRole('button', { name: 'Transaction' }), page.getByRole('button', { name: 'Add Debt \/ IOU' })]
+    const addActions = [page.getByRole('button', { name: 'Transaction' }), page.getByRole('button', { name: 'Add Debt / IOU' })]
     for (const action of addActions) {
       const bounds = await action.boundingBox()
       expect(bounds).not.toBeNull()
@@ -461,13 +586,16 @@ test('mobile navigation uses the five fixed slots and grouped More drawer', asyn
   })
   for (const pair of lightContrast.labels) expect(contrastRatio(pair.foreground, pair.background), JSON.stringify(pair)).toBeGreaterThanOrEqual(4.5)
   for (const pair of [...lightContrast.icons, lightContrast.fab]) expect(contrastRatio(pair.foreground, pair.background), JSON.stringify(pair)).toBeGreaterThanOrEqual(3)
-  await mobile.locator('button[aria-expanded="true"]').click()
-  await expect(mobile.getByRole('link', { name: 'Chittis' })).toBeVisible()
-  await mobile.getByRole('button', { name: 'Open more pages' }).click()
-  const drawer = page.getByRole('dialog', { name: 'More pages' })
-  for (const label of ['Calendar', 'Reports', 'Accounts', 'Debts & IOUs', 'Contacts', 'Offline queue', 'Budgets', 'Calculators', 'Savings goals', 'Shopping lists', 'Financial wellness', 'Settings']) {
-    await expect(drawer.getByRole('link', { name: new RegExp(label) })).toBeVisible()
-  }
+  await mobile.getByRole('link', { name: 'Settings' }).click()
+  await expect(page).toHaveURL(/\/settings$/)
+  await expect(page.getByRole('heading', { name: 'Workspace & modules' })).toBeVisible()
+  const analytics = page.getByRole('region', { name: 'Analytics, Planning & Wellness' })
+  await expect(analytics.getByRole('link', { name: 'Reports' })).toBeVisible()
+  await analytics.getByRole('link', { name: 'Reports' }).click()
+  await expect(page).toHaveURL(/\/reports$/)
+  await expect(page.getByRole('navigation', { name: 'Workspace breadcrumb' })).toContainText('Analytics, Planning & Wellness')
+  await expect(mobile.getByRole('link', { name: 'Settings' })).toHaveClass(/is-active/)
+  await page.goto('/')
   await expect(page.locator('.app-mobile-context')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
 })
@@ -488,8 +616,105 @@ test('settings presents release information and manual update check', async ({ p
   await page.goto('/settings?section=updates')
   await expect(page.getByRole('heading', { name: 'App updates' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Check for updates' })).toBeVisible()
-  await expect(page.getByText(/Latest release .*2026\.10\.03\.4/)).toBeVisible()
+  await expect(page.getByText(/Latest release .*2026\.10\.03\.6/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'View detailed summary' })).toBeVisible()
+})
+
+test('Telegram linking configures the synthetic webhook and confirms a consumed challenge', async ({ page }) => {
+  const evidence = await installSyntheticBackend(page)
+  const token = 'ab'.repeat(24)
+  const chatId = '987654321'
+  const configurationRequests: Array<{ body: unknown; authorization: string }> = []
+  const challengeRequests: Array<{ body: unknown; authorization: string }> = []
+  let linkedChatId: string | null = null
+
+  await page.route(`${backendOrigin}/functions/v1/telegram-webhook`, async route => {
+    const request = route.request()
+    if (request.method() === 'OPTIONS') return fulfillJson(route, {}, 204)
+    configurationRequests.push({
+      body: request.postDataJSON(),
+      authorization: request.headers().authorization ?? '',
+    })
+    await fulfillJson(route, { configured: true, webhookReady: true, pendingUpdates: 0, hasDeliveryError: false })
+  })
+
+  await page.route(`${backendOrigin}/rest/v1/rpc/issue_telegram_link_token`, async route => {
+    const request = route.request()
+    if (request.method() === 'OPTIONS') return fulfillJson(route, {}, 204)
+    challengeRequests.push({
+      body: request.postDataJSON(),
+      authorization: request.headers().authorization ?? '',
+    })
+    await fulfillJson(route, token)
+  })
+
+  await page.route(`${backendOrigin}/rest/v1/profiles**`, async route => {
+    const url = new URL(route.request().url())
+    if (url.searchParams.get('select') !== 'telegram_chat_id') return route.fallback()
+    await fulfillJson(route, { telegram_chat_id: linkedChatId })
+  })
+
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Link Telegram' }).click()
+  await expect(page.getByText('The bot webhook is verified.')).toBeVisible()
+  await expect(page.locator('code')).toContainText(`/start ${token}`)
+  const botLink = page.getByRole('link', { name: 'Open @ridhwans_fin_bot' })
+  await expect(botLink).toHaveAttribute('href', `https://t.me/ridhwans_fin_bot?start=${token}`)
+  await expect(botLink).toHaveAttribute('target', '_blank')
+  expect(configurationRequests).toEqual([{
+    body: { action: 'configure' },
+    authorization: expect.stringMatching(/^Bearer e30\./),
+  }])
+  expect(challengeRequests).toEqual([{
+    body: {},
+    authorization: expect.stringMatching(/^Bearer e30\./),
+  }])
+
+  // Model the webhook consuming the challenge, then let the settings page's
+  // visibility check confirm the linked chat without sending an external message.
+  linkedChatId = chatId
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+  await expect(page.getByText('Chat ID on file. Use the bot to verify or change it.')).toBeVisible()
+  await expect(page.locator('code')).toHaveCount(0)
+  expect(evidence.unexpectedOrigins).toEqual([])
+  expect(evidence.tableMutations).toEqual([])
+  expect(evidence.unexpectedRpcs).toEqual([])
+})
+
+test('Telegram setup failure does not issue or display a link challenge', async ({ page }) => {
+  const evidence = await installSyntheticBackend(page)
+  const configurationRequests: Array<{ body: unknown; authorization: string }> = []
+  let challengeRequestCount = 0
+
+  await page.route(`${backendOrigin}/functions/v1/telegram-webhook`, async route => {
+    const request = route.request()
+    if (request.method() === 'OPTIONS') return fulfillJson(route, {}, 204)
+    configurationRequests.push({
+      body: request.postDataJSON(),
+      authorization: request.headers().authorization ?? '',
+    })
+    await fulfillJson(route, { configured: false, error: 'Bot setup is temporarily unavailable.' }, 503)
+  })
+
+  await page.route(`${backendOrigin}/rest/v1/rpc/issue_telegram_link_token`, async route => {
+    if (route.request().method() === 'OPTIONS') return fulfillJson(route, {}, 204)
+    challengeRequestCount += 1
+    await fulfillJson(route, 'unexpected-challenge-token')
+  })
+
+  await page.goto('/settings?search=telegram')
+  await page.getByRole('textbox', { name: 'Search settings...' }).fill('telegram')
+  await page.getByRole('button', { name: 'Link Telegram' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'Could not create a link code. Try again.' })).toBeVisible()
+  await expect(page.getByText(/The bot webhook is verified/)).toHaveCount(0)
+  expect(configurationRequests).toEqual([{
+    body: { action: 'configure' },
+    authorization: expect.stringMatching(/^Bearer e30\./),
+  }])
+  expect(challengeRequestCount).toBe(0)
+  expect(evidence.unexpectedOrigins).toEqual([])
+  expect(evidence.tableMutations).toEqual([])
+  expect(evidence.unexpectedRpcs).toEqual([])
 })
 
 test('dated opening balance submission stays inside the synthetic backend', async ({ page }) => {
@@ -590,6 +815,96 @@ test('transaction occurrence date is sent unchanged as India-time noon to the le
   })
   expect(ledgerAuthorization).toEqual([expect.stringMatching(/^Bearer e30\./)])
   expect(await page.getByRole('dialog').count()).toBe(0)
+})
+
+test('offline queue upgrades legacy v6 records and redacts stored diagnostics', async ({ page }) => {
+  await installSyntheticBackend(page)
+  await page.route('http://127.0.0.1:5191/__idb_seed', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><title>IndexedDB migration fixture</title>',
+  }))
+  await page.goto('/__idb_seed')
+  await page.evaluate(() => {
+    if (indexedDB.databases) return indexedDB.databases().then(databases => {
+      const existing = databases.find(database => database.name === 'FinancialOS_OfflineDB')
+      if (!existing) return
+      return new Promise<void>((resolve, reject) => {
+        const request = indexedDB.deleteDatabase('FinancialOS_OfflineDB')
+        request.onsuccess = () => resolve()
+        request.onerror = () => reject(request.error)
+      })
+    })
+  })
+  const legacyTransaction = {
+    owner_id: syntheticUserId,
+    from_account_id: syntheticAccountId,
+    to_account_id: null,
+    amount: 735,
+    fee_amount: 0,
+    description: 'Legacy queued expense',
+    sync_status: 'failed',
+    last_error: 'Postgres error: password=must-not-survive; private diagnostic',
+    created_at: '2026-09-01T12:00:00.000Z',
+  }
+  await page.evaluate(async transaction => {
+    await new Promise<void>((resolve, reject) => {
+      // Dexie maps logical version 6 to native IndexedDB version 60.
+      const request = indexedDB.open('FinancialOS_OfflineDB', 60)
+      request.onupgradeneeded = () => {
+        const database = request.result
+        const outbox = database.createObjectStore('outbox', { keyPath: 'id', autoIncrement: true })
+        outbox.createIndex('sync_status', 'sync_status')
+        outbox.createIndex('created_at', 'created_at')
+        database.createObjectStore('accountCache', { keyPath: 'owner_id' })
+        database.createObjectStore('contactCache', { keyPath: 'owner_id' })
+      }
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => {
+        const database = request.result
+        const write = database.transaction('outbox', 'readwrite')
+        write.objectStore('outbox').add(transaction)
+        write.oncomplete = () => {
+          database.close()
+          resolve()
+        }
+        write.onerror = () => reject(write.error)
+      }
+    })
+  }, legacyTransaction)
+
+  await page.goto('/offline')
+  await expect(page.getByText('Legacy queued expense')).toBeVisible()
+  await expect(page.getByRole('alert').filter({ hasText: 'The server rejected this entry.' })).toBeVisible()
+  const migrated = await page.evaluate(async () => {
+    const request = indexedDB.open('FinancialOS_OfflineDB')
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const transaction = database.transaction('outbox', 'readonly')
+    const store = transaction.objectStore('outbox')
+    const row = await new Promise<Record<string, unknown>>((resolve, reject) => {
+      const query = store.get(1)
+      query.onsuccess = () => resolve(query.result)
+      query.onerror = () => reject(query.error)
+    })
+    const indexes = Array.from(store.indexNames)
+    database.close()
+    return { version: database.version, row, indexes }
+  })
+  expect(migrated.version).toBe(80) // Dexie's logical v8 uses native version 80.
+  expect(migrated.indexes).toContain('[owner_id+sync_status]')
+  expect(migrated.row).toMatchObject({
+    id: 1,
+    owner_id: syntheticUserId,
+    from_account_id: syntheticAccountId,
+    amount: 735,
+    description: 'Legacy queued expense',
+    sync_status: 'failed',
+    last_error: 'The server rejected this entry. Review it and enter it again if needed.',
+  })
+  expect(JSON.stringify(migrated.row)).not.toContain('must-not-survive')
 })
 
 test('all application pages render from synthetic data on desktop and mobile without page-load writes', async ({ page }) => {

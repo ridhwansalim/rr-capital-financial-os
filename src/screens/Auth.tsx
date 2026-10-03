@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
+import { getPasswordPolicyError, PASSWORD_MIN_LENGTH } from '../lib/passwordPolicy'
 import { Mail, Lock, Loader2, LogIn, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 type AuthMode = 'login' | 'invite' | 'recovery'
@@ -53,6 +54,8 @@ export default function Auth() {
       }
 
       if (password !== passwordConfirmation) throw new Error('Passwords do not match.')
+      const passwordPolicyError = getPasswordPolicyError(password)
+      if (passwordPolicyError) throw new Error(passwordPolicyError)
 
       const { error } = await supabase.auth.updateUser({ password })
       if (error) throw error
@@ -161,7 +164,7 @@ export default function Auth() {
             <input
               type="password"
               required
-              minLength={isSettingPassword ? 12 : undefined}
+              minLength={isSettingPassword ? PASSWORD_MIN_LENGTH : undefined}
               autoComplete={isSettingPassword ? 'new-password' : 'current-password'}
               placeholder={isSettingPassword ? 'New Password' : 'Password'}
               aria-label={isSettingPassword ? 'New password' : 'Password'}
@@ -171,7 +174,7 @@ export default function Auth() {
               />
           </div>
 
-          {isSettingPassword && <p className="-mt-2 text-xs text-slate-400">Use at least 12 characters.</p>}
+          {isSettingPassword && <p className="-mt-2 text-xs text-slate-400">Use at least 12 characters, including uppercase and lowercase letters, a number, and a symbol.</p>}
 
           {isSettingPassword && (
             <div className="relative">
@@ -179,7 +182,7 @@ export default function Auth() {
               <input
                 type="password"
                 required
-                minLength={12}
+                minLength={PASSWORD_MIN_LENGTH}
                 autoComplete="new-password"
                 placeholder="Confirm New Password"
                 aria-label="Confirm new password"

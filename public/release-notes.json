@@ -1,7 +1,7 @@
 {
-    "version":  "2026.10.03.4",
-    "releasedAt":  "2026-10-03T10:12:33+05:30",
-    "brief":  "Desktop Add actions float on desktop, responsive liquid-glass controls polish the workspace, and the RR creator profile now has a refractive glass surface.",
+    "version":  "2026.10.03.6",
+    "releasedAt":  "2026-10-03T14:10:00+05:30",
+    "brief":  "Creator profile links use recognizable social logos and brand colors across desktop and phones.",
     "details":  [
                     "Desktop navigation keeps Dashboard, Calendar, Ledger, Reports, and Accounts in the top bar, with the coral Add action floating at the lower right.",
                     "Mobile navigation keeps Dashboard, Ledger, Add, Chittis, and More in the bottom bar; the More drawer groups the remaining pages.",
@@ -13,6 +13,8 @@
                     "Transaction and Debt / IOU form placeholders use readable contrast in light mode.",
                     "A keyboard-accessible liquid-glass range control is available for future slider settings.",
                     "The RR Capital logo opens a responsive creator details modal with a continuous liquid-glass surface, visible edge reflections, and a refractive background.",
-                    "Preference switches and primary actions use theme-aware liquid-glass styling, and the Dashboard heading no longer has excess space above it."
+                    "Creator profile social links use recognizable logos and network colors, with readable dark-theme contrast and brand tints on touch devices. The profile has one top-right close control, theme-aware text, and no pointer-following highlight.",
+                    "Preference switches and primary actions use theme-aware liquid-glass styling, and the Dashboard heading no longer has excess space above it.",
+                    "Telegram Settings now verifies both successful linking and safe handling when webhook setup fails; its automated browser checks use synthetic responses and do not contact Telegram."
                 ]
 }
