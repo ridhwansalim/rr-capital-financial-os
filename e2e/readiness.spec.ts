@@ -93,6 +93,7 @@ const syntheticProfile = {
 
 type MockEvidence = {
   unexpectedOrigins: string[]
+  blockedBrowserExtensionOrigins: string[]
   tableMutations: string[]
   unexpectedRpcs: string[]
 }
@@ -113,7 +114,7 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
 }
 
 async function installSyntheticBackend(page: Page): Promise<MockEvidence> {
-  const evidence: MockEvidence = { unexpectedOrigins: [], tableMutations: [], unexpectedRpcs: [] }
+  const evidence: MockEvidence = { unexpectedOrigins: [], blockedBrowserExtensionOrigins: [], tableMutations: [], unexpectedRpcs: [] }
 
   await page.addInitScript(({ storageKey, session }) => {
     localStorage.setItem(storageKey, JSON.stringify(session))
@@ -131,7 +132,13 @@ async function installSyntheticBackend(page: Page): Promise<MockEvidence> {
     }
 
     if (url.origin !== backendOrigin) {
-      evidence.unexpectedOrigins.push(url.origin)
+      // Managed browsers may inject their security extension into pages. Keep
+      // blocking its request and report it separately from application traffic.
+      if (/\.kis\.v2\.scr\.kaspersky-labs\.com$/i.test(url.hostname)) {
+        evidence.blockedBrowserExtensionOrigins.push(url.origin)
+      } else {
+        evidence.unexpectedOrigins.push(url.origin)
+      }
       await route.abort('blockedbyclient')
       return
     }
@@ -217,15 +224,88 @@ test('protected pages send anonymous visitors to the invitation-only sign-in pag
   await expect(page.getByText(/Access is invitation-only/i)).toBeVisible()
 })
 
+test('dated opening balance submission stays inside the synthetic backend', async ({ page }) => {
+  const evidence = await installSyntheticBackend(page)
+  const submittedAccounts: Array<Record<string, unknown>> = []
+  const submittedAuthorization: string[] = []
+
+  await page.route(`${backendOrigin}/rest/v1/accounts`, async route => {
+    const request = route.request()
+    if (request.method().toUpperCase() !== 'POST') {
+      await fulfillJson(route, [{ id: syntheticAccountId, owner_id: syntheticUserId, name: 'Synthetic primary bank', type: 'bank', credit_limit: null, opening_balance: 20_000, opening_date: '2026-01-01' }])
+      return
+    }
+
+    submittedAccounts.push(request.postDataJSON() as Record<string, unknown>)
+    submittedAuthorization.push(request.headers()['authorization'] ?? '')
+    await route.fulfill({
+      status: 201,
+      headers: {
+        'access-control-allow-origin': '*',
+        'access-control-allow-headers': 'apikey,authorization,content-type,x-client-info,prefer,range,accept-profile,content-profile',
+        'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify([{ id: '10000000-0000-4000-a000-000000000088' }]),
+    })
+  })
+
+  await page.goto('/accounts')
+  await page.getByRole('button', { name: /Add Account/ }).click()
+  await page.getByPlaceholder('e.g., SBI Savings').fill('Synthetic dated account')
+  await page.getByLabel('Starting balance').fill('1250.50')
+  await page.getByLabel('Start tracking from').fill('2026-09-01')
+  await page.getByRole('button', { name: 'Create Account' }).click()
+
+  await expect.poll(() => submittedAccounts.length).toBe(1)
+  expect(submittedAccounts[0]).toMatchObject({
+    name: 'Synthetic dated account',
+    type: 'bank',
+    owner_id: syntheticUserId,
+    opening_balance: 1250.5,
+    opening_date: '2026-09-01',
+  })
+  expect(submittedAuthorization).toEqual([expect.stringMatching(/^Bearer e30\./)])
+  expect(new URL(backendOrigin).hostname).toBe('rr-capital-test.invalid')
+  expect(evidence.unexpectedOrigins).toEqual([])
+  expect(evidence.blockedBrowserExtensionOrigins.every(origin => /\.kis\.v2\.scr\.kaspersky-labs\.com$/i.test(new URL(origin).hostname))).toBe(true)
+  expect(evidence.unexpectedRpcs).toEqual([])
+})
+
+test('transaction before its account opening date is rejected before an outbox or network write', async ({ page }) => {
+  const evidence = await installSyntheticBackend(page)
+
+  await page.goto('/accounts')
+  await page.getByRole('button', { name: 'Open add menu' }).click()
+  await page.getByRole('button', { name: 'Transaction' }).click()
+
+  await page.getByRole('combobox').selectOption(syntheticAccountId)
+  await page.getByPlaceholder('0.00').fill('25')
+  await page.getByLabel('Occurrence date').fill('2025-12-31')
+  await page.getByPlaceholder('e.g., Rent Payment, Groceries').fill('Synthetic date boundary check')
+  await page.getByRole('button', { name: 'Log Transaction' }).click()
+
+  expect(evidence.unexpectedRpcs).toEqual([])
+  expect(evidence.tableMutations).toEqual([])
+  await expect(page.getByText('Choose an occurrence date on or after the account start date.')).toBeVisible()
+  expect(evidence.unexpectedOrigins).toEqual([])
+})
+
 test('all application pages render from synthetic data on desktop and mobile without page-load writes', async ({ page }) => {
   test.setTimeout(120_000)
   const evidence = await installSyntheticBackend(page)
   const browserErrors: string[] = []
   page.on('pageerror', error => browserErrors.push(error.message))
   page.on('console', message => {
-    if (message.type() === 'error') browserErrors.push(`${page.url()}: ${message.text()}`)
+    if (message.type() === 'error' && !message.text().includes('net::ERR_BLOCKED_BY_CLIENT.Inspector')) {
+      browserErrors.push(`${page.url()}: ${message.text()}`)
+    }
   })
-  page.on('requestfailed', request => browserErrors.push(`Failed request: ${request.url()}`))
+  page.on('requestfailed', request => {
+    if (!/\.kis\.v2\.scr\.kaspersky-labs\.com$/i.test(new URL(request.url()).hostname)) {
+      browserErrors.push(`Failed request: ${request.url()}`)
+    }
+  })
 
   const pages = [
     { path: '/', title: 'Financial overview' },

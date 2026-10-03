@@ -447,13 +447,13 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
       }
       if (!sourceAcc) throw new Error('Choose an account before posting.')
       if (isDateBeforeOpeningDate(transactionDate, sourceAcc.opening_date)) {
-        throw new Error(sourceAcc.name + ' started on ' + sourceAcc.opening_date + '; choose that date or later.')
+        throw new Error('Choose an occurrence date on or after the account start date.')
       }
       if (type === 'transfer') {
         const destinationAccount = accounts.find(account => account.id === targetAccount)
         if (!destinationAccount) throw new Error('Choose a destination account before posting.')
         if (isDateBeforeOpeningDate(transactionDate, destinationAccount.opening_date)) {
-          throw new Error(destinationAccount.name + ' started on ' + destinationAccount.opening_date + '; choose that date or later.')
+          throw new Error('Choose an occurrence date on or after both account start dates.')
         }
       }
       if (type === 'transfer' && selectedAccount === targetAccount) {
