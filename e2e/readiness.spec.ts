@@ -448,7 +448,8 @@ test('settings presents release information and manual update check', async ({ p
   await page.goto('/settings?section=updates')
   await expect(page.getByRole('heading', { name: 'App updates' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Check for updates' })).toBeVisible()
-  await expect(page.getByText(/Latest release/)).toBeVisible()
+  await expect(page.getByText(/Latest release .*2026\.10\.03\.3/)).toBeVisible()
+  await expect(page.getByText(/Desktop Add actions now use the restored floating coral button/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'View detailed summary' })).toBeVisible()
 })
 
