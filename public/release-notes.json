@@ -1,20 +1,17 @@
 {
-    "version":  "2026.10.03.6",
-    "releasedAt":  "2026-10-03T14:10:00+05:30",
-    "brief":  "Creator profile links use recognizable social logos and brand colors across desktop and phones.",
-    "details":  [
-                    "Desktop navigation keeps Dashboard, Calendar, Ledger, Reports, and Accounts in the top bar, with the coral Add action floating at the lower right.",
-                    "Mobile navigation keeps Dashboard, Ledger, Add, Chittis, and More in the bottom bar; the More drawer groups the remaining pages.",
-                    "The More menus show only enabled optional modules, and the offline queue shows its pending count.",
-                    "When a new app build is available, the notice points to Settings. Settings checks for updates and shows the release date, brief, and detailed notes.",
-                    "The mobile Add control is a raised coral circle centered above the navigation bar. Its Transaction and Debt / IOU actions remain inside short phone viewports, with clear separation from the Add button.",
-                    "Light theme preserves white action icons on their colored circles, and page guidance uses a readable theme-aware accent.",
-                    "Tapping Transaction or Debt / IOU from the centered floating Add button now opens the selected form reliably.",
-                    "Transaction and Debt / IOU form placeholders use readable contrast in light mode.",
-                    "A keyboard-accessible liquid-glass range control is available for future slider settings.",
-                    "The RR Capital logo opens a responsive creator details modal with a continuous liquid-glass surface, visible edge reflections, and a refractive background.",
-                    "Creator profile social links use recognizable logos and network colors, with readable dark-theme contrast and brand tints on touch devices. The profile has one top-right close control, theme-aware text, and no pointer-following highlight.",
-                    "Preference switches and primary actions use theme-aware liquid-glass styling, and the Dashboard heading no longer has excess space above it.",
-                    "Telegram Settings now verifies both successful linking and safe handling when webhook setup fails; its automated browser checks use synthetic responses and do not contact Telegram."
-                ]
+  "version": "2026.10.03.7",
+  "releasedAt": "2026-10-03T22:23:00+05:30",
+  "brief": "Settings is now the adaptive Workspace & Modules hub, with liquid-glass navigation and updated responsive page shells.",
+  "details": [
+    "Desktop and mobile navigation use one route registry. Settings remains pinned, and moving a module between navigation and Settings updates its canonical group automatically.",
+    "Mobile navigation is a fixed, floating glass dock with a centered Add action and safe-area spacing.",
+    "Optional modules can be enabled in Settings; disabled optional routes return to Dashboard, and Account Health remains embedded in Accounts.",
+    "Page placeholders use a consistent KPI and workspace-slot layout, with a Settings breadcrumb and placement control for modules opened from the hub.",
+    "Settings includes the light/dark appearance switcher and persistent workspace preferences.",
+    "The mobile Add control opens Transaction and Debt / IOU forms reliably, including on short phone viewports.",
+    "The RR Capital logo opens a responsive creator details modal with a liquid-glass surface and one close control.",
+    "Creator profile social links use recognizable logos and network colors, with readable theme-aware text and no pointer-following highlight.",
+    "Preference switches and selection controls use theme-aware liquid-glass styling, and the Dashboard heading no longer has excess space above it.",
+    "Telegram Settings verifies webhook setup and one-time challenge linking; automated checks use synthetic responses and do not contact Telegram."
+  ]
 }
