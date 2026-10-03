@@ -11,6 +11,7 @@ SELECT ok(
   NOT has_table_privilege('authenticated','public.profiles','SELECT')
   AND NOT has_table_privilege('anon','public.profiles','SELECT')
   AND has_column_privilege('authenticated','public.profiles','full_name','SELECT')
+  AND has_column_privilege('authenticated','public.profiles','username','SELECT')
   AND has_column_privilege('authenticated','public.profiles','registered_devices','SELECT')
   AND NOT has_column_privilege('authenticated','public.profiles','telegram_chat_id','SELECT')
   AND NOT has_column_privilege('anon','public.profiles','telegram_chat_id','SELECT')
