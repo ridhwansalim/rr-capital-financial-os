@@ -697,6 +697,7 @@ html[data-theme="dark"] .liquid-switcher,
 .navbar-viewport-switcher__count { border: 1px solid color-mix(in srgb, var(--c-light) 38%, transparent); border-radius: 999px; padding: 3px 7px; background: color-mix(in srgb, var(--c-glass) 22%, transparent); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--c-light) 34%, transparent); color: var(--muted); font-size: 10px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 .navbar-viewport-switcher .liquid-switcher__item.is-active .navbar-viewport-switcher__count { border-color: color-mix(in srgb, var(--brand-primary) 25%, transparent); background: color-mix(in srgb, var(--brand-primary) 12%, transparent); color: var(--brand-primary-active); }
 .navbar-viewport-switcher .liquid-switcher__item span { color: inherit; }
+.navbar-viewport-switcher__count { flex: 0 0 auto; white-space: nowrap; }
 .navbar-viewport-switcher.liquid-switcher.is-ready::after { transition: translate 480ms cubic-bezier(.22, 1.25, .36, 1), width 480ms cubic-bezier(.22, 1.25, .36, 1); }
 .navbar-viewport-switcher.liquid-switcher.is-squishing::after { animation: navbar-cap-squish 480ms cubic-bezier(.22, 1.25, .36, 1); }
 @keyframes navbar-cap-squish { 0% { scale: 1 1; } 38% { scale: 1.12 .96; } 68% { scale: .98 1.02; } 100% { scale: 1 1; } }
@@ -836,7 +837,10 @@ html[data-theme="dark"] .liquid-toggle { --glass-reflex-dark: 2; --glass-reflex-
 }
 .app-desktop-add {
   position: fixed;
-  inset: auto 32px calc(32px + env(safe-area-inset-bottom, 0px)) auto;
+  top: auto;
+  right: 32px;
+  bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+  left: auto;
   z-index: 60;
   display: none;
   flex-direction: column;
@@ -946,3 +950,4 @@ html[data-theme="dark"] .app-glass-fab {
 @media (prefers-reduced-motion: reduce) {
   .liquid-switch, .liquid-switch__thumb, .app-desktop-fab, .liquid-action { transition-duration: .01ms; }
 }
+
