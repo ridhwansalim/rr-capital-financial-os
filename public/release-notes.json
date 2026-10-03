@@ -1,7 +1,7 @@
 {
-  "version": "2026.10.03.7",
-  "releasedAt": "2026-10-03T22:23:00+05:30",
-  "brief": "Settings is now the adaptive Workspace & Modules hub, with liquid-glass navigation and updated responsive page shells.",
+  "version": "2026.10.04.1",
+  "releasedAt": "2026-10-04T00:42:00+05:30",
+  "brief": "Settings adds a brighter liquid-glass viewport selector, and credit-line limits now protect historical balances.",
   "details": [
     "Desktop and mobile navigation use one route registry. Settings remains pinned, and moving a module between navigation and Settings updates its canonical group automatically.",
     "Mobile navigation is a fixed, floating glass dock with a centered Add action and safe-area spacing.",
@@ -12,6 +12,8 @@
     "The RR Capital logo opens a responsive creator details modal with a liquid-glass surface and one close control.",
     "Creator profile social links use recognizable logos and network colors, with readable theme-aware text and no pointer-following highlight.",
     "Preference switches and selection controls use theme-aware liquid-glass styling, and the Dashboard heading no longer has excess space above it.",
-    "Telegram Settings verifies webhook setup and one-time challenge linking; automated checks use synthetic responses and do not contact Telegram."
+    "Telegram Settings verifies webhook setup and one-time challenge linking; automated checks use synthetic responses and do not contact Telegram.",
+    "The Mobile/Desktop navbar layout selector has a stronger translucent glass cap, while desktop Add remains a floating lower-right action.",
+    "Backdated credit-line purchases are rejected if the dated balance would exceed the approved limit, even when a later credit would make the current balance appear safe."
   ]
 }
