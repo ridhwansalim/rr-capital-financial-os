@@ -1,6 +1,6 @@
 {
   "version": "2026.10.03.1",
-  "releasedAt": "2026-10-03T07:04:00+05:30",
+  "releasedAt": "2026-10-03T07:05:35+05:30",
   "brief": "A more visible floating Add button, better spacing on short phones, and clearer light-theme accents.",
   "details": [
     "Desktop navigation keeps Dashboard, Calendar, Ledger, Reports, and Accounts in the top bar, with the Add action beside them.",
