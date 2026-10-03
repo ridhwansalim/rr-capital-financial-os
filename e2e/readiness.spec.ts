@@ -91,6 +91,20 @@ const syntheticProfile = {
   registered_devices: [],
 }
 
+function contrastRatio(foreground: string, background: string) {
+  const luminance = (color: string) => {
+    const channels = color.match(/[\d.]+/g)?.slice(0, 3).map(Number)
+    if (!channels || channels.length !== 3) throw new Error(`Unexpected computed color: ${color}`)
+    const [red, green, blue] = channels.map(value => {
+      const normalized = value / 255
+      return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4
+    })
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+  }
+  const values = [luminance(foreground), luminance(background)].sort((a, b) => b - a)
+  return (values[0] + 0.05) / (values[1] + 0.05)
+}
+
 type MockEvidence = {
   unexpectedOrigins: string[]
   blockedBrowserExtensionOrigins: string[]
@@ -113,7 +127,7 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
   })
 }
 
-async function installSyntheticBackend(page: Page): Promise<MockEvidence> {
+async function installSyntheticBackend(page: Page, themeMode: 'light' | 'dark' = 'dark'): Promise<MockEvidence> {
   const evidence: MockEvidence = { unexpectedOrigins: [], blockedBrowserExtensionOrigins: [], tableMutations: [], unexpectedRpcs: [] }
 
   await page.addInitScript(({ storageKey, session }) => {
@@ -161,7 +175,7 @@ async function installSyntheticBackend(page: Page): Promise<MockEvidence> {
     }
 
     if (path === '/rest/v1/profiles' && method === 'GET') {
-      await fulfillJson(route, syntheticProfile)
+      await fulfillJson(route, { ...syntheticProfile, theme_mode: themeMode })
       return
     }
 
@@ -250,7 +264,7 @@ test('desktop navigation follows the page matrix and logo opens the creator prof
 })
 
 test('mobile navigation uses the five fixed slots and grouped More drawer', async ({ page }) => {
-  await installSyntheticBackend(page)
+  await installSyntheticBackend(page, 'light')
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
 
@@ -258,12 +272,61 @@ test('mobile navigation uses the five fixed slots and grouped More drawer', asyn
   await expect(mobile.getByRole('link', { name: 'Dashboard' })).toBeVisible()
   await expect(mobile.getByRole('link', { name: 'Ledger' })).toBeVisible()
   await expect(mobile.getByRole('button', { name: 'Add transaction or debt' })).toBeVisible()
-  const addButton = mobile.getByRole('button', { name: 'Add transaction or debt' })
+  const addButton = mobile.locator('button.app-mobile-fab')
   await expect(addButton).toHaveClass(/rounded-full/)
   await expect(addButton).toHaveClass(/-mt-7/)
   await addButton.click()
   await expect(page.getByRole('button', { name: 'Transaction' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Add Debt \/ IOU' })).toBeVisible()
+  await mobile.locator('button[aria-expanded="true"]').click()
+  for (const viewport of [{ width: 320, height: 568 }, { width: 360, height: 640 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport)
+    await addButton.click()
+    const addActions = [page.getByRole('button', { name: 'Transaction' }), page.getByRole('button', { name: 'Add Debt \/ IOU' })]
+    for (const action of addActions) {
+      const bounds = await action.boundingBox()
+      expect(bounds).not.toBeNull()
+      expect(bounds!.x).toBeGreaterThanOrEqual(0)
+      expect(bounds!.y).toBeGreaterThanOrEqual(0)
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width)
+      expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height)
+    }
+    const fabBounds = await addButton.boundingBox()
+    expect(fabBounds).not.toBeNull()
+    expect(fabBounds!.x + fabBounds!.width / 2).toBeCloseTo(viewport.width / 2, 0)
+    const firstActionBounds = await addActions[0].boundingBox()
+    const secondActionBounds = await addActions[1].boundingBox()
+    expect(firstActionBounds).not.toBeNull()
+    expect(secondActionBounds).not.toBeNull()
+    expect(firstActionBounds!.y + firstActionBounds!.height).toBeLessThanOrEqual(secondActionBounds!.y)
+    expect(secondActionBounds!.y + secondActionBounds!.height).toBeLessThanOrEqual(fabBounds!.y)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width)
+    await mobile.locator('button[aria-expanded="true"]').click()
+  }
+  await page.setViewportSize({ width: 390, height: 844 })
+  await addButton.click()
+  await expect(page.getByRole('button', { name: 'Transaction' })).toBeVisible()
+  const lightContrast = await page.evaluate(() => {
+    const actionGroup = document.querySelector<HTMLElement>('[role="group"][aria-label="Quick add actions"]')
+    const transaction = actionGroup?.querySelector<HTMLButtonElement>('button:first-child')
+    const debt = actionGroup?.querySelector<HTMLButtonElement>('button:last-child')
+    const fab = document.querySelector<HTMLButtonElement>('button.app-mobile-fab')
+    if (!transaction || !debt || !fab) throw new Error('The floating Add controls are not rendered')
+    const readPair = (foreground: HTMLElement, background: HTMLElement) => ({
+      foreground: getComputedStyle(foreground).color,
+      background: getComputedStyle(background).backgroundColor,
+    })
+    return {
+      labels: [readPair(transaction, transaction), readPair(debt, debt)],
+      icons: [transaction.lastElementChild, debt.lastElementChild].map(icon => {
+        if (!(icon instanceof HTMLElement)) throw new Error('An Add action icon is missing')
+        return readPair(icon, icon)
+      }),
+      fab: readPair(fab, fab),
+    }
+  })
+  for (const pair of lightContrast.labels) expect(contrastRatio(pair.foreground, pair.background), JSON.stringify(pair)).toBeGreaterThanOrEqual(4.5)
+  for (const pair of [...lightContrast.icons, lightContrast.fab]) expect(contrastRatio(pair.foreground, pair.background), JSON.stringify(pair)).toBeGreaterThanOrEqual(3)
   await mobile.locator('button[aria-expanded="true"]').click()
   await expect(mobile.getByRole('link', { name: 'Chittis' })).toBeVisible()
   await mobile.getByRole('button', { name: 'Open more pages' }).click()

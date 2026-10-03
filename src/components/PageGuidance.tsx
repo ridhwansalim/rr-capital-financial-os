@@ -39,6 +39,6 @@ export default function PageGuidance({ page }: { page: string }) {
   void revision
   if (!visible || !tip || !userId) return null
   return <aside className="mx-4 mt-4 sm:mx-6 lg:mx-8 rounded-2xl border border-indigo-400/20 bg-indigo-500/5 px-4 py-3 text-sm text-slate-300" aria-label={tip.title}>
-    <div className="flex items-start gap-3"><Info className="w-4 h-4 mt-0.5 shrink-0 text-indigo-300" /><p className="flex-1"><strong className="mr-2 text-indigo-200">{tip.title}</strong>{tip.text}</p><button type="button" aria-label="Dismiss this tip" onClick={() => { dismissGuidance(userId, page); setRevision(value => value + 1) }} className="p-1 -mr-1 text-slate-500 hover:text-white"><X className="w-4 h-4" /></button></div>
+    <div className="flex items-start gap-3"><Info className="w-4 h-4 mt-0.5 shrink-0 text-[var(--brand-primary-active)]" /><p className="flex-1"><strong className="mr-2 text-[var(--brand-primary-active)]">{tip.title}</strong>{tip.text}</p><button type="button" aria-label="Dismiss this tip" onClick={() => { dismissGuidance(userId, page); setRevision(value => value + 1) }} className="p-1 -mr-1 text-[var(--muted)] hover:text-[var(--ink)]"><X className="w-4 h-4" /></button></div>
   </aside>
 }
