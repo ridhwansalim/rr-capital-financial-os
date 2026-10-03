@@ -132,7 +132,7 @@ The fresh protected `data.sql` COPY-section count contains eight app rows total:
 
 After the Liquid Glass switcher helper cleanup, `npm test` passed, `npm run build` passed (3,057 modules; PWA precache 61 entries), and `npm run test:e2e` passed all 15 browser tests against the synthetic backend, including desktop/mobile creator details, mobile navigation, glass switches/range control, Telegram linking, India-time ledger dates, offline queue migration/redaction, and page-load write protection. `npm audit` found zero dependency vulnerabilities. `npm run lint` completed with existing warnings in other components/screens; warnings in the shared switcher helper and one needless test-string escape were fixed. `git diff --check` passed. These checks do not verify managed Supabase Auth/Vault/Storage recovery or production deployment.
 
-## Recovery and database-suite revalidation � 2026-10-03 12:42 UTC
+## Recovery and database-suite revalidation � 2026-10-03 12:42 UTC
 
 Protected snapshot `%LOCALAPPDATA%\RR-Capital-Backups\20261003-162145-435` passed its read-only integrity verifier, then passed `Test-RR-Capital-Schema-Restore.ps1 -IncludeData` in the healthy isolated `rr-capital-restore-check` PostgreSQL container: 29 tables, 1 view, 94 functions, 8 aggregate rows. Postflight confirmed the unique scratch database and temporary SQL files were removed. This is application-schema/data recovery evidence only; it does not restore the managed Auth identity, Storage objects, Vault secrets, extensions/runtime configuration, or project settings.
 
@@ -155,3 +155,9 @@ Fresh RR Capital catalog query verified public request_settlement, accept_settle
 ### Hosted fixture reset — 2026-10-03 16:15 UTC
 
 The active readiness goal explicitly requested clearing test data. Rechecked RR Capital immediately before cleanup: expected owner Auth/profile present, exactly 3 dedicated fixture accounts and 10 fixture categories, 864 tagged sample transactions, 0 non-sample transactions attached to those accounts, and 6 feature flags. Applied `supabase/fixtures/rr_capital_sample_cleanup.sql` in one guarded transaction to RR Capital only. Its preconditions/postconditions passed. A fresh read-only postflight found owner Auth=1, profile=1, profile_directory=1, feature flags=6, owner accounts=0, owner transactions=0, sample-labeled transactions=0, and sample-labeled categories=0. Fixed fixture IDs are checked by the cleanup transaction's postcondition. Financial OS v2 was not changed. No schema, Auth, preferences, or deployment changes were made.
+
+## Managed recovery status — 2026-10-03 17:00 UTC
+
+Latest current state: RR Capital retains its owner identity/profile and six user feature flags, with zero accounts, transactions, obligations, or obligation payments after the guarded sample reset. The v2 project is separate and has no Auth users or financial rows. Schema-plus-data restore rehearsal and migration replay have been demonstrated in isolated PostgreSQL containers; they do not restore Supabase Auth identities/sessions, Vault secrets, Storage objects, Edge Function secrets/configuration, or project-level Auth/settings. Full managed-project recovery remains an open readiness requirement.
+
+The current app candidate is on `readiness/hardening-2026-10-03` at `013d6634853ff587aafc9be22bd47d40487f18e0`, draft [PR #1](https://github.com/ridhwansalim/rr-capital-financial-os/pull/1), with a READY Vercel preview and successful Vercel status. Production remains on the previous READY deployment pending review. No hosted data or RR Capital migration changed during this release verification.
