@@ -224,6 +224,70 @@ test('protected pages send anonymous visitors to the invitation-only sign-in pag
   await expect(page.getByText(/Access is invitation-only/i)).toBeVisible()
 })
 
+test('desktop navigation follows the page matrix and logo opens the creator profile', async ({ page }) => {
+  await installSyntheticBackend(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/')
+
+  const primary = page.getByRole('navigation', { name: 'Primary navigation' })
+  for (const label of ['Dashboard', 'Calendar', 'Ledger', 'Reports', 'Accounts']) {
+    await expect(primary.getByRole('link', { name: label })).toBeVisible()
+  }
+  await primary.getByRole('button', { name: 'About RR Capital and its creator' }).click()
+  const creator = page.getByRole('dialog', { name: 'Ridhwan S.' })
+  await expect(creator).toBeVisible()
+  for (const label of ['GitHub', 'Instagram', 'LinkedIn', 'Portfolio']) await expect(creator.getByRole('link', { name: new RegExp(label) })).toBeVisible()
+  await creator.getByRole('button', { name: 'Close creator profile' }).click()
+
+  await primary.getByRole('button', { name: /More/ }).click()
+  const menu = page.getByRole('menu')
+  for (const label of ['Workspace', 'Optional modules', 'Preferences']) await expect(menu.getByRole('region', { name: label })).toBeVisible()
+  for (const label of ['Chittis', 'Debts & IOUs', 'Contacts', 'Offline queue', 'Budgets', 'Calculators', 'Savings goals', 'Shopping lists', 'Financial wellness', 'Settings']) {
+    await expect(menu.getByRole('link', { name: new RegExp(label) })).toBeVisible()
+  }
+  await expect(menu.getByRole('link', { name: 'Calendar' })).toHaveCount(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440)
+})
+
+test('mobile navigation uses the five fixed slots and grouped More drawer', async ({ page }) => {
+  await installSyntheticBackend(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+
+  const mobile = page.getByRole('navigation', { name: 'Mobile navigation' })
+  await expect(mobile.getByRole('link', { name: 'Dashboard' })).toBeVisible()
+  await expect(mobile.getByRole('link', { name: 'Ledger' })).toBeVisible()
+  await expect(mobile.getByRole('button', { name: 'Add transaction or debt' })).toBeVisible()
+  await expect(mobile.getByRole('link', { name: 'Chittis' })).toBeVisible()
+  await mobile.getByRole('button', { name: 'Open more pages' }).click()
+  const drawer = page.getByRole('dialog', { name: 'More pages' })
+  for (const label of ['Calendar', 'Reports', 'Accounts', 'Debts & IOUs', 'Contacts', 'Offline queue', 'Budgets', 'Calculators', 'Savings goals', 'Shopping lists', 'Financial wellness', 'Settings']) {
+    await expect(drawer.getByRole('link', { name: new RegExp(label) })).toBeVisible()
+  }
+  await expect(page.locator('.app-mobile-context')).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+})
+
+test('disabled optional routes return to dashboard and unknown routes show a notice', async ({ page }) => {
+  await installSyntheticBackend(page)
+  await page.route('**/rest/v1/user_feature_flags**', route => fulfillJson(route, []))
+  await page.goto('/calculators')
+  await expect(page).toHaveURL(/\/$/)
+
+  await page.goto('/not-a-real-page')
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByRole('status').filter({ hasText: 'That page does not exist' })).toBeVisible()
+})
+
+test('settings presents release information and manual update check', async ({ page }) => {
+  await installSyntheticBackend(page)
+  await page.goto('/settings?section=updates')
+  await expect(page.getByRole('heading', { name: 'App updates' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Check for updates' })).toBeVisible()
+  await expect(page.getByText(/Latest release/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'View detailed summary' })).toBeVisible()
+})
+
 test('dated opening balance submission stays inside the synthetic backend', async ({ page }) => {
   const evidence = await installSyntheticBackend(page)
   const submittedAccounts: Array<Record<string, unknown>> = []

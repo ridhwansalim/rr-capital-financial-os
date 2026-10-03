@@ -109,15 +109,21 @@ export default function Auth() {
   const title = authMode === 'invite' ? 'Accept your invitation' : authMode === 'recovery' ? 'Reset your password' : 'Welcome back'
 
   return (
-    <div style={{ width: '100%', maxWidth: '100%', boxSizing: 'border-box' }} className="app-auth-page min-h-screen flex items-center justify-center bg-[var(--canvas)] p-4 font-sans text-[var(--ink)] relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-[var(--brand-tint)] rounded-full blur-3xl" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-[var(--surface-strong)] opacity-60 rounded-full blur-3xl" />
+    <div className="app-auth-page relative flex min-h-screen items-center justify-center overflow-hidden bg-[#faf9f5] p-4 font-sans text-[#171714] sm:p-8">
+      <div className="pointer-events-none absolute -left-28 -top-28 h-96 w-96 rounded-full bg-[#eaded0]/70 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 -right-20 h-96 w-96 rounded-full bg-[#e8ece4]/80 blur-3xl" />
 
-      <div style={{ width: '100%', maxWidth: '28rem', boxSizing: 'border-box' }} className="app-auth-card min-w-0 p-6 sm:p-8 rounded-2xl bg-[var(--surface-card)] border border-[var(--line)] shadow-[var(--app-shadow)] relative z-10 animate-in fade-in zoom-in-95 duration-500">
+      <div className="app-auth-card relative z-10 grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-[#e7e1d8] bg-white shadow-[0_28px_90px_rgba(40,34,25,.12)] animate-in fade-in zoom-in-95 duration-500 md:grid-cols-[.9fr_1.1fr]">
+        <aside className="relative hidden flex-col justify-between overflow-hidden bg-[#211f1b] p-10 text-[#faf9f5] md:flex lg:p-14">
+          <div className="absolute -right-24 top-20 h-72 w-72 rounded-full border border-white/10" /><div className="absolute -right-12 top-32 h-48 w-48 rounded-full border border-white/10" />
+          <div className="relative"><img src="/rr-favicon.svg" alt="" className="h-12 w-12 rounded-xl bg-white p-1.5" /><p className="mt-8 text-xs font-semibold uppercase tracking-[.22em] text-[#e3a28a]">A calmer money workspace</p><h2 className="mt-4 max-w-sm font-serif text-4xl leading-tight">Your everyday finances, in one clear place.</h2><p className="mt-5 max-w-sm text-sm leading-6 text-white/65">Private records for your accounts, spending, commitments and the people you share them with.</p></div>
+          <p className="relative text-xs text-white/45">RR Capital · Personal use</p>
+        </aside>
+        <div className="min-w-0 p-6 sm:p-10 lg:p-14">
         <div className="flex flex-col items-center mb-8">
           <img src="/rr-logo.svg" alt="RR Capital" className="h-16 mb-5 rounded-xl" />
           <h1 className="text-2xl font-normal tracking-tight text-[var(--ink)]" style={{ fontFamily: 'var(--font-display)' }}>{title}</h1>
-          <p className="text-slate-400 text-sm mt-2 text-center">
+          <p className="text-[#6c6a64] text-sm mt-2 text-center">
             {authMode === 'invite'
               ? 'Choose a password to finish setting up your invited account.'
               : authMode === 'recovery'
@@ -199,13 +205,13 @@ export default function Auth() {
               </button>
             </div>
 
-            <div className="mt-6 mb-6 flex items-center text-slate-500 text-xs uppercase tracking-wider">
-              <div className="flex-1 border-t border-white/10" />
+            <div className="mt-6 mb-6 flex items-center text-[#858178] text-xs uppercase tracking-wider">
+              <div className="flex-1 border-t border-[#e7e1d8]" />
               <span className="px-4">Or continue with</span>
-              <div className="flex-1 border-t border-white/10" />
+              <div className="flex-1 border-t border-[#e7e1d8]" />
             </div>
 
-            <button type="button" onClick={handleGoogleAuth} disabled={isLoading} className="w-full flex items-center justify-center py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold transition-all mb-6 disabled:opacity-50">
+            <button type="button" onClick={handleGoogleAuth} disabled={isLoading} className="w-full flex items-center justify-center py-3 rounded-xl bg-white hover:bg-[#faf9f5] border border-[#e7e1d8] text-[#252523] font-semibold transition-all mb-6 disabled:opacity-50">
               <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20 7.7 23 12 23z" fill="#34A853" />
@@ -215,7 +221,7 @@ export default function Auth() {
               Continue with Google
             </button>
 
-            <p className="text-center text-sm text-slate-400">
+            <p className="text-center text-sm text-[#6c6a64]">
               Access is invitation-only. Ask Ridhu to invite your email address.
             </p>
           </>
@@ -233,6 +239,7 @@ export default function Auth() {
             </button>
           </>
         )}
+        </div>
       </div>
     </div>
   )

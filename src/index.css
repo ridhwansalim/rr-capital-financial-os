@@ -102,6 +102,12 @@ button { -webkit-tap-highlight-color: transparent; }
   border-color: var(--line);
   backdrop-filter: blur(18px);
 }
+.app-mobile-context {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--canvas) 96%, transparent);
+  border-color: var(--line);
+  backdrop-filter: blur(18px);
+}
 .app-desktop-menu { color: var(--ink); background: var(--app-panel-strong); border-color: var(--line); box-shadow: var(--app-shadow); }
 .app-mobile-nav {
   color: var(--ink);

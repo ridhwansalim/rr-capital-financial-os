@@ -1,65 +1,76 @@
-import React from 'react'
+import { useEffect, useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
-import { RefreshCw, X, ArrowDownToLine } from 'lucide-react'
+import { ArrowDownToLine, X } from 'lucide-react'
+
+const UPDATE_AVAILABLE_KEY = 'rr-capital-update-available'
 
 export default function ReloadPrompt() {
+  const [available, setAvailable] = useState(() => localStorage.getItem(UPDATE_AVAILABLE_KEY) === 'true')
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
-    onRegistered(r) {
-      console.log('SW Registered')
-      
-      // Force the PWA to check for updates every time the window comes into focus
-      if (r) {
-        document.addEventListener('visibilitychange', () => {
-          if (document.visibilityState === 'visible') {
-            r.update()
-          }
-        })
+    onRegistered(registration) {
+      if (!registration) return
+      const checkOnFocus = () => {
+        if (document.visibilityState === 'visible') void registration.update()
       }
+      document.addEventListener('visibilitychange', checkOnFocus)
+      window.setInterval(() => void registration.update(), 60 * 60 * 1000)
     },
     onRegisterError() {
       console.error('Service worker registration failed')
-    }
+    },
   })
 
-  const close = () => {
+  useEffect(() => {
+    if (needRefresh) {
+      localStorage.setItem(UPDATE_AVAILABLE_KEY, 'true')
+      window.dispatchEvent(new Event('rr:update-found'))
+      return
+    }
+    return
+  }, [needRefresh])
+
+  useEffect(() => {
+    const requestCheck = () => {
+      void navigator.serviceWorker?.getRegistration().then(registration => registration?.update())
+    }
+    const requestInstall = () => {
+      localStorage.removeItem(UPDATE_AVAILABLE_KEY)
+      setAvailable(false)
+      void updateServiceWorker(true)
+    }
+    window.addEventListener('rr:check-app-update', requestCheck)
+    window.addEventListener('rr:install-app-update', requestInstall)
+    return () => {
+      window.removeEventListener('rr:check-app-update', requestCheck)
+      window.removeEventListener('rr:install-app-update', requestInstall)
+    }
+  }, [updateServiceWorker])
+
+  const openSettings = () => {
+    window.location.assign('/settings?section=updates')
+  }
+
+  const dismiss = () => {
     setNeedRefresh(false)
+    setAvailable(false)
+    localStorage.removeItem(UPDATE_AVAILABLE_KEY)
   }
 
-  const handleUpdate = () => {
-    // Tell the service worker to take over, then forcefully reload the window
-    updateServiceWorker(true).then(() => {
-      window.location.reload()
-    })
-  }
-
-  if (!needRefresh) return null
+  if (!needRefresh && !available) return null
 
   return (
-    <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-[100] w-11/12 max-w-sm p-4 bg-emerald-500/90 backdrop-blur-xl border border-emerald-400/50 rounded-3xl shadow-[0_10px_40px_rgba(16,185,129,0.3)] animate-in slide-in-from-bottom-8 duration-500">
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center">
-          <div className="p-2 bg-white/20 rounded-full mr-3">
-            <ArrowDownToLine className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h3 className="font-black text-white text-sm uppercase tracking-wide">Update Available</h3>
-            <p className="text-xs text-emerald-100 mt-0.5">A new version of RR Capital is ready.</p>
-          </div>
+    <div className="fixed bottom-28 left-1/2 z-[100] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-2xl border border-[var(--line)] bg-[var(--app-panel-strong)] p-4 shadow-2xl">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><ArrowDownToLine className="h-5 w-5" /></span>
+          <div><h3 className="text-sm font-semibold text-[var(--ink)]">RR Capital has an update</h3><p className="mt-0.5 text-xs text-[var(--muted)]">Review what changed in Settings when you’re ready.</p></div>
         </div>
-        <button onClick={close} className="p-1.5 text-emerald-200 hover:text-white bg-black/10 hover:bg-black/20 rounded-full transition-colors">
-          <X className="w-4 h-4" />
-        </button>
+        <button type="button" aria-label="Dismiss update notice" onClick={dismiss} className="rounded-full p-1.5 text-[var(--muted)] hover:bg-[var(--surface-soft)]"><X className="h-4 w-4" /></button>
       </div>
-      
-      <button 
-        onClick={handleUpdate} 
-        className="w-full flex items-center justify-center py-3 bg-white text-emerald-900 rounded-xl font-black transition-all hover:scale-[1.02] shadow-lg"
-      >
-        <RefreshCw className="w-4 h-4 mr-2" /> Update Now
-      </button>
+      <button type="button" onClick={openSettings} className="mt-3 min-h-10 w-full rounded-xl bg-[var(--surface-soft)] px-4 text-sm font-semibold text-[var(--ink)] hover:bg-[var(--surface-strong)]">View update in Settings</button>
     </div>
   )
 }

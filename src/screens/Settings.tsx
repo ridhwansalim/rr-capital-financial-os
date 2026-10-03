@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Settings as SettingsIcon, Search, User, Key, Lock, RotateCcw, Save, Trash2, Loader2, Palette, Bot, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut, Sun, Moon } from 'lucide-react'
+import { Settings as SettingsIcon, Search, User, Key, Lock, RotateCcw, Save, Trash2, Loader2, Palette, Bot, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut, Sun, Moon, RefreshCw, Download } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDate } from '../lib/financeDate'
 import { normalizeThemeMode, useTheme } from '../components/ThemeProvider'
@@ -10,6 +10,7 @@ import { setOptionalFeature, useOptionalFeatures } from '../lib/optionalFeatures
 import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { isGuidedHelpEnabled, replayGuidance, setGuidedHelpEnabled } from '../lib/guidedHelp'
 import PageHeader from '../components/PageHeader'
+import { currentRelease, type ReleaseNotes } from '../lib/releaseNotes'
 
 // WebAuthn Helper to encode hardware keys
 const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
@@ -21,6 +22,68 @@ export default function Settings() {
   const telegramBotUsername = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'ridhwans_fin_bot').replace(/^@/, '')
   const { themeMode, setTheme } = useTheme()
   const { flags: featureFlags } = useOptionalFeatures()
+  const [checkingAppUpdate, setCheckingAppUpdate] = useState(false)
+  const [appUpdateStatus, setAppUpdateStatus] = useState('')
+  const [lastAppUpdateCheck, setLastAppUpdateCheck] = useState('')
+  const [appUpdateAvailable, setAppUpdateAvailable] = useState(() => localStorage.getItem('rr-capital-update-available') === 'true')
+  const [showReleaseDetails, setShowReleaseDetails] = useState(false)
+  const [releaseInfo, setReleaseInfo] = useState<ReleaseNotes>(currentRelease)
+
+  const loadReleaseInfo = async () => {
+    try {
+      const response = await fetch('/release-notes.json', { cache: 'no-store' })
+      if (!response.ok) return
+      const value = await response.json() as Partial<ReleaseNotes>
+      if (typeof value.version !== 'string' || typeof value.releasedAt !== 'string' || !Number.isFinite(Date.parse(value.releasedAt)) || typeof value.brief !== 'string' || !Array.isArray(value.details)) return
+      setReleaseInfo({
+        version: value.version.slice(0, 40),
+        releasedAt: value.releasedAt,
+        brief: value.brief.slice(0, 600),
+        details: value.details.filter((detail): detail is string => typeof detail === 'string').slice(0, 30).map(detail => detail.slice(0, 600)),
+      })
+    } catch {
+      // Keep the bundled release notes available while offline.
+    }
+  }
+
+  useEffect(() => {
+    const markAvailable = () => setAppUpdateAvailable(true)
+    window.addEventListener('rr:update-found', markAvailable)
+    const releaseNotesTimer = window.setTimeout(() => { void loadReleaseInfo() }, 0)
+    if (new URLSearchParams(window.location.search).get('section') === 'updates') {
+      window.setTimeout(() => document.getElementById('app-updates')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 250)
+    }
+    return () => { window.clearTimeout(releaseNotesTimer); window.removeEventListener('rr:update-found', markAvailable) }
+  }, [])
+
+  const checkForAppUpdate = async () => {
+    setCheckingAppUpdate(true)
+    setAppUpdateStatus('Checking for an updateâ€¦')
+    setLastAppUpdateCheck(new Date().toISOString())
+    try {
+      await loadReleaseInfo()
+      const registration = await navigator.serviceWorker?.getRegistration()
+      if (!registration) {
+        setAppUpdateStatus('Update checks are unavailable until the app has finished installing on this device.')
+        return
+      }
+      await registration.update()
+      const waiting = registration.waiting || (registration.installing?.state === 'installed' ? registration.installing : null)
+      if (waiting) {
+        localStorage.setItem('rr-capital-update-available', 'true')
+        setAppUpdateAvailable(true)
+        setAppUpdateStatus('A new version is ready to install.')
+      } else {
+        setAppUpdateStatus('Youâ€™re using the latest version available to this device.')
+      }
+    } catch {
+      setAppUpdateStatus('Could not check right now. Check your connection and try again.')
+    } finally {
+      setCheckingAppUpdate(false)
+    }
+  }
+
+  const installAppUpdate = () => window.dispatchEvent(new Event('rr:install-app-update'))
   const [featureBusy, setFeatureBusy] = useState(false)
   const [featureError, setFeatureError] = useState('')
   const [isSigningOut, setIsSigningOut] = useState(false)
@@ -534,6 +597,17 @@ export default function Settings() {
 
       <div className="space-y-6">
 
+        <section id="app-updates" className="surface-panel scroll-mt-20 rounded-3xl p-6 md:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><Download className="h-5 w-5" /></span><div><h2 className="text-xl font-bold">App updates</h2><p className="mt-1 text-sm text-[var(--muted)]">Check for the latest RR Capital version and review its release notes.</p></div></div>
+            <button type="button" onClick={() => void checkForAppUpdate()} disabled={checkingAppUpdate} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] px-4 text-sm font-semibold text-[var(--ink)] hover:bg-[var(--surface-strong)] disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${checkingAppUpdate ? 'animate-spin' : ''}`} />{checkingAppUpdate ? 'Checkingâ€¦' : 'Check for updates'}</button>
+          </div>
+          {appUpdateStatus && <p role="status" className="mt-3 text-sm text-[var(--muted)]">{appUpdateStatus}</p>}
+          {lastAppUpdateCheck && <p className="mt-1 text-xs text-[var(--muted-soft)]">Last checked {new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(lastAppUpdateCheck))}</p>}
+          {appUpdateAvailable && <div className="mt-5 rounded-2xl border border-[var(--brand-primary)]/30 bg-[var(--brand-tint)] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--brand-primary-active)]">New version available Â· {releaseInfo.version}</p><p className="mt-1 text-xs text-[var(--muted)]">Released {new Intl.DateTimeFormat('en-IN', { dateStyle: 'long', timeStyle: 'short' }).format(new Date(releaseInfo.releasedAt))}</p></div><button type="button" onClick={installAppUpdate} className="min-h-10 rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-semibold text-white hover:bg-[var(--brand-primary-active)]">Install update</button></div></div>}
+          <div className="mt-5 border-t border-[var(--line)] pt-4"><p className="text-sm font-semibold">Latest release Â· {releaseInfo.version}</p><p className="mt-1 text-sm leading-6 text-[var(--muted)]">{releaseInfo.brief}</p><button type="button" aria-expanded={showReleaseDetails} onClick={() => setShowReleaseDetails(value => !value)} className="mt-3 text-sm font-semibold text-[var(--brand-primary-active)] hover:underline">{showReleaseDetails ? 'Hide detailed summary' : 'View detailed summary'}</button>{showReleaseDetails && <ul className="mt-3 space-y-2 pl-5 text-sm leading-6 text-[var(--muted)]">{releaseInfo.details.map(detail => <li key={detail} className="list-disc">{detail}</li>)}</ul>}</div>
+        </section>
+
         {showModules && <section className="surface-panel rounded-3xl p-6 md:p-8">
           <div className="flex items-center justify-between gap-4">
             <div><h2 className="text-xl font-bold">Optional features</h2><p className="text-sm text-slate-400 mt-1">Turn planning tools on only when you want them.</p></div>
@@ -568,7 +642,7 @@ export default function Settings() {
             <button type="button" role="switch" aria-checked={guidedHelpEnabled} onClick={toggleGuidedHelp} className={`relative shrink-0 w-12 h-7 rounded-full transition-colors ${guidedHelpEnabled ? 'bg-emerald-500' : 'bg-slate-600'}`}><span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${guidedHelpEnabled ? 'translate-x-6' : 'translate-x-1'}`} /></button>
           </div>
           <div className="flex justify-end"><button type="button" disabled={!guidedHelpEnabled || !userId} onClick={() => userId && replayGuidance(userId)} className="rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/5 disabled:opacity-40">Replay page tips</button></div>
-          {featureBusy && <p className="mt-3 text-xs text-slate-400">Saving feature setting…</p>}
+          {featureBusy && <p className="mt-3 text-xs text-slate-400">Saving feature settingâ€¦</p>}
           {featureError && <p role="alert" className="mt-3 text-xs text-rose-300">{featureError}</p>}
         </section>}
         
@@ -663,7 +737,7 @@ export default function Settings() {
               <div className="flex flex-col space-y-1">
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase flex justify-between items-center">
                   <span className="flex items-center"><Key className="w-3 h-3 mr-1" /> Your Gemini API Key (BYOK)</span>
-                  <span className={geminiStatusLoading ? 'text-slate-500 normal-case' : geminiKeyConfigured ? 'text-emerald-400 normal-case' : 'text-slate-500 normal-case'}>{geminiStatusLoading ? 'Checking key…' : geminiKeyConfigured ? 'Key saved securely' : 'No key saved'}</span>
+                  <span className={geminiStatusLoading ? 'text-slate-500 normal-case' : geminiKeyConfigured ? 'text-emerald-400 normal-case' : 'text-slate-500 normal-case'}>{geminiStatusLoading ? 'Checking keyâ€¦' : geminiKeyConfigured ? 'Key saved securely' : 'No key saved'}</span>
                 </label>
                 <input 
                   type="password" autoComplete="new-password" placeholder="Google Gemini API key" value={geminiKeyDraft}
@@ -731,7 +805,7 @@ export default function Settings() {
               <hr className="border-white/10 my-2" />
 
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3"><div><p className="font-semibold">Link Telegram</p><p className="text-sm text-slate-400">{originalProfile.telegram_chat_id ? 'Chat ID on file. Use the bot to verify or change it.' : 'Connect your private Telegram chat for alerts.'}</p></div><button type="button" onClick={() => void requestTelegramLink()} disabled={telegramBusy} className="shrink-0 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50">{telegramBusy ? 'Working…' : 'Link Telegram'}</button></div>
+                <div className="flex items-center justify-between gap-3"><div><p className="font-semibold">Link Telegram</p><p className="text-sm text-slate-400">{originalProfile.telegram_chat_id ? 'Chat ID on file. Use the bot to verify or change it.' : 'Connect your private Telegram chat for alerts.'}</p></div><button type="button" onClick={() => void requestTelegramLink()} disabled={telegramBusy} className="shrink-0 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50">{telegramBusy ? 'Workingâ€¦' : 'Link Telegram'}</button></div>
                 {telegramToken && <div className="text-sm text-slate-300 space-y-2"><p>The bot webhook is verified. Open the bot and tap <strong>Start</strong> within 10 minutes (or send this command):</p><code className="block p-3 rounded-xl bg-black/30 break-all select-all">/start {telegramToken}</code><a className="inline-block text-emerald-300 underline" target="_blank" rel="noopener noreferrer" href={`https://t.me/${telegramBotUsername}?start=${encodeURIComponent(telegramToken)}`}>Open @{telegramBotUsername}</a><p>Keep this page open; it will confirm the link automatically. If Telegram only shows a Start button, tap it once in the private chat.</p></div>}
                 {telegramWebhookWarning && <p role="status" className="text-sm text-amber-300">{telegramWebhookWarning}</p>}
                 {telegramLinkError && <p role="alert" className="text-sm text-rose-300">{telegramLinkError}</p>}
@@ -876,7 +950,7 @@ export default function Settings() {
           className="w-full flex items-center justify-center p-4 bg-white/5 hover:bg-rose-500/10 border border-white/10 hover:border-rose-500/20 rounded-2xl text-slate-300 hover:text-rose-400 transition-colors disabled:cursor-wait disabled:opacity-60"
         >
           {isSigningOut ? <Loader2 className="w-5 h-5 mr-3 animate-spin" /> : <LogOut className="w-5 h-5 mr-3" />}
-          <span className="font-bold">{isSigningOut ? 'Signing out…' : 'Sign Out of RR Capital'}</span>
+          <span className="font-bold">{isSigningOut ? 'Signing outâ€¦' : 'Sign Out of RR Capital'}</span>
         </button>
         {signOutError && <p role="alert" className="mt-3 text-center text-sm text-rose-400">{signOutError}</p>}
         <p className="mt-3 text-center text-xs text-slate-500">Saved offline transactions stay on this browser until they sync or you discard them.</p>

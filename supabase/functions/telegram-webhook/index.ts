@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { readBoundedJson } from "../_shared/boundedJson.ts"
+import { isValidTelegramWebhookSecret } from "../_shared/telegramWebhookSecret.ts"
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -50,7 +51,7 @@ serve(async (req) => {
 
   const authorization = req.headers.get('authorization') || ''
   const bearer = /^Bearer\s+([\x21-\x7e]+)$/i.exec(authorization)
-  const isTelegramUpdate = !authorization && !!webhookSecret &&
+  const isTelegramUpdate = !authorization && isValidTelegramWebhookSecret(webhookSecret) &&
     equalSecret(req.headers.get('X-Telegram-Bot-Api-Secret-Token'), webhookSecret)
   if (!isTelegramUpdate) {
     if (!bearer || !anonKey) return new Response('Sign in required', { status: 401, headers: corsHeaders })
@@ -72,8 +73,8 @@ serve(async (req) => {
   // ever returning or exposing either server-side credential to the browser.
   if (update?.action === 'configure') {
     if (isTelegramUpdate) return new Response('Sign in required', { status: 401, headers: corsHeaders })
-    if (!telegramBotToken || !webhookSecret || webhookSecret.length < 32) {
-      return Response.json({ error: 'Telegram server configuration is incomplete.' }, { status: 503, headers: corsHeaders })
+    if (!telegramBotToken || !isValidTelegramWebhookSecret(webhookSecret)) {
+      return Response.json({ error: 'Telegram server configuration is incomplete. TELEGRAM_WEBHOOK_SECRET must contain 32–256 letters, digits, underscores, or hyphens.' }, { status: 503, headers: corsHeaders })
     }
 
     try {
@@ -109,7 +110,7 @@ serve(async (req) => {
 
   // setWebhook must use this same secret_token. A missing deployment secret
   // fails closed instead of trusting arbitrary requests to a public endpoint.
-  if (!webhookSecret || webhookSecret.length < 32) {
+  if (!isValidTelegramWebhookSecret(webhookSecret)) {
     return new Response('Webhook unavailable', { status: 503 })
   }
   if (!isTelegramUpdate) {

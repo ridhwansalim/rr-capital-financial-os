@@ -76,7 +76,7 @@ export default function App() {
                       <Route path="/chittis" element={<Chittis />} />
                       
                       {/* Fallback */}
-                      <Route path="*" element={<Navigate to="/" replace />} />
+                      <Route path="*" element={<Navigate to="/" replace state={{ routeNotice: 'That page does not exist. You are back on the Dashboard.' }} />} />
                     </Routes>
                     </Suspense>
                   </Layout>
