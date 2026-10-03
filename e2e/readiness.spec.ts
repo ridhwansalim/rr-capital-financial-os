@@ -262,9 +262,32 @@ test('desktop navigation follows the page matrix and logo opens the creator prof
   await primary.getByRole('button', { name: 'About RR Capital and its creator' }).click()
   const creator = page.getByRole('dialog', { name: 'Ridhwan S.' })
   await expect(creator).toBeVisible()
-  const backdropFilter = await creator.evaluate(element => getComputedStyle(element).backdropFilter)
-  expect(backdropFilter).toContain('creator-glass-bend')
-  for (const label of ['GitHub', 'Instagram', 'LinkedIn', 'Portfolio']) await expect(creator.getByRole('link', { name: new RegExp(label) })).toBeVisible()
+  await expect(creator.getByRole('img', { name: 'Ridhwan S., creator of RR Capital' })).toHaveJSProperty('complete', true)
+  await expect(creator.getByRole('img', { name: 'Ridhwan S., creator of RR Capital' })).not.toHaveJSProperty('naturalWidth', 0)
+  await page.screenshot({ path: 'test-results/creator-modal-visual-check.png' })
+  await expect(creator).toHaveClass(/glass-card/)
+  const glassSurface = await creator.evaluate(element => ({
+    backdropFilter: getComputedStyle(element).backdropFilter,
+    backgroundColor: getComputedStyle(element).backgroundColor,
+    boxShadow: getComputedStyle(element).boxShadow,
+    topHighlight: getComputedStyle(element, '::before').backgroundImage,
+    edgeHighlight: getComputedStyle(element, '::after').backgroundImage,
+  }))
+  expect(glassSurface.backdropFilter).toContain('blur(24px)')
+  expect(glassSurface.backdropFilter).toContain('saturate(1.9)')
+  expect(glassSurface.backgroundColor).toContain('oklab(')
+  expect(glassSurface.backgroundColor).toContain(' / ')
+  expect(glassSurface.boxShadow).toContain('inset')
+  expect(glassSurface.topHighlight).toContain('linear-gradient')
+  expect(glassSurface.edgeHighlight).toContain('linear-gradient')
+  for (const [label, expectedColor] of [['GitHub', 'rgb(240, 246, 252)'], ['Instagram', 'rgb(225, 48, 108)'], ['LinkedIn', 'rgb(10, 102, 194)'], ['Portfolio', 'rgb(182, 93, 63)']]) {
+    const link = creator.getByRole('link', { name: new RegExp(label) })
+    await expect(link).toBeVisible()
+    await expect(link.locator('svg').first()).toHaveCSS('color', expectedColor)
+  }
+  await creator.getByRole('link', { name: /GitHub/ }).hover()
+  await expect(creator.getByRole('link', { name: /GitHub/ })).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await expect(creator.getByRole('button', { name: 'Close profile' })).toHaveCSS('background-image', /linear-gradient/)
   await creator.getByRole('button', { name: 'Close creator profile' }).click()
 
   await primary.getByRole('button', { name: /More/ }).click()
@@ -293,6 +316,21 @@ test('desktop navigation follows the page matrix and logo opens the creator prof
   })
   expect(headingGap).toBeLessThan(64)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440)
+})
+
+test('creator profile remains usable on mobile', async ({ page }) => {
+  await installSyntheticBackend(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'About RR Capital and its creator' }).click()
+
+  const creator = page.getByRole('dialog', { name: 'Ridhwan S.' })
+  await expect(creator).toBeVisible()
+  await expect(creator.getByRole('img', { name: 'Ridhwan S., creator of RR Capital' })).toBeVisible()
+  for (const label of ['GitHub', 'Instagram', 'LinkedIn', 'Portfolio']) {
+    await expect(creator.getByRole('link', { name: new RegExp(label) })).toBeVisible()
+  }
+  await expect(creator.getByRole('button', { name: 'Close profile' })).toBeVisible()
 })
 
 test('liquid preference switches preserve native switch semantics and keyboard control', async ({ page }) => {
@@ -451,7 +489,6 @@ test('settings presents release information and manual update check', async ({ p
   await expect(page.getByRole('heading', { name: 'App updates' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Check for updates' })).toBeVisible()
   await expect(page.getByText(/Latest release .*2026\.10\.03\.4/)).toBeVisible()
-  await expect(page.getByText(/RR creator profile now has a refractive glass surface/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'View detailed summary' })).toBeVisible()
 })
 

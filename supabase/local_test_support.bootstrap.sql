@@ -3,6 +3,7 @@
 CREATE SCHEMA auth;
 CREATE SCHEMA extensions;
 CREATE SCHEMA vault;
+CREATE PUBLICATION supabase_realtime;
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
@@ -19,32 +20,5 @@ $$;
 GRANT USAGE ON SCHEMA auth TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated, anon;
 
--- Empty Vault-compatible test stub. It preserves the columns and signatures
--- used by migrations without storing real application secrets or claiming to
--- emulate Supabase Vault encryption.
-CREATE TABLE vault.secrets (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text UNIQUE,
-  description text,
-  secret text,
-  decrypted_secret text
-);
-CREATE VIEW vault.decrypted_secrets AS
-  SELECT id, name, decrypted_secret FROM vault.secrets;
-CREATE FUNCTION vault.create_secret(p_secret text, p_name text, p_description text)
-RETURNS uuid LANGUAGE plpgsql AS $$
-DECLARE v_id uuid;
-BEGIN
-  INSERT INTO vault.secrets(name, description, secret, decrypted_secret)
-  VALUES (p_name, p_description, p_secret, p_secret)
-  RETURNING id INTO v_id;
-  RETURN v_id;
-END;
-$$;
-CREATE FUNCTION vault.update_secret(p_id uuid, p_secret text)
-RETURNS uuid LANGUAGE plpgsql AS $$
-BEGIN
-  UPDATE vault.secrets SET secret=p_secret, decrypted_secret=p_secret WHERE id=p_id;
-  RETURN p_id;
-END;
-$$;
+-- The current schema dump creates Supabase Vault itself. Do not emulate its
+-- secrets table here: the extension owns that schema and catalog.

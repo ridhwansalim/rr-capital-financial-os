@@ -137,7 +137,7 @@ Push-Location $RepositoryRoot
 try {
   Invoke-PinnedSupabaseDump -Arguments @('db', 'dump', '--linked', '--file', (Join-Path $SnapshotPath 'roles.sql'), '--role-only')
   Invoke-PinnedSupabaseDump -Arguments @('db', 'dump', '--linked', '--file', (Join-Path $SnapshotPath 'schema.sql'))
-  Invoke-PinnedSupabaseDump -Arguments @('db', 'dump', '--linked', '--file', (Join-Path $SnapshotPath 'data.sql'), '--use-copy', '--data-only')
+  Invoke-PinnedSupabaseDump -Arguments @('db', 'dump', '--linked', '--file', (Join-Path $SnapshotPath 'data.sql'), '--use-copy', '--data-only', '-x', 'storage.buckets_vectors', '-x', 'storage.vector_indexes')
 }
 finally {
   Pop-Location

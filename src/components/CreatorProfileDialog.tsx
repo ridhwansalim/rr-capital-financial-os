@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react'
-import { ArrowUpRight, BriefcaseBusiness, Camera, Code2, X } from 'lucide-react'
+import { ArrowUpRight, X } from 'lucide-react'
 import { useModalBack } from '../lib/useModalBack'
 
 const creatorLinks = [
-  { label: 'GitHub', href: 'https://github.com/ridhwansalim', icon: Code2 },
-  { label: 'Instagram', href: 'https://www.instagram.com/ridhwan_salim/', icon: Camera },
-  { label: 'LinkedIn', href: 'https://www.linkedin.com/in/ridhwan-s/', icon: BriefcaseBusiness },
-  { label: 'Portfolio', href: 'https://ridhwansalim.github.io/Portfolio', icon: ArrowUpRight },
+  { label: 'GitHub', href: 'https://github.com/ridhwansalim', brand: 'github', icon: 'M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.09.682-.217.682-.483 0-.237-.009-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.455-1.157-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.091-.647.35-1.087.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.684-.103-.253-.446-1.27.098-2.646 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0 1 12 6.836c.85.004 1.705.115 2.504.337 1.909-1.294 2.748-1.025 2.748-1.025.546 1.376.203 2.393.1 2.646.64.7 1.027 1.593 1.027 2.684 0 3.842-2.339 4.687-4.566 4.935.359.31.679.92.679 1.855 0 1.339-.012 2.42-.012 2.75 0 .268.18.578.688.48A10.003 10.003 0 0 0 22 12c0-5.523-4.477-10-10-10Z' },
+  { label: 'Instagram', href: 'https://www.instagram.com/ridhwan_salim/', brand: 'instagram', icon: 'M7.8 2h8.4A5.8 5.8 0 0 1 22 7.8v8.4a5.8 5.8 0 0 1-5.8 5.8H7.8A5.8 5.8 0 0 1 2 16.2V7.8A5.8 5.8 0 0 1 7.8 2Zm0 2A3.8 3.8 0 0 0 4 7.8v8.4A3.8 3.8 0 0 0 7.8 20h8.4a3.8 3.8 0 0 0 3.8-3.8V7.8A3.8 3.8 0 0 0 16.2 4H7.8ZM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm5.25-3.25a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Z' },
+  { label: 'LinkedIn', href: 'https://www.linkedin.com/in/ridhwan-s/', brand: 'linkedin', icon: 'M5.2 3a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4ZM3.4 9h3.6v12H3.4V9Zm5.8 0h3.45v1.64h.05C13.18 9.7 14.28 8.8 16.3 8.8c3.7 0 4.3 2.43 4.3 5.59V21H17v-5.86c0-1.4-.03-3.2-1.95-3.2-1.96 0-2.26 1.53-2.26 3.1V21H9.2V9Z' },
+  { label: 'Portfolio', href: 'https://ridhwansalim.github.io/Portfolio', brand: 'portfolio', icon: '' },
 ]
 
 export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -49,28 +49,56 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
     }
   }, [isOpen, onClose])
 
+  useEffect(() => {
+    if (!isOpen) return
+    const dialog = dialogRef.current
+    if (!dialog) return
+
+    const updateSurface = (clientX: number, clientY: number) => {
+      const bounds = dialog.getBoundingClientRect()
+      const x = (clientX - bounds.left) / bounds.width
+      const y = (clientY - bounds.top) / bounds.height
+      dialog.style.setProperty('--glass-x', `${Math.max(0, Math.min(1, x)) * 100}%`)
+      dialog.style.setProperty('--glass-y', `${Math.max(0, Math.min(1, y)) * 100}%`)
+      dialog.style.setProperty('--glass-tilt-x', `${(0.5 - y) * 2.4}deg`)
+      dialog.style.setProperty('--glass-tilt-y', `${(x - 0.5) * 2.4}deg`)
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerType === 'touch') return
+      updateSurface(event.clientX, event.clientY)
+    }
+    const resetSurface = () => {
+      dialog.style.setProperty('--glass-x', '50%')
+      dialog.style.setProperty('--glass-y', '0%')
+      dialog.style.setProperty('--glass-tilt-x', '0deg')
+      dialog.style.setProperty('--glass-tilt-y', '0deg')
+    }
+
+    dialog.addEventListener('pointermove', handlePointerMove)
+    dialog.addEventListener('pointerleave', resetSurface)
+    return () => {
+      dialog.removeEventListener('pointermove', handlePointerMove)
+      dialog.removeEventListener('pointerleave', resetSurface)
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
   return (
     <div
-      className="fixed inset-0 z-[80] grid place-items-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
+        className="creator-profile-backdrop fixed inset-0 z-[80] grid place-items-center overflow-y-auto p-4"
       onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}
     >
+      <>
       <section
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="creator-profile-title"
-        className="creator-profile-glass relative grid max-h-[min(90dvh,46rem)] w-full max-w-2xl overflow-x-hidden overflow-y-auto rounded-3xl shadow-2xl sm:max-h-[85dvh] sm:grid-cols-[minmax(180px,0.8fr)_1.2fr] sm:overflow-hidden"
+        className="creator-profile-glass glass-card relative grid max-h-[min(90dvh,46rem)] w-full max-w-2xl overflow-x-hidden overflow-y-auto rounded-3xl text-[var(--ink)] sm:max-h-[85dvh] sm:grid-cols-[minmax(180px,0.8fr)_1.2fr] sm:overflow-hidden"
       >
-        <svg className="creator-profile-glass__filter" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <filter id="creator-glass-bend" x="-20%" y="-20%" width="140%" height="140%" colorInterpolationFilters="sRGB">
-            <feTurbulence type="fractalNoise" baseFrequency="0.003 0.007" numOctaves="1" result="turbulence" />
-            <feGaussianBlur in="turbulence" stdDeviation="2" result="softMap" />
-            <feDisplacementMap in="SourceGraphic" in2="softMap" scale="26" xChannelSelector="R" yChannelSelector="G" />
-          </filter>
-        </svg>
-        <div className="creator-profile-glass__photo relative min-h-52 overflow-hidden bg-[var(--surface-dark)] sm:min-h-[390px]">
+        <div className="relative min-h-52 overflow-hidden bg-[var(--surface-dark)] sm:min-h-[390px]">
           <img
             src="/ridhwan-creator.jpg"
             alt="Ridhwan S., creator of RR Capital"
@@ -82,13 +110,13 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
           </div>
         </div>
 
-        <div className="creator-profile-glass__content relative flex flex-col p-5 text-[var(--ink)] sm:p-7">
+        <div className="creator-profile-glass__content relative z-[1] flex flex-col p-5 text-[var(--ink)] sm:p-7">
           <button
             ref={closeButtonRef}
             type="button"
             aria-label="Close creator profile"
             onClick={onClose}
-            className="absolute right-4 top-4 rounded-full p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)]"
+            className="creator-profile-glass__control absolute right-4 top-4 rounded-full p-2 text-[var(--ink)] transition-colors hover:text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)]"
           >
             <X className="h-4 w-4" />
           </button>
@@ -106,15 +134,15 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
           <div className="mt-6">
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Find me online</p>
             <div className="grid grid-cols-2 gap-2">
-              {creatorLinks.map(({ label, href, icon: Icon }) => (
+              {creatorLinks.map(({ label, href, brand, icon }) => (
                 <a
                   key={label}
                   href={href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex min-h-11 items-center justify-between gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] px-3 text-sm font-medium text-[var(--ink)] transition-colors hover:border-[var(--brand-primary)]/50 hover:bg-[var(--brand-tint)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)]"
+                  className={`creator-profile-glass__control creator-profile-social creator-profile-social--${brand} inline-flex min-h-11 items-center justify-between gap-2 rounded-xl border px-3 text-sm font-medium text-[var(--ink)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)]`}
                 >
-                  <span className="inline-flex items-center gap-2"><Icon className="h-4 w-4 text-[var(--brand-primary-active)]" />{label}</span>
+                  <span className="inline-flex items-center gap-2"><svg aria-hidden="true" viewBox="0 0 24 24" className="creator-profile-social__icon h-4 w-4" fill="currentColor">{icon ? <path d={icon} /> : <><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" /><path d="M14 14h2v2h-2zM18 14h2v6h-2zM14 18h2v2h-2z" /></>}</svg>{label}</span>
                   <ArrowUpRight className="h-3.5 w-3.5 text-[var(--muted)]" />
                 </a>
               ))}
@@ -126,13 +154,14 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
             <button
               type="button"
               onClick={onClose}
-              className="min-h-11 w-full rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--brand-primary-active)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)]"
+              className="creator-profile-glass__action min-h-11 w-full rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--brand-primary-active)] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)]"
             >
               Close profile
             </button>
           </div>
         </div>
       </section>
+      </>
     </div>
   )
 }

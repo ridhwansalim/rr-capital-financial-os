@@ -181,104 +181,6 @@ html[data-theme="dark"] :is(.app-sidebar, .app-mobile-nav) {
   box-shadow: var(--app-shadow);
 }
 
-/* Frosted, theme-aware surface for the RR logo creator details dialog. */
-.creator-profile-glass {
-  --creator-glass-border: rgb(255 255 255 / .62);
-  --creator-glass-highlight: rgb(255 255 255 / .7);
-  --creator-glass-control: rgb(255 255 255 / .14);
-  isolation: isolate;
-  border: 1px solid var(--creator-glass-border);
-  background:
-    radial-gradient(ellipse at 12% 4%, rgb(255 255 255 / .36), transparent 38%),
-    radial-gradient(ellipse at 92% 90%, color-mix(in srgb, var(--brand-primary) 20%, transparent), transparent 42%),
-    linear-gradient(135deg, rgb(255 255 255 / .16), rgb(255 255 255 / .035) 42%, rgb(255 255 255 / .11));
-  -webkit-backdrop-filter: blur(28px) saturate(190%);
-  backdrop-filter: blur(28px) saturate(190%);
-  -webkit-backdrop-filter: url(#creator-glass-bend) blur(28px) saturate(190%);
-  backdrop-filter: url(#creator-glass-bend) blur(28px) saturate(190%);
-  box-shadow:
-    inset 0 0 2px 1px rgb(255 255 255 / .88),
-    inset 0 0 28px 4px rgb(255 255 255 / .18),
-    inset 0 14px 36px color-mix(in srgb, var(--brand-primary) 14%, transparent),
-    0 32px 90px rgb(0 0 0 / .38);
-}
-
-.creator-profile-glass::before {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  border-radius: inherit;
-  background:
-    linear-gradient(112deg, transparent 10%, rgb(255 255 255 / .20) 24%, transparent 42%),
-    radial-gradient(ellipse at 78% 0%, color-mix(in srgb, var(--brand-primary) 16%, transparent), transparent 52%),
-    linear-gradient(145deg, rgb(255 255 255 / .26), transparent 48%);
-  content: "";
-  pointer-events: none;
-}
-
-.creator-profile-glass::after {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  border: 1px solid var(--creator-glass-border);
-  border-radius: inherit;
-  box-shadow:
-    inset 2px 2px 3px rgb(255 255 255 / .58),
-    inset -2px -2px 3px rgb(255 255 255 / .34),
-    inset 0 0 34px rgb(255 255 255 / .12);
-  content: "";
-  pointer-events: none;
-}
-
-.creator-profile-glass__photo,
-.creator-profile-glass__content {
-  z-index: 3;
-}
-
-.creator-profile-glass__filter {
-  position: absolute;
-  width: 0;
-  height: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-html[data-theme="dark"] .creator-profile-glass {
-  --creator-glass-border: rgb(255 255 255 / .38);
-  --creator-glass-highlight: rgb(255 255 255 / .52);
-  --creator-glass-control: rgb(255 255 255 / .1);
-  background:
-    radial-gradient(ellipse at 12% 4%, rgb(255 255 255 / .2), transparent 38%),
-    radial-gradient(ellipse at 92% 90%, color-mix(in srgb, var(--brand-primary) 14%, transparent), transparent 42%),
-    linear-gradient(135deg, rgb(36 35 34 / .2), rgb(15 15 15 / .12) 52%, rgb(255 255 255 / .055));
-  box-shadow:
-    inset 0 0 2px 1px rgb(255 255 255 / .52),
-    inset 0 0 28px 4px rgb(255 255 255 / .13),
-    inset 0 14px 36px color-mix(in srgb, var(--brand-primary) 12%, transparent),
-    0 28px 80px rgb(0 0 0 / .48);
-}
-
-html[data-theme="dark"] .creator-profile-glass::before {
-  background:
-    linear-gradient(112deg, transparent 10%, rgb(255 255 255 / .12) 24%, transparent 42%),
-    radial-gradient(ellipse at 78% 0%, color-mix(in srgb, var(--brand-primary) 14%, transparent), transparent 52%),
-    linear-gradient(145deg, rgb(255 255 255 / .18), transparent 48%);
-}
-
-.creator-profile-glass__content { background: rgb(255 255 255 / .035); }
-.creator-profile-glass__content a {
-  border-color: rgb(255 255 255 / .28);
-  background: var(--creator-glass-control);
-  -webkit-backdrop-filter: blur(14px) saturate(160%);
-  backdrop-filter: blur(14px) saturate(160%);
-  box-shadow: inset 1px 1px 0 rgb(255 255 255 / .26), inset 0 -1px 0 rgb(255 255 255 / .08), 0 5px 16px rgb(0 0 0 / .08);
-}
-.creator-profile-glass__content a:hover { background: color-mix(in srgb, var(--brand-primary) 18%, var(--creator-glass-control)); }
-.creator-profile-glass__content button[aria-label="Close creator profile"] { background: rgb(255 255 255 / .12); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
-
-@media (max-width: 639px) {
-  .creator-profile-glass__content { min-height: 360px; }
-}
 .app-page-header {
   display: flex;
   align-items: end;
@@ -349,6 +251,116 @@ html[data-theme="dark"] .creator-profile-glass::before {
   border-color: var(--line);
   border-radius: 16px;
   box-shadow: 0 24px 64px rgb(0 0 0 / 0.2);
+}
+.creator-profile-glass {
+  --glass-x: 50%;
+  --glass-y: 0%;
+  --glass-tilt-x: 0deg;
+  --glass-tilt-y: 0deg;
+  isolation: isolate;
+  transform: perspective(1200px) rotateX(var(--glass-tilt-x)) rotateY(var(--glass-tilt-y));
+  transition: transform 220ms ease-out, box-shadow 220ms ease-out;
+  border: 1px solid rgb(255 255 255 / 0.4);
+  background: color-mix(in oklab, white 9%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  backdrop-filter: blur(24px) saturate(190%);
+  box-shadow:
+    0 32px 90px rgb(0 0 0 / 0.38),
+    0 12px 38px -12px rgb(0 0 0 / 0.72),
+    inset 0 1.5px 0 rgb(255 255 255 / 0.78),
+    inset 0 -1px 0 rgb(255 255 255 / 0.22),
+    inset 0 0 30px rgb(255 255 255 / 0.13);
+}
+.creator-profile-glass::before,
+.creator-profile-glass::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+.creator-profile-glass::before {
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 55% 38% at var(--glass-x) var(--glass-y), rgb(255 255 255 / 0.34), transparent 75%),
+    linear-gradient(135deg, rgb(255 255 255 / 0.17), transparent 38% 68%, rgb(255 255 255 / 0.08));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.74), inset 0 0 34px rgb(255 255 255 / 0.1);
+  transition: background 180ms ease-out;
+}
+.creator-profile-glass::after {
+  inset: 1px;
+  border: 1px solid rgb(255 255 255 / 0.24);
+  border-radius: inherit;
+  background: linear-gradient(115deg, rgb(255 255 255 / 0.12), transparent 22% 78%, rgb(255 255 255 / 0.06));
+  mask-image: linear-gradient(#000, transparent 28%, transparent 72%, #000);
+}
+.creator-profile-glass__content {
+  background: transparent;
+}
+.creator-profile-glass__control {
+  border-color: rgb(255 255 255 / 0.32);
+  background: color-mix(in srgb, var(--surface-card) 12%, transparent);
+  -webkit-backdrop-filter: blur(8px) saturate(1.35);
+  backdrop-filter: blur(8px) saturate(1.35);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.48),
+    inset 0 -1px 0 rgb(255 255 255 / 0.12),
+    0 4px 14px rgb(0 0 0 / 0.08);
+}
+.creator-profile-glass__control:hover {
+  background: color-mix(in srgb, var(--brand-primary) 16%, transparent);
+}
+.creator-profile-social { --social-brand: var(--brand-primary); }
+.creator-profile-social__icon { color: var(--social-brand); }
+.creator-profile-social--github { --social-brand: #181717; }
+.creator-profile-social--instagram { --social-brand: #e1306c; }
+.creator-profile-social--linkedin { --social-brand: #0a66c2; }
+.creator-profile-social--portfolio { --social-brand: #b65d3f; }
+html[data-theme="dark"] .creator-profile-social--github { --social-brand: #f0f6fc; }
+.creator-profile-social:hover,
+.creator-profile-social:focus-visible {
+  border-color: color-mix(in srgb, var(--social-brand) 58%, white 42%);
+  background: color-mix(in srgb, var(--social-brand) 22%, transparent);
+}
+html[data-theme="dark"] .creator-profile-social--github:hover,
+html[data-theme="dark"] .creator-profile-social--github:focus-visible {
+  border-color: color-mix(in srgb, #181717 62%, white 38%);
+  background: color-mix(in srgb, #181717 76%, transparent);
+}
+.creator-profile-glass__action {
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 65%, white 35%);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--brand-primary) 84%, white 16%), var(--brand-primary-active));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.5), 0 5px 14px color-mix(in srgb, var(--brand-primary) 24%, transparent);
+}
+html[data-theme="dark"] .creator-profile-glass {
+  border-color: rgb(255 255 255 / 0.32);
+  background: color-mix(in oklab, rgb(24 28 34) 18%, transparent);
+}
+.creator-profile-backdrop {
+  background:
+    radial-gradient(ellipse at 50% 48%, rgb(242 232 216 / 0.08), transparent 58%),
+    rgb(8 10 14 / 0.32);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+html[data-theme="light"] .creator-profile-backdrop {
+  background:
+    radial-gradient(ellipse at 50% 48%, rgb(255 255 255 / 0.12), transparent 58%),
+    rgb(24 29 36 / 0.24);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .creator-profile-glass { transform: none; background: var(--surface-card); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .creator-profile-glass__content { background: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .creator-profile-glass { transform: none; transition: none; }
+}
+@media (hover: none) {
+  .creator-profile-social--github { border-color: color-mix(in srgb, #181717 36%, white 64%); background: color-mix(in srgb, #181717 12%, transparent); }
+  .creator-profile-social--instagram { border-color: color-mix(in srgb, #e1306c 36%, white 64%); background: color-mix(in srgb, #e1306c 12%, transparent); }
+  .creator-profile-social--linkedin { border-color: color-mix(in srgb, #0a66c2 36%, white 64%); background: color-mix(in srgb, #0a66c2 12%, transparent); }
+  .creator-profile-social--portfolio { border-color: color-mix(in srgb, #b65d3f 36%, white 64%); background: color-mix(in srgb, #b65d3f 12%, transparent); }
+  html[data-theme="dark"] .creator-profile-social--github { border-color: rgb(255 255 255 / 0.38); background: color-mix(in srgb, #181717 30%, transparent); }
 }
 .app-dialog input.app-emi-amount-input { color: var(--ink); }
 .app-dialog div:has(> .app-emi-amount-input) {

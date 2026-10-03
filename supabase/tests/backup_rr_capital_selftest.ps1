@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $BackupScript = Join-Path $PSScriptRoot '..\Backup-RR-Capital.ps1'
+$VerifyScript = Join-Path $PSScriptRoot '..\Test-RR-Capital-Backup.ps1'
 $PowerShellExe = (Get-Command 'powershell.exe').Source
 $TempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\')
 $TestRoot = Join-Path $TempRoot ('rr capital backup selftest-' + [guid]::NewGuid().ToString('N'))
@@ -12,6 +13,14 @@ $CallLog = Join-Path $TestRoot 'calls.txt'
 function Assert-True {
   param([bool]$Condition, [string]$Message)
   if (-not $Condition) { throw $Message }
+}
+
+function Invoke-BackupVerifier {
+  param([string]$Path, [string]$OutputPath)
+  $errorPath = $OutputPath + '.stderr'
+  $argumentLine = '-NoProfile -ExecutionPolicy Bypass -File "' + $VerifyScript + '" -SnapshotPath "' + $Path + '"'
+  $process = Start-Process -FilePath $PowerShellExe -ArgumentList $argumentLine -RedirectStandardOutput $OutputPath -RedirectStandardError $errorPath -Wait -PassThru -NoNewWindow
+  return $process.ExitCode
 }
 
 try {
@@ -76,8 +85,31 @@ exit /b %errorlevel%
   Assert-True ((@($calls | Where-Object { $_ -match 'db\|dump\|--linked' }).Count) -eq 3) 'Expected three linked-project dump commands.'
   Assert-True (($calls -join "`n") -match '--role-only') 'Role-only export flag is missing.'
   Assert-True (($calls -join "`n") -match '--data-only') 'Data-only export flag is missing.'
+  Assert-True (($calls -join "`n") -match 'storage\.buckets_vectors') 'Managed vector bucket table exclusion is missing.'
+  Assert-True (($calls -join "`n") -match 'storage\.vector_indexes') 'Managed vector index table exclusion is missing.'
 
-  Write-Output 'Backup runner self-test passed: pinned CLI, linked RR Capital guard, three exports, protected ACL, manifest hashes, and output suppression.'
+  $verifiedExitCode = Invoke-BackupVerifier -Path $snapshotPath -OutputPath (Join-Path $TestRoot 'verify-valid.stdout')
+  Assert-True ($verifiedExitCode -eq 0) "Backup verifier rejected the valid synthetic snapshot: $(Get-Content -LiteralPath (Join-Path $TestRoot 'verify-valid.stdout.stderr') -Raw)"
+
+  $dataPath = Join-Path $snapshotPath 'data.sql'
+  Add-Content -LiteralPath $dataPath -Value 'tampered' -Encoding ASCII
+  $tamperedExitCode = Invoke-BackupVerifier -Path $snapshotPath -OutputPath (Join-Path $TestRoot 'verify-tampered.stdout')
+  Assert-True ($tamperedExitCode -ne 0) 'Backup verifier accepted a modified export.'
+  Set-Content -LiteralPath $dataPath -Value 'synthetic backup fixture' -Encoding ASCII
+  $manifest = Get-Content -LiteralPath (Join-Path $snapshotPath 'manifest.json') -Raw | ConvertFrom-Json
+  foreach ($file in $manifest.files) {
+    $path = Join-Path $snapshotPath $file.name
+    $fileInfo = Get-Item -LiteralPath $path
+    $file.sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+    $file.bytes = $fileInfo.Length
+  }
+  $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $snapshotPath 'manifest.json') -Encoding UTF8
+  $manifest.status = 'in_progress'
+  $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $snapshotPath 'manifest.json') -Encoding UTF8
+  $incompleteExitCode = Invoke-BackupVerifier -Path $snapshotPath -OutputPath (Join-Path $TestRoot 'verify-incomplete.stdout')
+  Assert-True ($incompleteExitCode -ne 0) 'Backup verifier accepted an in_progress snapshot.'
+
+  Write-Output 'Backup runner and verifier self-test passed: pinned CLI, linked RR Capital guard, protected ACL, integrity detection, incomplete-snapshot rejection, and output suppression.'
 }
 finally {
   Remove-Item Env:\RR_BACKUP_SELFTEST_CALL_LOG -ErrorAction SilentlyContinue
