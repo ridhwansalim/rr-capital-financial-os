@@ -8,7 +8,7 @@ This is the authoritative current snapshot. Later dated sections are historical 
 | --- | --- | --- | --- |
 | Local app and linked Supabase project | RR Capital | `hnebvwfgsotrknxpgpmv` | `supabase/config.toml` targets `financial-os`; linked-project identity was verified as RR Capital. The latest functional app change is commit `e29552a70a5b25b0e67c7c1f37037cad7a8ab4e7`; this environment note records later metadata-only verification. |
 | Production database | RR Capital | `hnebvwfgsotrknxpgpmv` | `ACTIVE_HEALTHY`, Postgres 17.6.1; fresh metadata query on 2026-10-03 returned 54 migrations through `20261002195439_match_obligation_on_ledger_retry`. |
-| Production web app | RR Capital | Vercel `financial-os` | Deployment `dpl_CppKbXCqa8t93pswBh7mHBu9c4p4` is `READY` for functional app commit `e29552a70a5b25b0e67c7c1f37037cad7a8ab4e7`; the production alias is `financial-os-orcin-ten.vercel.app`. |
+| Production web app | RR Capital | Vercel `financial-os` | The production alias `financial-os-orcin-ten.vercel.app` is `READY` and serves the latest functional app changes from commit `e29552a70a5b25b0e67c7c1f37037cad7a8ab4e7`. The subsequent commits only refresh readiness documentation. |
 | Separate legacy/test database | Financial OS v2 | `guvkfuxniprtqdsqlqtx` | `ACTIVE_HEALTHY`; schema and migration history remain separate. |
 
 ### Verified reset scope
