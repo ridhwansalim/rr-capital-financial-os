@@ -552,6 +552,28 @@ test('desktop navbar truncates only the visible tail on compact screens', async 
   await expect(page.getByRole('region', { name: 'Vaults, Directory & Sync' }).getByRole('link', { name: 'Accounts' })).toHaveCount(0)
 })
 
+test('navbar viewport selector fits the narrow-phone customization modal', async ({ page }) => {
+  await installSyntheticBackend(page)
+  await page.setViewportSize({ width: 320, height: 720 })
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Customize Navbar Layout' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Customize Navbar Layout' })
+  const tabs = dialog.getByRole('tablist', { name: 'Navbar viewport layout' })
+  await expect(tabs).toBeVisible()
+  const geometry = await tabs.evaluate(element => {
+    const bounds = element.getBoundingClientRect()
+    const dialogBounds = element.closest('[role="dialog"]')!.getBoundingClientRect()
+    return { left: bounds.left, right: bounds.right, dialogLeft: dialogBounds.left, dialogRight: dialogBounds.right }
+  })
+  expect(geometry.left).toBeGreaterThan(geometry.dialogLeft)
+  expect(geometry.right).toBeLessThan(geometry.dialogRight)
+
+  await tabs.getByRole('tab', { name: /Desktop/ }).click()
+  await expect(tabs.getByRole('tab', { name: /Desktop/ })).toHaveAttribute('aria-selected', 'true')
+  await expect.poll(() => tabs.evaluate(element => Number.parseFloat(getComputedStyle(element).getPropertyValue('--cap-w')))).toBeGreaterThan(0)
+})
+
 test('mobile navigation keeps a floating Settings hub and grouped module launcher', async ({ page }) => {
   await installSyntheticBackend(page, 'light')
   await page.setViewportSize({ width: 390, height: 844 })

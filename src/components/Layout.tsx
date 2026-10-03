@@ -173,7 +173,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </LiquidGlassSwitcher>
       </nav>
 
-      {createPortal(<div ref={desktopAddRef} className="app-desktop-add" style={{ position: 'fixed', top: 'auto', right: '32px', bottom: 'calc(32px + env(safe-area-inset-bottom, 0px))', left: 'auto' }}>
+      {createPortal(<div ref={desktopAddRef} className="app-desktop-add">
         <div aria-hidden={!isFabOpen} className={`absolute bottom-[calc(100%+0.65rem)] right-0 flex flex-col items-end gap-2 transition-all duration-200 ${isFabOpen ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-2 opacity-0 pointer-events-none'}`}>
           <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={openTransaction} className="flex min-h-12 items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--app-panel-strong)] px-4 text-sm font-medium text-[var(--ink)] shadow-xl"><span>Transaction</span><span className="rounded-full bg-[var(--brand-primary)] p-2 text-white"><CreditCard className="h-4 w-4" /></span></button>
           <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={openDebt} className="flex min-h-12 items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--app-panel-strong)] px-4 text-sm font-medium text-[var(--ink)] shadow-xl"><span>Debt / IOU</span><span className="rounded-full bg-emerald-600 p-2 text-white"><Users className="h-4 w-4" /></span></button>

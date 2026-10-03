@@ -700,6 +700,10 @@ html[data-theme="dark"] .liquid-switcher,
 .navbar-viewport-switcher.liquid-switcher.is-ready::after { transition: translate 480ms cubic-bezier(.22, 1.25, .36, 1), width 480ms cubic-bezier(.22, 1.25, .36, 1); }
 .navbar-viewport-switcher.liquid-switcher.is-squishing::after { animation: navbar-cap-squish 480ms cubic-bezier(.22, 1.25, .36, 1); }
 @keyframes navbar-cap-squish { 0% { scale: 1 1; } 38% { scale: 1.12 .96; } 68% { scale: .98 1.02; } 100% { scale: 1 1; } }
+@media (max-width: 380px) {
+  .navbar-viewport-switcher.liquid-switcher { width: 100%; min-width: 0; flex: 1 1 100%; }
+  .navbar-viewport-switcher .liquid-switcher__item { min-width: 0; flex: 1 1 0; gap: 6px; padding-inline: 8px; }
+}
 .app-mobile-nav .liquid-switcher__item { min-width: 0; width: 100%; min-height: 58px; flex-direction: column; gap: 4px; padding: 5px 1px; font-size: 10px; }
 .app-mobile-nav__group { display: flex; min-width: 0; align-items: center; overflow-x: auto; scrollbar-width: none; }
 .app-mobile-nav__group::-webkit-scrollbar { display: none; }
@@ -831,11 +835,8 @@ html[data-theme="dark"] .liquid-toggle { --glass-reflex-dark: 2; --glass-reflex-
   box-shadow: inset 1px 1px 0 rgb(255 255 255 / .52), inset -1px -1px 0 color-mix(in srgb, var(--brand-primary) 12%, transparent), 0 10px 26px color-mix(in srgb, var(--brand-primary) 12%, transparent), 0 2px 7px rgb(0 0 0 / .10);
 }
 .app-desktop-add {
-  position: fixed !important;
-  top: auto !important;
-  right: 32px !important;
-  bottom: calc(32px + env(safe-area-inset-bottom, 0px)) !important;
-  left: auto !important;
+  position: fixed;
+  inset: auto 32px calc(32px + env(safe-area-inset-bottom, 0px)) auto;
   z-index: 60;
   display: none;
   flex-direction: column;
