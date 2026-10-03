@@ -86,7 +86,6 @@ const syntheticProfile = {
   theme_accent: 'amber',
   ai_model: null,
   ai_persona: null,
-  telegram_chat_id: null,
   is_biometric_enabled: false,
   registered_devices: [],
   navbar_layout: { mobileSelectedUrls: ['/ledger', '/chittis'], desktopSelectedUrls: ['/ledger', '/calendar', '/chittis'] },
@@ -226,6 +225,7 @@ async function installSyntheticBackend(page: Page, themeMode: 'light' | 'dark' =
       const rpcName = path.slice('/rest/v1/rpc/'.length)
       const readOnlyRpcs = new Set([
         'financial_health_excluded_transaction_ids',
+        'get_telegram_link_status',
         'list_installment_occurrences',
         'profile_labels',
       ])
@@ -706,10 +706,10 @@ test('settings presents release information and manual update check', async ({ p
 test('Telegram linking configures the synthetic webhook and confirms a consumed challenge', async ({ page }) => {
   const evidence = await installSyntheticBackend(page)
   const token = 'ab'.repeat(24)
-  const chatId = '987654321'
   const configurationRequests: Array<{ body: unknown; authorization: string }> = []
   const challengeRequests: Array<{ body: unknown; authorization: string }> = []
-  let linkedChatId: string | null = null
+  const profileSelections: string[] = []
+  let telegramLinked = false
 
   await page.route(`${backendOrigin}/functions/v1/telegram-webhook`, async route => {
     const request = route.request()
@@ -731,10 +731,13 @@ test('Telegram linking configures the synthetic webhook and confirms a consumed 
     await fulfillJson(route, token)
   })
 
+  await page.route(`${backendOrigin}/rest/v1/rpc/get_telegram_link_status`, async route => {
+    if (route.request().method() === 'OPTIONS') return fulfillJson(route, {}, 204)
+    await fulfillJson(route, telegramLinked)
+  })
   await page.route(`${backendOrigin}/rest/v1/profiles**`, async route => {
-    const url = new URL(route.request().url())
-    if (url.searchParams.get('select') !== 'telegram_chat_id') return route.fallback()
-    await fulfillJson(route, { telegram_chat_id: linkedChatId })
+    profileSelections.push(new URL(route.request().url()).searchParams.get('select') ?? '')
+    await route.fallback()
   })
 
   await page.goto('/settings')
@@ -752,12 +755,15 @@ test('Telegram linking configures the synthetic webhook and confirms a consumed 
     body: {},
     authorization: expect.stringMatching(/^Bearer e30\./),
   }])
+  expect(profileSelections.length).toBeGreaterThan(0)
+  expect(profileSelections.every(selection => !selection.includes('telegram_chat_id'))).toBe(true)
 
   // Model the webhook consuming the challenge, then let the settings page's
   // visibility check confirm the linked chat without sending an external message.
-  linkedChatId = chatId
+  telegramLinked = true
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
-  await expect(page.getByText('Chat ID on file. Use the bot to verify or change it.')).toBeVisible()
+  await expect(page.getByText('Telegram chat linked. Use the bot to verify or change it.')).toBeVisible()
+  await expect(page.getByText('987654321')).toHaveCount(0)
   await expect(page.locator('code')).toHaveCount(0)
   expect(evidence.unexpectedOrigins).toEqual([])
   expect(evidence.tableMutations).toEqual([])

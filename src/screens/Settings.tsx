@@ -112,6 +112,7 @@ export default function Settings() {
   const [telegramLinkError, setTelegramLinkError] = useState('')
   const [telegramWebhookWarning, setTelegramWebhookWarning] = useState('')
   const [telegramBusy, setTelegramBusy] = useState(false)
+  const [telegramLinked, setTelegramLinked] = useState(false)
   const [telegramExpiresAt, setTelegramExpiresAt] = useState(0)
   const [geminiKeyDraft, setGeminiKeyDraft] = useState('')
   const [geminiKeyConfigured, setGeminiKeyConfigured] = useState(false)
@@ -126,7 +127,6 @@ export default function Settings() {
     theme_accent: 'coral',
     ai_model: 'gemini-1.5-flash',
     ai_persona: 'Analyst',
-    telegram_chat_id: '',
     is_biometric_enabled: false,
     registered_devices: [] as any[]
   }))
@@ -164,7 +164,11 @@ export default function Settings() {
             .catch(() => console.warn('Could not check Gemini key status'))
             .finally(() => setGeminiStatusLoading(false))
 
-          const { data } = await supabase.from('profiles').select('full_name, username, theme_mode, theme_accent, ai_model, ai_persona, telegram_chat_id, is_biometric_enabled, registered_devices').eq('id', user.id).single()
+          const [{ data }, { data: linkedStatus }] = await Promise.all([
+            supabase.from('profiles').select('full_name, username, theme_mode, theme_accent, ai_model, ai_persona, is_biometric_enabled, registered_devices').eq('id', user.id).single(),
+            supabase.rpc('get_telegram_link_status'),
+          ])
+          setTelegramLinked(linkedStatus === true)
           if (data) {
             const themeMode = normalizeThemeMode(data.theme_mode)
             const uniqueDevices = Array.from(new Map((data.registered_devices || []).map((device: any) => [device.id, device])).values())
@@ -196,7 +200,7 @@ export default function Settings() {
     fetchSettings()
   }, [defaultProfile])
 
-  const isProfileModified = JSON.stringify({ ...originalProfile, telegram_chat_id: '' }) !== JSON.stringify({ ...draftProfile, telegram_chat_id: '' })
+  const isProfileModified = JSON.stringify(originalProfile) !== JSON.stringify(draftProfile)
 
   const signOut = async () => {
     if (isSigningOut) return
@@ -436,10 +440,9 @@ export default function Settings() {
         setTelegramLinkError('That Telegram link code expired. Tap Link Telegram to create a fresh one.')
         return
       }
-      const { data } = await supabase.from('profiles').select('telegram_chat_id').eq('id', userId).single()
-      if (data?.telegram_chat_id && data.telegram_chat_id !== originalProfile.telegram_chat_id) {
-        setOriginalProfile(prev => ({ ...prev, telegram_chat_id: data.telegram_chat_id }))
-        setDraftProfile(prev => ({ ...prev, telegram_chat_id: data.telegram_chat_id }))
+      const { data } = await supabase.rpc('get_telegram_link_status')
+      if (data === true && !telegramLinked) {
+        setTelegramLinked(true)
         setTelegramToken('')
       }
     }
@@ -456,7 +459,7 @@ export default function Settings() {
       window.clearInterval(interval)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [userId, telegramToken, telegramExpiresAt, originalProfile.telegram_chat_id])
+  }, [userId, telegramToken, telegramExpiresAt, telegramLinked])
 
   // --- HARDWARE WEBAUTHN REGISTRATION ---
   const registerNewDevice = async () => {
@@ -894,7 +897,7 @@ export default function Settings() {
               <hr className="border-white/10 my-2" />
 
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3"><div><p className="font-semibold">Link Telegram</p><p className="text-sm text-slate-400">{originalProfile.telegram_chat_id ? 'Chat ID on file. Use the bot to verify or change it.' : 'Connect your private Telegram chat for alerts.'}</p></div><button type="button" onClick={() => void requestTelegramLink()} disabled={telegramBusy} className="shrink-0 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50">{telegramBusy ? 'Working…' : 'Link Telegram'}</button></div>
+                <div className="flex items-center justify-between gap-3"><div><p className="font-semibold">Link Telegram</p><p className="text-sm text-slate-400">{telegramLinked ? 'Telegram chat linked. Use the bot to verify or change it.' : 'Connect your private Telegram chat for alerts.'}</p></div><button type="button" onClick={() => void requestTelegramLink()} disabled={telegramBusy} className="shrink-0 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50">{telegramBusy ? 'Working…' : telegramLinked ? 'Relink Telegram' : 'Link Telegram'}</button></div>
                 {telegramToken && <div className="text-sm text-slate-300 space-y-2"><p>The bot webhook is verified. Open the bot and tap <strong>Start</strong> within 10 minutes (or send this command):</p><code className="block p-3 rounded-xl bg-black/30 break-all select-all">/start {telegramToken}</code><a className="inline-block text-emerald-300 underline" target="_blank" rel="noopener noreferrer" href={`https://t.me/${telegramBotUsername}?start=${encodeURIComponent(telegramToken)}`}>Open @{telegramBotUsername}</a><p>Keep this page open; it will confirm the link automatically. If Telegram only shows a Start button, tap it once in the private chat.</p></div>}
                 {telegramWebhookWarning && <p role="status" className="text-sm text-amber-300">{telegramWebhookWarning}</p>}
                 {telegramLinkError && <p role="alert" className="text-sm text-rose-300">{telegramLinkError}</p>}
