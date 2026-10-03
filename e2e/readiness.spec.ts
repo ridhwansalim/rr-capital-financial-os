@@ -262,6 +262,8 @@ test('desktop navigation follows the page matrix and logo opens the creator prof
   await primary.getByRole('button', { name: 'About RR Capital and its creator' }).click()
   const creator = page.getByRole('dialog', { name: 'Ridhwan S.' })
   await expect(creator).toBeVisible()
+  const backdropFilter = await creator.evaluate(element => getComputedStyle(element).backdropFilter)
+  expect(backdropFilter).toContain('creator-glass-bend')
   for (const label of ['GitHub', 'Instagram', 'LinkedIn', 'Portfolio']) await expect(creator.getByRole('link', { name: new RegExp(label) })).toBeVisible()
   await creator.getByRole('button', { name: 'Close creator profile' }).click()
 
@@ -448,8 +450,8 @@ test('settings presents release information and manual update check', async ({ p
   await page.goto('/settings?section=updates')
   await expect(page.getByRole('heading', { name: 'App updates' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Check for updates' })).toBeVisible()
-  await expect(page.getByText(/Latest release .*2026\.10\.03\.3/)).toBeVisible()
-  await expect(page.getByText(/Desktop Add actions now use the restored floating coral button/)).toBeVisible()
+  await expect(page.getByText(/Latest release .*2026\.10\.03\.4/)).toBeVisible()
+  await expect(page.getByText(/RR creator profile now has a refractive glass surface/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'View detailed summary' })).toBeVisible()
 })
 
