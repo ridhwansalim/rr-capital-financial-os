@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, X } from 'lucide-react'
 import { useModalBack } from '../lib/useModalBack'
 
@@ -12,6 +12,30 @@ const creatorLinks = [
 export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const dialogRef = useRef<HTMLElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!isOpen || !dialog) return
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerType !== 'mouse') return
+      const bounds = dialog.getBoundingClientRect()
+      const x = (event.clientX - bounds.left) / bounds.width - 0.5
+      const y = (event.clientY - bounds.top) / bounds.height - 0.5
+      dialog.style.setProperty('--glass-tilt-x', `${Math.max(-1, Math.min(1, -y * 4))}deg`)
+      dialog.style.setProperty('--glass-tilt-y', `${Math.max(-1, Math.min(1, x * 4))}deg`)
+    }
+    const resetTilt = () => {
+      dialog.style.setProperty('--glass-tilt-x', '0deg')
+      dialog.style.setProperty('--glass-tilt-y', '0deg')
+    }
+    dialog.addEventListener('pointermove', handlePointerMove)
+    dialog.addEventListener('pointerleave', resetTilt)
+    return () => {
+      dialog.removeEventListener('pointermove', handlePointerMove)
+      dialog.removeEventListener('pointerleave', resetTilt)
+      resetTilt()
+    }
+  }, [isOpen])
 
   useModalBack(isOpen, onClose)
 
@@ -49,40 +73,6 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
     }
   }, [isOpen, onClose])
 
-  useEffect(() => {
-    if (!isOpen) return
-    const dialog = dialogRef.current
-    if (!dialog) return
-
-    const updateSurface = (clientX: number, clientY: number) => {
-      const bounds = dialog.getBoundingClientRect()
-      const x = (clientX - bounds.left) / bounds.width
-      const y = (clientY - bounds.top) / bounds.height
-      dialog.style.setProperty('--glass-x', `${Math.max(0, Math.min(1, x)) * 100}%`)
-      dialog.style.setProperty('--glass-y', `${Math.max(0, Math.min(1, y)) * 100}%`)
-      dialog.style.setProperty('--glass-tilt-x', `${(0.5 - y) * 2.4}deg`)
-      dialog.style.setProperty('--glass-tilt-y', `${(x - 0.5) * 2.4}deg`)
-    }
-
-    const handlePointerMove = (event: PointerEvent) => {
-      if (event.pointerType === 'touch') return
-      updateSurface(event.clientX, event.clientY)
-    }
-    const resetSurface = () => {
-      dialog.style.setProperty('--glass-x', '50%')
-      dialog.style.setProperty('--glass-y', '0%')
-      dialog.style.setProperty('--glass-tilt-x', '0deg')
-      dialog.style.setProperty('--glass-tilt-y', '0deg')
-    }
-
-    dialog.addEventListener('pointermove', handlePointerMove)
-    dialog.addEventListener('pointerleave', resetSurface)
-    return () => {
-      dialog.removeEventListener('pointermove', handlePointerMove)
-      dialog.removeEventListener('pointerleave', resetSurface)
-    }
-  }, [isOpen])
-
   if (!isOpen) return null
 
   return (
@@ -90,20 +80,28 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
         className="creator-profile-backdrop fixed inset-0 z-[80] grid place-items-center overflow-y-auto p-4"
       onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}
     >
-      <>
       <section
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="creator-profile-title"
-        className="creator-profile-glass glass-card relative grid max-h-[min(90dvh,46rem)] w-full max-w-2xl overflow-x-hidden overflow-y-auto rounded-3xl text-[var(--ink)] sm:max-h-[85dvh] sm:grid-cols-[minmax(180px,0.8fr)_1.2fr] sm:overflow-hidden"
+        className="creator-profile-glass glass-card relative grid max-h-[min(90dvh,46rem)] w-full max-w-2xl grid-rows-[minmax(16rem,46dvh)_minmax(0,1fr)] overflow-x-hidden overflow-y-auto rounded-3xl text-[var(--ink)] sm:grid-rows-1 sm:max-h-[85dvh] sm:grid-cols-[minmax(180px,0.8fr)_1.2fr] sm:overflow-hidden"
       >
-        <div className="relative min-h-52 overflow-hidden bg-[var(--surface-dark)] sm:min-h-[390px]">
+        <div className="creator-profile-photo pointer-events-none relative h-[min(46dvh,22rem)] min-h-64 overflow-hidden bg-[var(--surface-dark)] sm:h-auto sm:min-h-[390px]">
           <img
             src="/ridhwan-creator.jpg"
             alt="Ridhwan S., creator of RR Capital"
-            className="absolute inset-0 h-full w-full object-cover object-center"
+            className="pointer-events-none absolute inset-0 h-full w-full object-cover object-[center_28%] sm:object-center"
           />
+          <button
+            type="button"
+            aria-label="View creator photo"
+            onClick={() => window.dispatchEvent(new Event('creator-photo-open'))}
+            className="creator-profile-photo__zoom pointer-events-auto absolute right-3 top-3 z-[3] inline-flex h-10 items-center gap-2 rounded-full px-3 text-xs font-medium text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          >
+            <span aria-hidden="true" className="text-base leading-none">⤢</span>
+            <span>View photo</span>
+          </button>
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent px-5 pb-5 pt-14 text-white sm:hidden">
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-white/75">Created by</p>
             <p className="mt-1 text-xl font-semibold">Ridhwan S.</p>
@@ -122,17 +120,17 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
           </button>
 
           <div className="pr-10">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--brand-primary-active)]">About RR Capital</p>
-            <h2 id="creator-profile-title" className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Ridhwan S.</h2>
-            <p className="mt-1 text-sm text-[var(--muted)]">BI &amp; E-commerce Analyst · Full-stack Developer</p>
+            <p className="creator-profile-adaptive-copy text-[10px] font-semibold uppercase tracking-[0.18em]">About RR Capital</p>
+            <h2 id="creator-profile-title" className="creator-profile-adaptive-copy mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Ridhwan S.</h2>
+            <p className="creator-profile-adaptive-copy mt-1 text-sm">BI &amp; E-commerce Analyst · Full-stack Developer</p>
           </div>
 
-          <p className="mt-5 text-sm leading-6 text-[var(--muted)]">
+          <p className="creator-profile-adaptive-copy mt-5 text-sm leading-6">
             RR Capital is a personal finance workspace shaped around everyday needs, built for use with family and friends.
           </p>
 
           <div className="mt-6">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Find me online</p>
+            <p className="creator-profile-adaptive-copy mb-2 text-[10px] font-semibold uppercase tracking-[0.16em]">Find me online</p>
             <div className="grid grid-cols-2 gap-2">
               {creatorLinks.map(({ label, href, brand, icon }) => (
                 <a
@@ -142,7 +140,7 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
                   rel="noopener noreferrer"
                   className={`creator-profile-glass__control creator-profile-social creator-profile-social--${brand} inline-flex min-h-11 items-center justify-between gap-2 rounded-xl border px-3 text-sm font-medium text-[var(--ink)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)]`}
                 >
-                  <span className="inline-flex items-center gap-2"><svg aria-hidden="true" viewBox="0 0 24 24" className="creator-profile-social__icon h-4 w-4" fill="currentColor">{icon ? <path d={icon} /> : <><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" /><path d="M14 14h2v2h-2zM18 14h2v6h-2zM14 18h2v2h-2z" /></>}</svg>{label}</span>
+                  <span className="inline-flex items-center gap-2"><svg aria-hidden="true" viewBox="0 0 24 24" className="creator-profile-social__icon h-4 w-4" fill="currentColor">{icon ? <path d={icon} /> : <><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" /><path d="M14 14h2v2h-2zM18 14h2v6h-2zM14 18h2v2h-2z" /></>}</svg><span className="creator-profile-adaptive-copy">{label}</span></span>
                   <ArrowUpRight className="h-3.5 w-3.5 text-[var(--muted)]" />
                 </a>
               ))}
@@ -150,18 +148,42 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
           </div>
 
           <div className="mt-auto pt-6">
-            <p className="mb-3 text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">RR Capital · Personal use</p>
-            <button
-              type="button"
-              onClick={onClose}
-              className="creator-profile-glass__action min-h-11 w-full rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-semibold text-white transition-colors hover:bg-[var(--brand-primary-active)] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)]"
-            >
-              Close profile
-            </button>
+            <p className="creator-profile-adaptive-copy mb-3 text-[10px] uppercase tracking-[0.14em]">RR Capital · Personal use</p>
           </div>
         </div>
       </section>
-      </>
+      <CreatorPhotoViewer />
+    </div>
+  )
+}
+
+function CreatorPhotoViewer() {
+  const [open, setOpen] = useState(false)
+  const closeRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    const show = () => setOpen(true)
+    window.addEventListener('creator-photo-open', show)
+    return () => window.removeEventListener('creator-photo-open', show)
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    closeRef.current?.focus()
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [open])
+
+  if (!open) return null
+  return (
+    <div className="creator-photo-viewer fixed inset-0 z-[100] grid place-items-center p-4" onMouseDown={event => { if (event.target === event.currentTarget) setOpen(false) }}>
+      <div role="dialog" aria-modal="true" aria-label="Creator photo" className="relative max-h-[92dvh] max-w-[min(92vw,48rem)] overflow-hidden rounded-2xl">
+        <button ref={closeRef} type="button" aria-label="Close creator photo" onClick={() => setOpen(false)} className="creator-profile-glass__control absolute right-3 top-3 z-10 rounded-full p-2 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"><X className="h-4 w-4" /></button>
+        <img src="/ridhwan-creator.jpg" alt="Ridhwan S., creator of RR Capital" className="max-h-[92dvh] w-auto max-w-[92vw] object-contain" />
+      </div>
     </div>
   )
 }

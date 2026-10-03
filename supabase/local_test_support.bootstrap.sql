@@ -20,5 +20,9 @@ $$;
 GRANT USAGE ON SCHEMA auth TO authenticated, anon;
 GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated, anon;
 
--- The current schema dump creates Supabase Vault itself. Do not emulate its
--- secrets table here: the extension owns that schema and catalog.
+-- The local replay has no Vault extension or secrets. This empty compatibility
+-- view lets migrations safely query configured webhook names without exposing
+-- credentials or attempting to deliver notifications in the scratch database.
+CREATE VIEW vault.decrypted_secrets AS
+SELECT NULL::text AS name, NULL::text AS decrypted_secret
+WHERE false;

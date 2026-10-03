@@ -30,7 +30,7 @@ if (-not (Test-Path -LiteralPath $NpxExecutable -PathType Leaf)) {
   throw 'The configured npx executable does not exist.'
 }
 
-$VersionOutput = @(& $NpxExecutable --yes "supabase@$CliVersion" --version 2>$null)
+$VersionOutput = @(& $NpxExecutable --offline --yes "supabase@$CliVersion" --version 2>$null)
 $VersionExitCode = $LASTEXITCODE
 $VersionLines = @($VersionOutput | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
 if ($VersionExitCode -ne 0 -or $VersionLines.Count -ne 1 -or $VersionLines[0] -ne $CliVersion) {
@@ -87,7 +87,7 @@ function Invoke-PinnedSupabaseDump {
   $OutputId = [guid]::NewGuid().ToString('N')
   $StandardOutputPath = Join-Path $SnapshotPath ('.cli-' + $OutputId + '.stdout')
   $StandardErrorPath = Join-Path $SnapshotPath ('.cli-' + $OutputId + '.stderr')
-  $AllArguments = @('--yes', "supabase@$CliVersion") + $Arguments
+  $AllArguments = @('--offline', '--yes', "supabase@$CliVersion") + $Arguments
   $ArgumentLine = '"' + ($AllArguments -join '" "') + '"'
   $ExitCode = -1
   try {
@@ -129,7 +129,7 @@ $Manifest = [ordered]@{
   project_ref = $ExpectedProjectRef
   supabase_cli_version = $CliVersion
   files = @()
-  scope = 'roles.sql, schema.sql, and data.sql; Supabase-managed Auth, Storage, extension schemas, and project-level settings are excluded.'
+  scope = 'roles.sql and schema.sql; data.sql is restricted to public and private application schemas. Supabase-managed Auth/Storage data and project-level settings are excluded.'
 }
 $Manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ManifestPath -Encoding UTF8
 
@@ -137,7 +137,7 @@ Push-Location $RepositoryRoot
 try {
   Invoke-PinnedSupabaseDump -Arguments @('db', 'dump', '--linked', '--file', (Join-Path $SnapshotPath 'roles.sql'), '--role-only')
   Invoke-PinnedSupabaseDump -Arguments @('db', 'dump', '--linked', '--file', (Join-Path $SnapshotPath 'schema.sql'))
-  Invoke-PinnedSupabaseDump -Arguments @('db', 'dump', '--linked', '--file', (Join-Path $SnapshotPath 'data.sql'), '--use-copy', '--data-only', '-x', 'storage.buckets_vectors', '-x', 'storage.vector_indexes')
+  Invoke-PinnedSupabaseDump -Arguments @('db', 'dump', '--linked', '--file', (Join-Path $SnapshotPath 'data.sql'), '--use-copy', '--data-only', '--schema', 'public,private')
 }
 finally {
   Pop-Location
