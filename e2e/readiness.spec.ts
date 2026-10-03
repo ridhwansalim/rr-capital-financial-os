@@ -332,7 +332,7 @@ test('desktop navigation uses the Settings module hub and logo opens the creator
   await expect(layoutDialog).toBeVisible()
   const viewportTabs = layoutDialog.getByRole('tablist', { name: 'Navbar viewport layout' })
   await expect(viewportTabs).toContainText('2 / 2')
-  await expect(viewportTabs).toContainText(/3\s*\/\s*\d+/)
+  await expect(viewportTabs).toContainText('3 / 10')
   await expect(viewportTabs).toHaveClass(/is-ready/)
   await expect.poll(() => viewportTabs.evaluate(element => Number.parseFloat(getComputedStyle(element).getPropertyValue('--cap-w')))).toBeGreaterThan(0)
   await viewportTabs.getByRole('tab', { name: /Desktop/ }).click()
@@ -352,6 +352,8 @@ test('desktop navigation uses the Settings module hub and logo opens the creator
   expect(viewport).not.toBeNull()
   expect(fabBounds!.y).toBeGreaterThan(viewport!.height - 100)
   expect(fabBounds!.x + fabBounds!.width).toBeGreaterThan(viewport!.width - 100)
+  expect(fabBounds!.x + fabBounds!.width).toBeCloseTo(viewport!.width - 32, 0)
+  expect(fabBounds!.y + fabBounds!.height).toBeCloseTo(viewport!.height - 32, 0)
   const accountsSwitch = layoutDialog.getByRole('switch', { name: 'Show Accounts in desktop navbar' })
   await accountsSwitch.click()
   await expect(accountsSwitch).toHaveAttribute('aria-checked', 'true')
@@ -768,6 +770,24 @@ test('Telegram linking configures the synthetic webhook and confirms a consumed 
   expect(evidence.unexpectedOrigins).toEqual([])
   expect(evidence.tableMutations).toEqual([])
   expect(evidence.unexpectedRpcs).toEqual([])
+})
+
+test('Settings still loads profile preferences while the Telegram status migration is pending', async ({ page }) => {
+  const evidence = await installSyntheticBackend(page)
+
+  await page.route(`${backendOrigin}/rest/v1/rpc/get_telegram_link_status`, async route => {
+    if (route.request().method() === 'OPTIONS') return fulfillJson(route, {}, 204)
+    await fulfillJson(route, {
+      code: 'PGRST202',
+      message: 'Could not find the function public.get_telegram_link_status.',
+    }, 404)
+  })
+
+  await page.goto('/settings')
+  await expect(page.getByRole('heading', { name: 'Profile & Identity' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Link Telegram' })).toBeVisible()
+  expect(evidence.unexpectedRpcs).toEqual([])
+  expect(evidence.unexpectedOrigins).toEqual([])
 })
 
 test('Telegram setup failure does not issue or display a link challenge', async ({ page }) => {

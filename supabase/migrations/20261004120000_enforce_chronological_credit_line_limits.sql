@@ -34,16 +34,15 @@ BEGIN
 
   WITH events AS (
     SELECT t.created_at AS occurred_at,
-           sum(CASE WHEN t.to_account_id = p_account_id THEN t.amount ELSE 0 END
+           CASE WHEN t.to_account_id = p_account_id THEN t.amount ELSE 0 END
              - CASE WHEN t.from_account_id = p_account_id
-                    THEN t.amount + COALESCE(t.fee_amount, 0) ELSE 0 END) AS delta
+                    THEN t.amount + COALESCE(t.fee_amount, 0) ELSE 0 END AS delta
       FROM public.transactions AS t
      WHERE t.status = 'COMPLETED'
        AND t.owner_id = p_owner_id
        AND t.id IS DISTINCT FROM p_excluded_transaction_id
        AND (t.from_account_id = p_account_id OR t.to_account_id = p_account_id)
        AND (t.created_at AT TIME ZONE 'Asia/Kolkata')::date >= v_opening_date
-     GROUP BY t.created_at
     UNION ALL
     SELECT p_candidate_created_at,
            sum(CASE WHEN p_candidate_to = p_account_id THEN p_candidate_amount ELSE 0 END
@@ -53,12 +52,18 @@ BEGIN
         AND (p_candidate_from = p_account_id OR p_candidate_to = p_account_id)
         AND (p_candidate_created_at AT TIME ZONE 'Asia/Kolkata')::date >= v_opening_date
   ), moments AS (
-    SELECT occurred_at, sum(delta) AS delta
+    -- If a purchase and a repayment have the same timestamp, process the
+    -- liability increase first. Netting them together could conceal an
+    -- over-limit intermediate balance.
+    SELECT occurred_at, delta < 0 AS is_charge, sum(delta) AS delta
       FROM events
-     GROUP BY occurred_at
+     GROUP BY occurred_at, (delta < 0)
   ), running AS (
     SELECT v_opening_balance
-             + sum(delta) OVER (ORDER BY occurred_at ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS balance
+             + sum(delta) OVER (
+                 ORDER BY occurred_at, is_charge DESC
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+               ) AS balance
       FROM moments
   )
   SELECT min(balance) INTO v_minimum FROM running;
@@ -72,6 +77,30 @@ $$;
 REVOKE ALL ON FUNCTION private.assert_credit_line_timeline(
   uuid,uuid,uuid,text,uuid,uuid,numeric,numeric,timestamptz
 ) FROM PUBLIC, anon, authenticated, service_role;
+
+-- A limit reduction must respect the entire dated ledger, not only today's
+-- net balance. Otherwise repayments can hide an earlier breach.
+CREATE OR REPLACE FUNCTION private.validate_credit_line_limit_history()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $$
+BEGIN
+  IF (NEW.credit_limit IS DISTINCT FROM OLD.credit_limit
+      OR NEW.type IS DISTINCT FROM OLD.type)
+     AND NEW.type IN ('credit', 'credit_card', 'pay_later') THEN
+    PERFORM private.assert_credit_line_timeline(NEW.owner_id, NEW.id);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.validate_credit_line_limit_history()
+  FROM PUBLIC, anon, authenticated, service_role;
+DROP TRIGGER IF EXISTS validate_credit_line_limit_history ON public.accounts;
+CREATE TRIGGER validate_credit_line_limit_history
+  AFTER UPDATE OF credit_limit, type ON public.accounts
+  FOR EACH ROW EXECUTE FUNCTION private.validate_credit_line_limit_history();
 
 CREATE OR REPLACE FUNCTION private.validate_credit_line_limit()
 RETURNS trigger

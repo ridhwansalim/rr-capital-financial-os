@@ -8,16 +8,21 @@ export type ReleaseNotes = {
 // Update this entry for each user-facing production release. The date is the
 // release date, not the time this client happens to check for a new build.
 export const currentRelease: ReleaseNotes = {
-  version: '2026.10.03.3',
-  releasedAt: '2026-10-03T08:15:51+05:30',
-  brief: 'Desktop Add actions now use the restored floating coral button. Liquid-glass controls and cleaner Dashboard spacing round out the updated navigation.',
+  version: '2026.10.04.1',
+  releasedAt: '2026-10-04T00:42:00+05:30',
+  brief: 'Settings adds a brighter liquid-glass viewport selector, and credit-line limits now protect historical balances.',
   details: [
-    'Desktop navigation keeps Dashboard, Calendar, Ledger, Reports, and Accounts in the top bar, with the coral Add action floating at the lower right.',
-    'Mobile navigation keeps Dashboard, Ledger, Add, Chittis, and More in the bottom bar; the More drawer groups the remaining pages.',
-    'The More menus show only enabled optional modules, and the offline queue shows its pending count.',
-    'The RR Capital logo opens the creator profile with a photo and social links.',
-    'When a new app build is available, the notice points to Settings. Settings can check for updates and show the release date, brief, and detailed notes.',
-    'Preference switches and primary actions now use theme-aware liquid-glass styling, and the Dashboard heading no longer has excess space above it.',
-    'A keyboard-accessible liquid-glass range control is available for future slider settings.',
+    'Desktop and mobile navigation use one route registry. Settings remains pinned, and moving a module between navigation and Settings updates its canonical group automatically.',
+    'Mobile navigation is a fixed, floating glass dock with a centered Add action and safe-area spacing.',
+    'Optional modules can be enabled in Settings; disabled optional routes return to Dashboard, and Account Health remains embedded in Accounts.',
+    'Page placeholders use a consistent KPI and workspace-slot layout, with a Settings breadcrumb and placement control for modules opened from the hub.',
+    'Settings includes the light/dark appearance switcher and persistent workspace preferences.',
+    'The mobile Add control opens Transaction and Debt / IOU forms reliably, including on short phone viewports.',
+    'The RR Capital logo opens a responsive creator details modal with a liquid-glass surface and one close control.',
+    'Creator profile social links use recognizable logos and network colors, with readable theme-aware text and no pointer-following highlight.',
+    'Preference switches and selection controls use theme-aware liquid-glass styling, and the Dashboard heading no longer has excess space above it.',
+    'Telegram Settings verifies webhook setup and one-time challenge linking; automated checks use synthetic responses and do not contact Telegram.',
+    'The Mobile/Desktop navbar layout selector has a stronger translucent glass cap, while desktop Add remains a floating lower-right action.',
+    'Backdated credit-line purchases are rejected if the dated balance would exceed the approved limit, even when a later credit would make the current balance appear safe.',
   ],
 }

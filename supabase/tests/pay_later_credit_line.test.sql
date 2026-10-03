@@ -1,15 +1,17 @@
-SELECT plan(3);
+SELECT plan(5);
 BEGIN;
 INSERT INTO auth.users(id, email, raw_user_meta_data) VALUES
   ('00000000-0000-4000-a000-000000000419', 'pay-later@example.invalid', '{}');
 INSERT INTO public.accounts(id, owner_id, name, type, credit_limit, opening_balance, opening_date) VALUES
-  ('10000000-0000-4000-a000-000000000419', '00000000-0000-4000-a000-000000000419', 'Everyday bank', 'bank', 0, 1000, current_date),
-  ('10000000-0000-4000-a000-000000000420', '00000000-0000-4000-a000-000000000419', 'Card', 'credit_card', 100, 0, current_date),
+  ('10000000-0000-4000-a000-000000000419', '00000000-0000-4000-a000-000000000419', 'Everyday bank', 'bank', 0, 1000, current_date - 3),
+  ('10000000-0000-4000-a000-000000000420', '00000000-0000-4000-a000-000000000419', 'Card', 'credit_card', 100, 0, current_date - 3),
   ('10000000-0000-4000-a000-000000000421', '00000000-0000-4000-a000-000000000419', 'Pay Later', 'pay_later', 200, -30, current_date),
   ('10000000-0000-4000-a000-000000000422', '00000000-0000-4000-a000-000000000419', 'Second bank', 'bank', 0, 1000, current_date),
   ('10000000-0000-4000-a000-000000000424', '00000000-0000-4000-a000-000000000419', 'Cash in Hand', 'cash', 0, 375, current_date),
   ('10000000-0000-4000-a000-000000000425', '00000000-0000-4000-a000-000000000419', 'Historical card', 'credit_card', 100, 0, current_date - 3),
-  ('10000000-0000-4000-a000-000000000426', '00000000-0000-4000-a000-000000000419', 'Historical funding bank', 'bank', 0, 500, current_date - 3);
+  ('10000000-0000-4000-a000-000000000426', '00000000-0000-4000-a000-000000000419', 'Historical funding bank', 'bank', 0, 500, current_date - 3),
+  ('10000000-0000-4000-a000-000000000427', '00000000-0000-4000-a000-000000000419', 'Same-time card', 'credit_card', 100, 0, current_date - 3),
+  ('10000000-0000-4000-a000-000000000428', '00000000-0000-4000-a000-000000000419', 'Same-time funding bank', 'bank', 0, 500, current_date - 3);
 INSERT INTO auth.users(id, email, raw_user_meta_data) VALUES
   ('00000000-0000-4000-a000-000000000420', 'pay-later-other@example.invalid', '{}');
 INSERT INTO public.accounts(id, owner_id, name, type, credit_limit, opening_balance, opening_date) VALUES
@@ -23,6 +25,8 @@ SELECT set_config('request.jwt.claim.sub', '00000000-0000-4000-a000-000000000419
 SET LOCAL ROLE authenticated;
 
 DO $$
+DECLARE
+  v_same_timestamp timestamptz := statement_timestamp();
 BEGIN
   BEGIN
     INSERT INTO public.recurring_emis(owner_id, name, amount, start_date, end_date, type, status, credit_account_id)
@@ -41,7 +45,7 @@ BEGIN
 
   PERFORM public.post_ledger_transaction(
     gen_random_uuid(), '10000000-0000-4000-a000-000000000420', NULL,
-    80, 0, 'Synthetic card purchase', statement_timestamp());
+    80, 0, 'Synthetic card purchase', (current_date - 2)::timestamptz + interval '12 hours');
   PERFORM public.post_ledger_transaction(
     gen_random_uuid(), '10000000-0000-4000-a000-000000000421', NULL,
     125, 0, 'Synthetic Pay Later purchase', statement_timestamp());
@@ -74,6 +78,21 @@ BEGIN
     '10000000-0000-4000-a000-000000000421', 55, 0,
     'Synthetic Pay Later repayment', statement_timestamp());
 
+  -- The original card purchase peaked at 80, but a later repayment makes its
+  -- present outstanding balance 30. The approved limit still cannot be
+  -- reduced below the historical peak.
+  PERFORM public.post_ledger_transaction(
+    gen_random_uuid(), '10000000-0000-4000-a000-000000000419', '10000000-0000-4000-a000-000000000420', 50, 0,
+    'Synthetic partial card repayment', (current_date - 1)::timestamptz + interval '12 hours');
+  BEGIN
+    UPDATE public.accounts SET credit_limit = 70
+     WHERE id = '10000000-0000-4000-a000-000000000420';
+    RAISE EXCEPTION 'Credit limit was lowered below its historical peak';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL;
+  END;
+  UPDATE public.accounts SET credit_limit = 85
+   WHERE id = '10000000-0000-4000-a000-000000000420';
+
   -- A later card credit can make the current net balance look safe while an
   -- earlier backdated purchase would have exceeded the limit when it posted.
   PERFORM public.post_ledger_transaction(
@@ -89,6 +108,20 @@ BEGIN
   EXCEPTION WHEN invalid_parameter_value THEN NULL;
   END;
 
+  -- Equal timestamps must conservatively process a card purchase before a
+  -- repayment/credit. Otherwise summing the two events could hide the peak.
+  PERFORM public.post_ledger_transaction(
+    gen_random_uuid(), '10000000-0000-4000-a000-000000000428',
+    '10000000-0000-4000-a000-000000000427', 40, 0,
+    'Synthetic same-time card credit', v_same_timestamp);
+  BEGIN
+    PERFORM public.post_ledger_transaction(
+      gen_random_uuid(), '10000000-0000-4000-a000-000000000427', NULL,
+      120, 0, 'Synthetic same-time over-limit purchase', v_same_timestamp);
+    RAISE EXCEPTION 'Same-time card credit masked an over-limit purchase';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL;
+  END;
+
   BEGIN
     INSERT INTO public.accounts(owner_id, name, type, credit_limit, opening_date)
     VALUES ('00000000-0000-4000-a000-000000000419', 'Unconfigured card', 'credit_card', 0, current_date);
@@ -97,9 +130,9 @@ BEGIN
   END;
 
   IF (SELECT balance FROM public.account_balances
-       WHERE id = '10000000-0000-4000-a000-000000000419') <> 945
+       WHERE id = '10000000-0000-4000-a000-000000000419') <> 895
      OR (SELECT balance FROM public.account_balances
-          WHERE id = '10000000-0000-4000-a000-000000000420') <> -80
+          WHERE id = '10000000-0000-4000-a000-000000000420') <> -30
      OR (SELECT balance FROM public.account_balances
           WHERE id = '10000000-0000-4000-a000-000000000421') <> -100 THEN
     RAISE EXCEPTION 'Credit-card and Pay Later balances did not use the expected sign convention';
@@ -114,7 +147,7 @@ BEGIN
 
   PERFORM public.pay_bank_emi(gen_random_uuid(), '20000000-0000-4000-a000-000000000419',
     '10000000-0000-4000-a000-000000000419', 1, statement_timestamp());
-  IF (SELECT balance FROM public.account_balances WHERE id = '10000000-0000-4000-a000-000000000419') <> 920
+  IF (SELECT balance FROM public.account_balances WHERE id = '10000000-0000-4000-a000-000000000419') <> 870
      OR (SELECT balance FROM public.account_balances WHERE id = '10000000-0000-4000-a000-000000000421') <> -75
      OR (SELECT balance FROM public.account_balances WHERE id = '10000000-0000-4000-a000-000000000424') <> 375
      OR (SELECT to_account_id FROM public.transactions WHERE description LIKE 'Bank EMI Installment: Pay Later purchase EMI%') <> '10000000-0000-4000-a000-000000000421' THEN
@@ -125,6 +158,8 @@ RESET ROLE;
 ROLLBACK;
 SELECT pass('credit-line purchases respect limits, repayments reduce Pay Later debt, and failed writes are atomic');
 SELECT pass('backdated credit-line purchases cannot exceed the historical limit even when later credits offset them');
+SELECT pass('approved limits cannot be reduced below a previously reached historical balance');
+SELECT pass('same-timestamp card credits cannot mask an over-limit purchase');
 SELECT ok(EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'private'
   AND tablename = 'emi_bank_action_requests'
   AND indexname = 'emi_bank_action_requests_credit_account_id_idx'),
