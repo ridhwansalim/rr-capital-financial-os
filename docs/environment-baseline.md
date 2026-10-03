@@ -41,6 +41,8 @@ Prior code and database tests cover owner-scoped access, atomic/idempotent ledge
 
 On 2026-10-03, ACL review found the active checkout `.env.local` and an additional backup checkout `.env.local` inherited access for Authenticated Users and other local SIDs. Both files' ACLs were narrowed to the current owner account, SYSTEM, and Administrators; contents were not read or changed. The backup checkout is outside the active repo and remains a separate archived copy that has not been otherwise audited.
 
+The repeatable manual Free-plan export runner `supabase/Backup-RR-Capital.ps1` was tested with a mock CLI and used for a fresh RR Capital logical export on 2026-10-03. The completed snapshot's manifest, file sizes, hashes, current-owner ownership, and inherited owner/SYSTEM/Administrators ACL were verified without reading dump contents. An earlier failed attempt remains marked `in_progress` and must not be restored. The snapshots remain in one local recovery location; no off-site copy or full-project restore is verified.
+
 ## Security implementation notes
 
 The bullets below retain earlier verification details. For the current findings and project state, use the snapshot at the top of this file.

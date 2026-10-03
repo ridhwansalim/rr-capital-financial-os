@@ -56,6 +56,12 @@ Do not apply Perry-only migrations `20261002040100_perry_scoped_reader_role.sql`
 
 A fresh RR Capital logical export now exists at the protected path above and its three file hashes were verified. This is a limited database-only recovery copy: it excludes the existing Auth identity, Storage objects, extension-managed schemas, and project-level/Auth/Edge settings. It has not been restored into an isolated project, so it is not a complete backup or restore rehearsal. The owner dropped the paid provider-clone rehearsal because upgrading is unaffordable. A failure requiring full project restoration would still need Supabase support or paid provider backup capability.
 
+### Repeatable export verified — 2026-10-03
+
+Added `supabase/Backup-RR-Capital.ps1` for manual Free-plan exports. It rejects any linked project other than RR Capital, requires the pre-existing owner-protected backup root, pins Supabase CLI 2.119.0, suppresses and deletes CLI output logs, and verifies the three export files and manifest hashes/ACL metadata. Its mock-only self-test passed, including a path-with-spaces case. The actual runner completed snapshot `20261003-052929-323`; its manifest is `complete`, and `roles.sql`, `schema.sql`, and `data.sql` match the recorded sizes and hashes. The snapshot inherits the protected root ACL and is owned by the current account. Dump contents were not read during verification. The first attempt left snapshot `20261003-052358-906` marked `in_progress` with only a partial roles dump; do not restore it. Postflight after the CLI login TTL found zero active temporary CLI login roles and one expired role record. No hosted schema or financial rows were changed by the export.
+
+To create the next manual snapshot, run `powershell -NoProfile -ExecutionPolicy Bypass -File supabase/Backup-RR-Capital.ps1`. A complete export remains local-only and database-only; it is not off-site, encrypted, or a full Supabase project backup. Do not upload it to public GitHub.
+
 ## File integrity
 
 SHA-256 of the nine reviewed local SQL files:
