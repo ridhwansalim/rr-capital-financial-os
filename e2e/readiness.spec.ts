@@ -291,6 +291,39 @@ test('transaction before its account opening date is rejected before an outbox o
   expect(evidence.unexpectedOrigins).toEqual([])
 })
 
+test('transaction occurrence date is sent unchanged as India-time noon to the ledger RPC', async ({ page }) => {
+  await installSyntheticBackend(page)
+  const ledgerCalls: Array<Record<string, unknown>> = []
+  const ledgerAuthorization: string[] = []
+
+  await page.route(`${backendOrigin}/rest/v1/rpc/post_ledger_transaction`, async route => {
+    ledgerCalls.push(route.request().postDataJSON() as Record<string, unknown>)
+    ledgerAuthorization.push(route.request().headers()['authorization'] ?? '')
+    await fulfillJson(route, null)
+  })
+
+  await page.goto('/accounts')
+  await page.getByRole('button', { name: 'Open add menu' }).click()
+  await page.getByRole('button', { name: 'Transaction' }).click()
+  await page.getByRole('combobox').selectOption(syntheticAccountId)
+  await page.getByPlaceholder('0.00').fill('25.50')
+  await page.getByLabel('Occurrence date').fill('2026-09-03')
+  await page.getByPlaceholder('e.g., Rent Payment, Groceries').fill('Synthetic dated expense')
+  await page.getByRole('button', { name: 'Log Transaction' }).click()
+
+  await expect.poll(() => ledgerCalls.length).toBe(1)
+  expect(ledgerCalls[0]).toMatchObject({
+    p_from_account_id: syntheticAccountId,
+    p_to_account_id: null,
+    p_amount: 25.5,
+    p_fee_amount: 0,
+    p_description: 'Synthetic dated expense',
+    p_created_at: '2026-09-03T06:30:00.000Z',
+  })
+  expect(ledgerAuthorization).toEqual([expect.stringMatching(/^Bearer e30\./)])
+  expect(await page.getByRole('dialog').count()).toBe(0)
+})
+
 test('all application pages render from synthetic data on desktop and mobile without page-load writes', async ({ page }) => {
   test.setTimeout(120_000)
   const evidence = await installSyntheticBackend(page)
