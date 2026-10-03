@@ -23,10 +23,15 @@ $supersededTimestampMigrations = @(
   '20261002041000_revoke_legacy_p2p_debt_rpc.sql',
   '20261002041011_retire_unsafe_perry_database_login.sql'
 )
-$expectedPending = @()
+$expectedPending = @(
+  '20261004120000_enforce_chronological_credit_line_limits',
+  '20261004130000_protect_telegram_destination'
+)
 $expectedHashes = @{
   '20261002103816_retire_unsafe_perry_database_login_after_live_ledger.sql' = '95528FF9472A0DEF4864553E859E035A4D208A60C7ACF62A96F52D35D9C22CB0'
   '20261002195439_match_obligation_on_ledger_retry.sql' = '2A202E37171F2FF09F88AD43018C7F705D87DEFDA1719505D015EF593C084FDD'
+  '20261004120000_enforce_chronological_credit_line_limits.sql' = '3808ED42933E37484ED382F5E734FC2AFCB9B581D8D87F2EE00030F6703F0217'
+  '20261004130000_protect_telegram_destination.sql' = '12D8AAFF9FE9ACA569A110929B3E2E68003A1C2B48EBC78A8128A7087F49EE1C'
 }
 
 foreach ($name in $expectedHashes.Keys) {

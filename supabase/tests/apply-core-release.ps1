@@ -5,9 +5,14 @@
 $ErrorActionPreference = 'Stop'
 $expectedProjectRef = 'hnebvwfgsotrknxpgpmv'
 if ($ProjectRef -cne $expectedProjectRef) { throw 'This release bundle is pinned to RR Capital only.' }
-$expectedPending = @()
+$expectedPending = @(
+  '20261004120000_enforce_chronological_credit_line_limits',
+  '20261004130000_protect_telegram_destination'
+)
 $expectedHashes = @{
   '20261002195439_match_obligation_on_ledger_retry.sql' = '2A202E37171F2FF09F88AD43018C7F705D87DEFDA1719505D015EF593C084FDD'
+  '20261004120000_enforce_chronological_credit_line_limits.sql' = '3808ED42933E37484ED382F5E734FC2AFCB9B581D8D87F2EE00030F6703F0217'
+  '20261004130000_protect_telegram_destination.sql' = '12D8AAFF9FE9ACA569A110929B3E2E68003A1C2B48EBC78A8128A7087F49EE1C'
 }
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $sourceSupabase = Join-Path $repoRoot 'supabase'
@@ -23,10 +28,11 @@ $excluded = @(
   '20261002041011_retire_unsafe_perry_database_login.sql'
 )
 foreach ($name in $expectedPending) {
-  $path = Join-Path (Join-Path $sourceSupabase 'migrations') $name
-  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Reviewed migration missing: $name" }
+  $fileName = "$name.sql"
+  $path = Join-Path (Join-Path $sourceSupabase 'migrations') $fileName
+  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Reviewed migration missing: $fileName" }
   $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
-  if ($hash -cne $expectedHashes[$name]) { throw "Hash mismatch for reviewed migration: $name" }
+  if ($hash -cne $expectedHashes[$fileName]) { throw "Hash mismatch for reviewed migration: $fileName" }
 }
 New-Item -ItemType Directory -Path $bundleMigrations -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $sourceSupabase 'config.toml') -Destination (Join-Path $bundleSupabase 'config.toml')
