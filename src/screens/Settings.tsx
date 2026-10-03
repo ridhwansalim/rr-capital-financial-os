@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Settings as SettingsIcon, Search, User, Key, Lock, RotateCcw, Save, Trash2, Loader2, Palette, Bot, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut, Sun, Moon, RefreshCw, Download, ArrowLeftRight, LayoutGrid } from 'lucide-react'
+import { Settings as SettingsIcon, Search, User, Key, Lock, RotateCcw, Save, Trash2, Loader2, Palette, Bot, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut, Sun, Moon, RefreshCw, Download, ArrowLeftRight, ArrowRight, LayoutGrid, X, ArrowUp, ArrowDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDate } from '../lib/financeDate'
 import { normalizeThemeMode, useTheme } from '../components/ThemeProvider'
@@ -14,7 +14,7 @@ import { currentRelease, type ReleaseNotes } from '../lib/releaseNotes'
 import LiquidSwitch from '../components/ui/LiquidSwitch'
 import LiquidGlassSwitcher from '../components/ui/LiquidGlassSwitcher'
 import { liquidGlassItemProps } from '../components/ui/liquidGlassSwitcherItem'
-import { ROUTE_REGISTRY, getGroupedSettingsRoutes, type RoutePlacement } from '../lib/routeRegistry'
+import { ROUTE_REGISTRY, SETTINGS_GROUPS } from '../lib/routeRegistry'
 import { useWorkspaceLayoutContext } from '../lib/workspaceLayoutContext'
 
 // WebAuthn Helper to encode hardware keys
@@ -28,6 +28,15 @@ export default function Settings() {
   const { themeMode, setTheme } = useTheme()
   const { flags: featureFlags } = useOptionalFeatures()
   const workspace = useWorkspaceLayoutContext()
+  const [navbarModalOpen, setNavbarModalOpen] = useState(false)
+  const [navbarEditorViewport, setNavbarEditorViewport] = useState<'mobile' | 'desktop'>(workspace.isMobile ? 'mobile' : 'desktop')
+  useModalBack(navbarModalOpen, () => setNavbarModalOpen(false))
+  useEffect(() => {
+    if (!navbarModalOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setNavbarModalOpen(false) }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [navbarModalOpen])
   const [checkingAppUpdate, setCheckingAppUpdate] = useState(false)
   const [appUpdateStatus, setAppUpdateStatus] = useState('')
   const [lastAppUpdateCheck, setLastAppUpdateCheck] = useState('')
@@ -552,7 +561,29 @@ export default function Settings() {
   const showIntegration = 'ai key openai gemini claude chatgpt integration telegram bot'.includes(query) || query === ''
   const showSecurity = 'security lock auto password biometric danger delete pin time faceid touchid'.includes(query) || query === ''
   const showModules = 'optional features modules budgets envelopes planning calculators guided help tips savings goals shopping lists account health minimum balance due date credit financial wellness score'.includes(query) || query === ''
-  const settingsSections = getGroupedSettingsRoutes(workspace.placements, featureFlags, workspace.isMobile)
+  const settingsSections = workspace.settingsSections
+  const editorKey = navbarEditorViewport === 'mobile' ? 'mobileSelectedUrls' : 'desktopSelectedUrls'
+  const editorLimit = navbarEditorViewport === 'mobile' ? 2 : workspace.isMobile ? 10 : Math.min(10, workspace.desktopCapacity)
+  const editorSelected = workspace.navbarLayout[editorKey]
+  const availableNavbarRoutes = ROUTE_REGISTRY.filter(route => route.path !== '/' && route.path !== '/settings' && (!route.optionalFeature || Boolean(featureFlags[route.optionalFeature])))
+  const toggleNavbarRoute = (path: string, selected: boolean) => {
+    workspace.setNavbarLayout(current => {
+      const selectedUrls = current[editorKey]
+      if (selected && selectedUrls.length >= editorLimit) return current
+      const next = selected ? [...selectedUrls, path] : selectedUrls.filter(item => item !== path)
+      return { ...current, [editorKey]: next }
+    })
+  }
+  const moveNavbarRoute = (path: string, offset: -1 | 1) => {
+    workspace.setNavbarLayout(current => {
+      const selectedUrls = [...current[editorKey]]
+      const index = selectedUrls.indexOf(path)
+      const nextIndex = index + offset
+      if (index < 0 || nextIndex < 0 || nextIndex >= selectedUrls.length) return current
+      ;[selectedUrls[index], selectedUrls[nextIndex]] = [selectedUrls[nextIndex], selectedUrls[index]]
+      return { ...current, [editorKey]: selectedUrls }
+    })
+  }
 
   if (isLoading) {
     return (
@@ -589,27 +620,45 @@ export default function Settings() {
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
               {section.routes.map(route => <div key={route.path} className="flex min-w-0 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-card)] p-3">
                 <Link to={route.path} className="flex min-w-0 flex-1 items-center gap-2.5 text-sm font-semibold text-[var(--ink)] hover:text-[var(--brand-primary-active)]"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><route.icon className="h-4 w-4" /></span><span className="truncate">{route.title}</span></Link>
-                <button type="button" aria-label={`Move ${route.title} to navbar`} title="Move to navbar" onClick={() => workspace.setPlacement(route.path, 'navbar')} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--brand-primary-active)]"><ArrowLeftRight className="h-4 w-4" /></button>
               </div>)}
             </div>
           </section>)}
         </div> : <p className="mt-5 rounded-2xl border border-dashed border-[var(--line)] px-4 py-5 text-sm text-[var(--muted)]">All available pages are currently on your navbar. Use the layout controls below to move a page back here.</p>}
       </section>
 
-      <section className="surface-panel mb-6 rounded-3xl p-5 md:p-7" aria-labelledby="layout-controller-title">
-        <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><ArrowLeftRight className="h-5 w-5" /></span><div><h2 id="layout-controller-title" className="text-lg font-bold">Navbar layout</h2><p className="mt-1 text-sm text-[var(--muted)]">Changes are saved to this signed-in workspace and update navigation immediately.</p></div></div>
-        <div className="mt-5 space-y-2">
-          {ROUTE_REGISTRY.filter(route => route.path !== '/' && route.path !== '/settings' && (!route.optionalFeature || Boolean(featureFlags[route.optionalFeature]))).map(route => {
-            const current = workspace.getPlacement(route.path)
-            return <div key={route.path} className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-soft)] p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--surface-card)] text-[var(--brand-primary-active)]"><route.icon className="h-4 w-4" /></span><div className="min-w-0"><p className="truncate text-sm font-semibold">{route.title}</p><p className="truncate text-xs text-[var(--muted)]">{route.settingsGroup}{route.optionalFeature ? ' · Optional module' : ''}</p></div></div>
-              <div className="flex shrink-0 rounded-full border border-[var(--line)] bg-[var(--surface-card)] p-1" role="group" aria-label={`${route.title} placement`}>
-                {(['navbar', 'settings'] as const).map(placement => <button key={placement} type="button" aria-pressed={current === placement} onClick={() => workspace.setPlacement(route.path, placement as RoutePlacement)} className={`min-h-8 rounded-full px-3 text-xs font-semibold transition-colors ${current === placement ? 'bg-[var(--brand-primary)] text-white shadow-sm' : 'text-[var(--muted)] hover:text-[var(--ink)]'}`}>{placement === 'navbar' ? 'In Navbar' : 'Inside Settings'}</button>)}
-              </div>
-            </div>
-          })}
-        </div>
-      </section>
+      <button type="button" onClick={() => setNavbarModalOpen(true)} className="surface-panel mb-6 flex w-full items-center gap-4 rounded-2xl p-4 text-left transition-colors hover:bg-[var(--surface-strong)] sm:p-5" aria-haspopup="dialog">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><ArrowLeftRight className="h-5 w-5" /></span>
+        <span className="min-w-0 flex-1"><span className="block font-semibold">Customize Navbar Layout</span><span className="mt-1 block text-sm text-[var(--muted)]">{workspace.navbarLayout.mobileSelectedUrls.length}/2 mobile slots · {workspace.navbarLayout.desktopSelectedUrls.length}/10 desktop slots</span></span>
+        <ArrowRight className="h-4 w-4 shrink-0 text-[var(--muted)]" />
+      </button>
+
+      {navbarModalOpen && <div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-3 backdrop-blur-sm sm:p-6" onMouseDown={event => { if (event.target === event.currentTarget) setNavbarModalOpen(false) }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="navbar-customization-title" className="surface-panel max-h-[min(90dvh,860px)] w-full max-w-2xl overflow-hidden rounded-3xl border border-[var(--line)] shadow-2xl">
+          <header className="flex items-start gap-3 border-b border-[var(--line)] p-5 sm:p-6"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><LayoutGrid className="h-5 w-5" /></span><div className="min-w-0 flex-1"><h2 id="navbar-customization-title" className="text-lg font-bold">Customize Navbar Layout</h2><p className="mt-1 text-sm text-[var(--muted)]">Choose pages and set their order. Dashboard, Add, and Settings stay fixed.</p></div><button type="button" aria-label="Close navbar customization" onClick={() => setNavbarModalOpen(false)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[var(--muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--ink)]"><X className="h-4 w-4" /></button></header>
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-5 py-3 sm:px-6"><LiquidGlassSwitcher activeKey={navbarEditorViewport} label="Navbar viewport layout" role="tablist" className="navbar-viewport-switcher inline-flex items-center">
+            {(['mobile', 'desktop'] as const).map(viewport => <button key={viewport} id={`navbar-${viewport}-tab`} type="button" role="tab" aria-selected={navbarEditorViewport === viewport} aria-controls="navbar-editor-panel" onClick={() => setNavbarEditorViewport(viewport)} {...liquidGlassItemProps(viewport, navbarEditorViewport === viewport, 'min-h-9 gap-1.5 px-3 text-xs font-semibold')}>
+              {viewport === 'mobile' ? <Smartphone className="h-3.5 w-3.5" /> : <Laptop className="h-3.5 w-3.5" />}{viewport === 'mobile' ? 'Mobile' : 'Desktop'}<span className="ml-1 rounded-full bg-[var(--surface-strong)] px-1.5 py-0.5 text-[10px] tabular-nums">{workspace.navbarLayout[viewport === 'mobile' ? 'mobileSelectedUrls' : 'desktopSelectedUrls'].length} / {viewport === 'mobile' ? 2 : workspace.desktopCapacity}</span>
+            </button>)}
+          </LiquidGlassSwitcher><span className="text-right text-xs text-[var(--muted)]">{workspace.isMobile ? 'Current viewport · Mobile' : 'Current viewport · Desktop'}<br /><strong className="text-[var(--ink)]">{editorSelected.length}/{editorLimit} selected</strong></span></div>
+          <div id="navbar-editor-panel" role="tabpanel" aria-labelledby={`navbar-${navbarEditorViewport}-tab`} className="max-h-[calc(min(90dvh,860px)-178px)] overflow-y-auto p-5 sm:p-6">
+            <div className="mb-4 rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">{navbarEditorViewport === 'mobile' ? 'Fixed order: Dashboard · page · Add · page · Settings. Select up to 2 pages.' : `Dashboard and Settings are fixed at the ends. Up to ${workspace.desktopCapacity} custom pages fit at this viewport; saved trailing pages return when more space is available.`}</div>
+            <div className="space-y-5">{SETTINGS_GROUPS.map(group => {
+              const routes = availableNavbarRoutes.filter(route => route.settingsGroup === group)
+              if (!routes.length) return null
+              return <section key={group} aria-label={`${group} customization`}><h3 className="mb-2 text-[11px] font-bold uppercase tracking-[.12em] text-[var(--muted)]">{group}</h3><div className="space-y-2">{routes.map(route => {
+                const index = editorSelected.indexOf(route.path)
+                const selected = index >= 0
+                const locked = !selected && editorSelected.length >= editorLimit
+                return <div key={route.path} className={`flex min-w-0 items-center gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-card)] p-3 ${locked ? 'opacity-55' : ''}`}>
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><route.icon className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{route.title}{route.optionalFeature ? ' · Optional' : ''}</p><p className="truncate text-xs text-[var(--muted)]">{selected ? `Navbar position ${index + 1}` : route.settingsGroup}</p></div>
+                  {selected && <div className="flex shrink-0 items-center"><button type="button" aria-label={`Move ${route.title} up`} disabled={index === 0} onClick={() => moveNavbarRoute(route.path, -1)} className="grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--surface-strong)] disabled:opacity-30"><ArrowUp className="h-4 w-4" /></button><button type="button" aria-label={`Move ${route.title} down`} disabled={index === editorSelected.length - 1} onClick={() => moveNavbarRoute(route.path, 1)} className="grid h-8 w-8 place-items-center rounded-lg text-[var(--muted)] hover:bg-[var(--surface-strong)] disabled:opacity-30"><ArrowDown className="h-4 w-4" /></button></div>}
+                  <LiquidSwitch label={`Show ${route.title} in ${navbarEditorViewport} navbar`} checked={selected} disabled={locked} onCheckedChange={checked => toggleNavbarRoute(route.path, checked)} />
+                </div>
+              })}</div></section>
+            })}</div>
+          </div>
+        </section>
+      </div>}
 
       {isProfileModified && (
         <div className="sticky top-4 z-50 mb-8 p-4 bg-indigo-500/10 border border-indigo-500/30 backdrop-blur-xl rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl animate-in slide-in-from-top-4">

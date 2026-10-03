@@ -1,4 +1,5 @@
 import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Plus, CreditCard, Users, Settings, CloudUpload } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -59,9 +60,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const activeRoute = findRoute(location.pathname) || findRoute('/')!
   const { navbarRoutes, setPlacement, getPlacement } = workspace
   const activeNavigationKey = navbarRoutes.some(route => route.path === location.pathname) ? location.pathname : 'settings'
-  const mobileSplitIndex = Math.ceil(navbarRoutes.length / 2)
-  const mobileLeftRoutes = navbarRoutes.slice(0, mobileSplitIndex)
-  const mobileRightRoutes = navbarRoutes.slice(mobileSplitIndex)
+  const mobileDashboard = navbarRoutes[0]!
+  const mobileCustomRoutes = workspace.visibleNavbarUrls.map(path => findRoute(path)).filter((route): route is NonNullable<typeof route> => Boolean(route))
+  const MobileDashboardIcon = mobileDashboard.icon
+  const MobileFirstIcon = mobileCustomRoutes[0]?.icon
+  const MobileSecondIcon = mobileCustomRoutes[1]?.icon
   const activeTitle = activeRoute.title
   const closeAbout = useCallback(() => setIsAboutOpen(false), [])
   const openTransaction = () => { setIsTxModalOpen(true); setIsFabOpen(false) }
@@ -164,18 +167,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#f8f9fa]"><img src="/rr-favicon.svg" alt="" className="h-7 w-7" /></span>
           <div className="hidden min-w-0 lg:block"><p className="font-semibold tracking-tight text-[var(--ink)]">RR Capital</p><p className="text-[10px] text-[var(--muted)]">Personal finance</p></div>
         </button>
-        <LiquidGlassSwitcher activeKey={activeNavigationKey} label="Primary navigation" className="app-desktop-nav-switcher mx-auto flex min-w-0 flex-1 justify-center">
+        <LiquidGlassSwitcher activeKey={activeNavigationKey} label="Primary navigation" className="app-desktop-nav-switcher mx-auto inline-flex w-fit shrink-0 items-center justify-center transition-all duration-300">
           {navbarRoutes.map(route => <Link key={route.path} to={route.path} onPointerEnter={() => prefetchRoute(route.path)} onFocus={() => prefetchRoute(route.path)} aria-label={route.title} title={route.title} aria-current={location.pathname === route.path ? 'page' : undefined} {...liquidGlassItemProps(route.path, location.pathname === route.path, 'gap-1.5 px-2 lg:gap-2 lg:px-3')}><route.icon className="h-4 w-4" /><span className="hidden font-medium text-[13px] lg:inline">{route.title}</span>{route.path === '/offline' && pendingCount > 0 && <span className="rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-slate-950">{pendingCount > 99 ? '99+' : pendingCount}</span>}</Link>)}
           <Link to="/settings" aria-current={location.pathname === '/settings' ? 'page' : undefined} {...liquidGlassItemProps('settings', activeNavigationKey === 'settings', 'gap-1.5 px-2 lg:gap-2 lg:px-3')}><Settings className="h-4 w-4" /><span className="hidden font-medium text-[13px] lg:inline">Settings</span></Link>
         </LiquidGlassSwitcher>
-        <div ref={desktopAddRef} className="relative hidden shrink-0 flex-col items-end gap-3 md:flex">
-          <div aria-hidden={!isFabOpen} className={`absolute right-0 top-[calc(100%+0.65rem)] flex flex-col items-end gap-2 transition-all duration-200 ${isFabOpen ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-2 opacity-0 pointer-events-none'}`}>
-            <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={openTransaction} className="flex min-h-12 items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--app-panel-strong)] px-4 text-sm font-medium text-[var(--ink)] shadow-xl"><span>Transaction</span><span className="rounded-full bg-[var(--brand-primary)] p-2 text-white"><CreditCard className="h-4 w-4" /></span></button>
-            <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={openDebt} className="flex min-h-12 items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--app-panel-strong)] px-4 text-sm font-medium text-[var(--ink)] shadow-xl"><span>Debt / IOU</span><span className="rounded-full bg-emerald-600 p-2 text-white"><Users className="h-4 w-4" /></span></button>
-          </div>
-          <button type="button" aria-label={isFabOpen ? 'Close add menu' : 'Open add menu'} aria-expanded={isFabOpen} onClick={() => setIsFabOpen(value => !value)} className={`app-desktop-fab app-glass-fab grid h-11 w-11 place-items-center rounded-full transition duration-200 hover:-translate-y-0.5 active:scale-95 ${isFabOpen ? 'rotate-45' : ''}`}><Plus className="relative z-[1] h-5 w-5" /></button>
-        </div>
       </nav>
+
+      {createPortal(<div ref={desktopAddRef} className="app-desktop-add">
+        <div aria-hidden={!isFabOpen} className={`absolute bottom-[calc(100%+0.65rem)] right-0 flex flex-col items-end gap-2 transition-all duration-200 ${isFabOpen ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-2 opacity-0 pointer-events-none'}`}>
+          <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={openTransaction} className="flex min-h-12 items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--app-panel-strong)] px-4 text-sm font-medium text-[var(--ink)] shadow-xl"><span>Transaction</span><span className="rounded-full bg-[var(--brand-primary)] p-2 text-white"><CreditCard className="h-4 w-4" /></span></button>
+          <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={openDebt} className="flex min-h-12 items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--app-panel-strong)] px-4 text-sm font-medium text-[var(--ink)] shadow-xl"><span>Debt / IOU</span><span className="rounded-full bg-emerald-600 p-2 text-white"><Users className="h-4 w-4" /></span></button>
+        </div>
+        <button type="button" aria-label={isFabOpen ? 'Close add menu' : 'Open add menu'} aria-expanded={isFabOpen} onClick={() => setIsFabOpen(value => !value)} className={`app-desktop-fab app-glass-fab grid h-11 w-11 place-items-center rounded-full transition duration-200 hover:-translate-y-0.5 active:scale-95 ${isFabOpen ? 'rotate-45' : ''}`}><Plus className="relative z-[1] h-5 w-5" /></button>
+      </div>, document.body)}
 
       <div className="app-mobile-context sticky inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b px-4 md:hidden">
         <button type="button" onClick={() => setIsAboutOpen(true)} className="flex min-w-0 items-center gap-2 text-left" aria-label="About RR Capital and its creator"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#f8f9fa]"><img src="/rr-favicon.svg" alt="" className="h-6 w-6" /></span><span className="truncate text-sm font-semibold">RR Capital</span></button>
@@ -189,9 +193,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <SettingsPageShell route={activeRoute} placement={getPlacement(location.pathname)} onPlacementChange={next => setPlacement(location.pathname, next)}>{children}</SettingsPageShell>
       </main>
       <LiquidGlassSwitcher as="nav" activeKey={activeNavigationKey} label="Mobile navigation" className="app-mobile-nav md:hidden">
-        <div className="app-mobile-nav__group app-mobile-nav__group--left">{mobileLeftRoutes.map(route => <Link key={route.path} to={route.path} onClick={() => setIsFabOpen(false)} onPointerEnter={() => prefetchRoute(route.path)} onFocus={() => prefetchRoute(route.path)} aria-current={location.pathname === route.path ? 'page' : undefined} {...liquidGlassItemProps(route.path, location.pathname === route.path)}><route.icon className="h-5 w-5" /><span>{route.title}</span></Link>)}</div>
+        <div className="app-mobile-nav__group app-mobile-nav__group--left"><Link to="/" onClick={() => setIsFabOpen(false)} aria-current={location.pathname === '/' ? 'page' : undefined} {...liquidGlassItemProps('/', location.pathname === '/')}><MobileDashboardIcon className="h-5 w-5" /><span>Dashboard</span></Link>{mobileCustomRoutes[0] && MobileFirstIcon && <Link to={mobileCustomRoutes[0].path} onClick={() => setIsFabOpen(false)} onPointerEnter={() => prefetchRoute(mobileCustomRoutes[0].path)} onFocus={() => prefetchRoute(mobileCustomRoutes[0].path)} aria-current={location.pathname === mobileCustomRoutes[0].path ? 'page' : undefined} {...liquidGlassItemProps(mobileCustomRoutes[0].path, location.pathname === mobileCustomRoutes[0].path)}><MobileFirstIcon className="h-5 w-5" /><span>{mobileCustomRoutes[0].title}</span></Link>}</div>
         <button ref={mobileFabRef} type="button" aria-label={isFabOpen ? 'Close add menu' : 'Add transaction or debt'} aria-expanded={isFabOpen} onClick={() => setIsFabOpen(value => !value)} className={`app-mobile-fab app-glass-fab relative z-10 grid h-12 w-12 place-items-center justify-self-center rounded-full border text-white shadow-[0_8px_24px_rgba(0,0,0,0.24)] transition-all duration-200 active:scale-95 ${isFabOpen ? 'rotate-45' : ''}`}><Plus className="relative z-[1] h-6 w-6" /></button>
-        <div className="app-mobile-nav__group app-mobile-nav__group--right">{mobileRightRoutes.map(route => <Link key={route.path} to={route.path} onClick={() => setIsFabOpen(false)} onPointerEnter={() => prefetchRoute(route.path)} onFocus={() => prefetchRoute(route.path)} aria-current={location.pathname === route.path ? 'page' : undefined} {...liquidGlassItemProps(route.path, location.pathname === route.path)}><route.icon className="h-5 w-5" /><span>{route.title}</span></Link>)}<Link to="/settings" onClick={() => setIsFabOpen(false)} aria-current={location.pathname === '/settings' ? 'page' : undefined} {...liquidGlassItemProps('settings', activeNavigationKey === 'settings')}><Settings className="h-5 w-5" /><span>Settings</span></Link></div>
+        <div className="app-mobile-nav__group app-mobile-nav__group--right">{mobileCustomRoutes[1] && MobileSecondIcon && <Link to={mobileCustomRoutes[1].path} onClick={() => setIsFabOpen(false)} onPointerEnter={() => prefetchRoute(mobileCustomRoutes[1].path)} onFocus={() => prefetchRoute(mobileCustomRoutes[1].path)} aria-current={location.pathname === mobileCustomRoutes[1].path ? 'page' : undefined} {...liquidGlassItemProps(mobileCustomRoutes[1].path, location.pathname === mobileCustomRoutes[1].path)}><MobileSecondIcon className="h-5 w-5" /><span>{mobileCustomRoutes[1].title}</span></Link>}<Link to="/settings" onClick={() => setIsFabOpen(false)} aria-current={location.pathname === '/settings' ? 'page' : undefined} {...liquidGlassItemProps('settings', activeNavigationKey === 'settings')}><Settings className="h-5 w-5" /><span>Settings</span></Link></div>
       </LiquidGlassSwitcher>
 
       <div ref={mobileAddActionsRef} role="group" aria-label="Quick add actions" aria-hidden={!isFabOpen} className={`md:hidden fixed bottom-[calc(100px+env(safe-area-inset-bottom))] left-1/2 z-40 flex -translate-x-1/2 flex-col items-center gap-3 transition-all duration-200 ${isFabOpen ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-2 opacity-0 pointer-events-none'}`}>

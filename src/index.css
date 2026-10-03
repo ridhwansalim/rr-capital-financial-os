@@ -665,8 +665,11 @@ html[data-theme="dark"] .liquid-switcher,
   backdrop-filter: blur(8px) saturate(150%);
 }
 @media (min-width: 768px) { .app-mobile-nav.liquid-switcher { display: none; } }
-.app-desktop-nav-switcher { max-width: 620px; }
+.app-desktop-nav-switcher { width: fit-content; max-width: calc(100vw - 300px); flex: 0 1 auto; transition: width 300ms ease, max-width 300ms ease; }
 .liquid-theme-switcher { width: fit-content; }
+.navbar-viewport-switcher.liquid-switcher { width: fit-content; min-width: 0; max-width: 100%; gap: 2px; padding: 4px 8px 6px; background-color: color-mix(in srgb, var(--c-glass) 12%, transparent); }
+.navbar-viewport-switcher .liquid-switcher__item { min-width: 112px; padding-inline: 12px; }
+.navbar-viewport-switcher .liquid-switcher__item span { color: inherit; }
 .app-mobile-nav .liquid-switcher__item { min-width: 0; width: 100%; min-height: 58px; flex-direction: column; gap: 4px; padding: 5px 1px; font-size: 10px; }
 .app-mobile-nav__group { display: flex; min-width: 0; align-items: center; overflow-x: auto; scrollbar-width: none; }
 .app-mobile-nav__group::-webkit-scrollbar { display: none; }
@@ -682,6 +685,7 @@ html[data-theme="dark"] .liquid-switcher,
 @media (max-width: 420px) {
   .liquid-switcher { gap: 0; padding-inline: 5px; }
   .liquid-switcher__item { padding-inline: 8px; font-size: 10px; }
+  .navbar-viewport-switcher .liquid-switcher__item { min-width: 104px; padding-inline: 9px; }
 }
 html[data-theme="dark"] .ed-panel { background: #201f1c; border-color: rgb(255 255 255 / .1); }
 html[data-theme="dark"] .ed-commitments { background: #211f1b; }
@@ -789,6 +793,18 @@ html[data-theme="dark"] .liquid-toggle { --glass-reflex-dark: 2; --glass-reflex-
   background: color-mix(in srgb, var(--brand-primary-active) 8%, transparent);
   color: var(--brand-primary-active);
   box-shadow: inset 1px 1px 0 rgb(255 255 255 / .52), inset -1px -1px 0 color-mix(in srgb, var(--brand-primary) 12%, transparent), 0 10px 26px color-mix(in srgb, var(--brand-primary) 12%, transparent), 0 2px 7px rgb(0 0 0 / .10);
+}
+.app-desktop-add {
+  position: fixed;
+  inset: auto 24px calc(24px + env(safe-area-inset-bottom, 0px)) auto;
+  z-index: 60;
+  display: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+@media (min-width: 768px) {
+  .app-desktop-add { display: flex; }
 }
 .app-desktop-fab:hover { filter: brightness(1.06); }
 .app-desktop-fab:focus-visible { outline: 3px solid color-mix(in srgb, var(--brand-primary) 45%, transparent); outline-offset: 4px; }

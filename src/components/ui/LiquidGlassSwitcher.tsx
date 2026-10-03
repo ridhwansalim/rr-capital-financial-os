@@ -6,6 +6,7 @@ type LiquidGlassSwitcherProps = {
   className?: string
   children: ReactNode
   as?: 'div' | 'nav'
+  role?: string
 }
 
 function positionCap(container: HTMLElement, target: HTMLElement) {
@@ -31,7 +32,7 @@ function positionCap(container: HTMLElement, target: HTMLElement) {
 }
 
 /** Sliding liquid-glass cap for existing navigation and selection controls. */
-export default function LiquidGlassSwitcher({ activeKey, label, className = '', children, as = 'div' }: LiquidGlassSwitcherProps) {
+export default function LiquidGlassSwitcher({ activeKey, label, className = '', children, as = 'div', role }: LiquidGlassSwitcherProps) {
   const containerRef = useRef<HTMLElement>(null)
   const activeKeyRef = useRef(activeKey)
   const previousIndexRef = useRef(-1)
@@ -108,5 +109,5 @@ export default function LiquidGlassSwitcher({ activeKey, label, className = '', 
 
   const sharedProps = { className: `liquid-switcher ${className}`, 'aria-label': label }
   if (as === 'nav') return <nav ref={node => { containerRef.current = node }} {...sharedProps}>{children}</nav>
-  return <div ref={node => { containerRef.current = node }} {...sharedProps} role="group">{children}</div>
+  return <div ref={node => { containerRef.current = node }} {...sharedProps} role={role ?? 'group'}>{children}</div>
 }

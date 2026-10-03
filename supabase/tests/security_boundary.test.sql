@@ -13,6 +13,16 @@ DO $$ DECLARE n integer; BEGIN
  UPDATE public.profiles SET full_name='Must not change' WHERE id='00000000-0000-4000-a000-000000000002';
  GET DIAGNOSTICS n=ROW_COUNT;
  IF n <> 0 THEN RAISE EXCEPTION 'Cross-user profile update allowed'; END IF;
+ UPDATE public.profiles SET navbar_layout='{"mobileSelectedUrls":["/ledger"],"desktopSelectedUrls":["/ledger","/calendar"]}'::jsonb
+  WHERE id='00000000-0000-4000-a000-000000000001';
+ GET DIAGNOSTICS n=ROW_COUNT;
+ IF n <> 1 THEN RAISE EXCEPTION 'Owner navbar preference update denied'; END IF;
+ BEGIN
+  UPDATE public.profiles SET navbar_layout='{"mobileSelectedUrls":["/ledger","/calendar","/chittis"],"desktopSelectedUrls":[]}'::jsonb
+   WHERE id='00000000-0000-4000-a000-000000000001';
+  RAISE EXCEPTION 'Oversized mobile navbar preference accepted';
+ EXCEPTION WHEN check_violation THEN NULL;
+ END;
 END $$;
 RESET ROLE;
 SET LOCAL ROLE anon;
@@ -30,7 +40,7 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 ROLLBACK;
-SELECT 'PASS: owner-only profiles, cross-user update denied, anonymous reads denied; fixtures rolled back' as result,
+SELECT 'PASS: owner-only profiles, scoped navbar preference update, cross-user update denied, anonymous reads denied; fixtures rolled back' as result,
  (select count(*) from auth.users) as remaining_users;
 SELECT plan(1);
 SELECT pass('owner-boundary SQL assertions completed without exception');

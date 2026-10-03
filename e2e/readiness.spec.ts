@@ -89,6 +89,7 @@ const syntheticProfile = {
   telegram_chat_id: null,
   is_biometric_enabled: false,
   registered_devices: [],
+  navbar_layout: { mobileSelectedUrls: ['/ledger', '/chittis'], desktopSelectedUrls: ['/ledger', '/calendar', '/chittis'] },
 }
 
 function contrastRatio(foreground: string, background: string) {
@@ -132,6 +133,7 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
 async function installSyntheticBackend(page: Page, themeMode: 'light' | 'dark' = 'dark'): Promise<MockEvidence> {
   const evidence: MockEvidence = { unexpectedOrigins: [], blockedBrowserExtensionOrigins: [], tableMutations: [], unexpectedRpcs: [] }
   let featureFlags = [...enabledFeatures]
+  let navbarLayout = structuredClone(syntheticProfile.navbar_layout)
 
   await page.addInitScript(({ storageKey, session }) => {
     localStorage.setItem(storageKey, JSON.stringify(session))
@@ -189,7 +191,14 @@ async function installSyntheticBackend(page: Page, themeMode: 'light' | 'dark' =
     }
 
     if (path === '/rest/v1/profiles' && method === 'GET') {
-      await fulfillJson(route, { ...syntheticProfile, theme_mode: themeMode })
+      await fulfillJson(route, { ...syntheticProfile, navbar_layout: navbarLayout, theme_mode: themeMode })
+      return
+    }
+
+    if (path === '/rest/v1/profiles' && method === 'PATCH') {
+      const body = request.postDataJSON() as { navbar_layout?: typeof navbarLayout }
+      if (body.navbar_layout) navbarLayout = body.navbar_layout
+      await fulfillJson(route, { ...syntheticProfile, navbar_layout: navbarLayout, theme_mode: themeMode })
       return
     }
 
@@ -316,15 +325,49 @@ test('desktop navigation uses the Settings module hub and logo opens the creator
   await expect(page).toHaveURL(/\/settings$/)
   await expect(page.getByRole('heading', { name: 'Workspace & modules' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Analytics, Planning & Wellness' }).getByRole('link', { name: 'Reports' })).toBeVisible()
-  await page.getByRole('group', { name: 'Accounts placement' }).getByRole('button', { name: 'In Navbar' }).click()
-  await page.getByRole('group', { name: 'Ledger placement' }).getByRole('button', { name: 'Inside Settings' }).click()
+  await expect(page.getByRole('region', { name: 'Vaults, Directory & Sync' }).getByRole('link', { name: 'Accounts' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Customize Navbar Layout' })).toContainText('2/2 mobile slots')
+  await page.getByRole('button', { name: 'Customize Navbar Layout' }).click()
+  const layoutDialog = page.getByRole('dialog', { name: 'Customize Navbar Layout' })
+  await expect(layoutDialog).toBeVisible()
+  const viewportTabs = layoutDialog.getByRole('tablist', { name: 'Navbar viewport layout' })
+  await expect(viewportTabs).toContainText('2 / 2')
+  await expect(viewportTabs).toContainText(/3\s*\/\s*\d+/)
+  await expect(viewportTabs).toHaveClass(/is-ready/)
+  await expect.poll(() => viewportTabs.evaluate(element => Number.parseFloat(getComputedStyle(element).getPropertyValue('--cap-w')))).toBeGreaterThan(0)
+  await viewportTabs.getByRole('tab', { name: /Desktop/ }).click()
+  await expect(viewportTabs.getByRole('tab', { name: /Desktop/ })).toHaveAttribute('aria-selected', 'true')
+  await expect.poll(() => viewportTabs.evaluate(element => Number.parseFloat(getComputedStyle(element).getPropertyValue('--cap-w')))).toBeGreaterThan(0)
+  await viewportTabs.getByRole('tab', { name: /Mobile/ }).click()
+  await expect(viewportTabs.getByRole('tab', { name: /Mobile/ })).toHaveAttribute('aria-selected', 'true')
+  await viewportTabs.getByRole('tab', { name: /Desktop/ }).click()
+  await expect(viewportTabs.getByRole('tab', { name: /Desktop/ })).toHaveAttribute('aria-selected', 'true')
+  const desktopAddFab = page.locator('button.app-desktop-fab')
+  const desktopAddContainer = page.locator('.app-desktop-add')
+  await expect(desktopAddContainer).toHaveCSS('position', 'fixed')
+  expect(await desktopAddContainer.evaluate(element => element.parentElement === document.body)).toBe(true)
+  const fabBounds = await desktopAddFab.boundingBox()
+  const viewport = page.viewportSize()
+  expect(fabBounds).not.toBeNull()
+  expect(viewport).not.toBeNull()
+  expect(fabBounds!.y).toBeGreaterThan(viewport!.height - 100)
+  expect(fabBounds!.x + fabBounds!.width).toBeGreaterThan(viewport!.width - 100)
+  const accountsSwitch = layoutDialog.getByRole('switch', { name: 'Show Accounts in desktop navbar' })
+  await accountsSwitch.click()
+  await expect(accountsSwitch).toHaveAttribute('aria-checked', 'true')
+  for (let i = 0; i < 3; i += 1) await layoutDialog.getByRole('button', { name: 'Move Accounts up' }).click()
+  const ledgerSwitch = layoutDialog.getByRole('switch', { name: 'Show Ledger in desktop navbar' })
+  await ledgerSwitch.click()
+  await expect(ledgerSwitch).toHaveAttribute('aria-checked', 'false')
+  await layoutDialog.getByRole('button', { name: 'Close navbar customization' }).click()
   await expect.poll(() => page.evaluate(userId => {
     const layout = JSON.parse(localStorage.getItem(`rr-capital.workspace-layout.v1.${userId}`) || '{}')
-    return layout.placements
-  }, syntheticUserId)).toMatchObject({ '/accounts': 'navbar', '/ledger': 'settings' })
+    return layout.navbarLayout.desktopSelectedUrls
+  }, syntheticUserId)).toEqual(['/accounts', '/calendar', '/chittis'])
   await expect(primary.getByRole('link', { name: 'Accounts' })).toBeVisible()
   await expect(primary.getByRole('link', { name: 'Ledger' })).toHaveCount(0)
   await expect(page.getByRole('region', { name: 'Core Operations & Daily Flow' }).getByRole('link', { name: 'Ledger' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Vaults, Directory & Sync' }).getByRole('link', { name: 'Accounts' })).toHaveCount(0)
   await page.getByRole('region', { name: 'Analytics, Planning & Wellness' }).getByRole('link', { name: 'Reports' }).click()
   await expect(page.getByRole('navigation', { name: 'Workspace breadcrumb' })).toContainText('Analytics, Planning & Wellness')
   await expect(page.getByRole('button', { name: /Move to Navbar/ })).toBeVisible()
@@ -481,6 +524,32 @@ test('native range keeps keyboard support and glass styling', async ({ page }) =
   await expect(slider).toHaveValue('41')
 })
 
+test('desktop navbar truncates only the visible tail on compact screens', async ({ page }) => {
+  await installSyntheticBackend(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Customize Navbar Layout' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Customize Navbar Layout' })
+  const debtsSwitch = dialog.getByRole('switch', { name: 'Show Debts & IOUs in desktop navbar' })
+  await debtsSwitch.click()
+  await expect(debtsSwitch).toHaveAttribute('aria-checked', 'true')
+  const accountsSwitch = dialog.getByRole('switch', { name: 'Show Accounts in desktop navbar' })
+  await accountsSwitch.click()
+  await expect(accountsSwitch).toHaveAttribute('aria-checked', 'true')
+  await dialog.getByRole('button', { name: 'Close navbar customization' }).click()
+
+  const primary = page.getByRole('navigation', { name: 'Primary navigation' })
+  await expect(primary.getByRole('link', { name: 'Accounts' })).toBeVisible()
+  await page.setViewportSize({ width: 900, height: 900 })
+  await expect(primary.getByRole('link', { name: 'Debts & IOUs' })).toBeVisible()
+  await expect(primary.getByRole('link', { name: 'Accounts' })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Vaults, Directory & Sync' }).getByRole('link', { name: 'Accounts' })).toBeVisible()
+
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await expect(primary.getByRole('link', { name: 'Accounts' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Vaults, Directory & Sync' }).getByRole('link', { name: 'Accounts' })).toHaveCount(0)
+})
+
 test('mobile navigation keeps a floating Settings hub and grouped module launcher', async ({ page }) => {
   await installSyntheticBackend(page, 'light')
   await page.setViewportSize({ width: 390, height: 844 })
@@ -589,6 +658,20 @@ test('mobile navigation keeps a floating Settings hub and grouped module launche
   await mobile.getByRole('link', { name: 'Settings' }).click()
   await expect(page).toHaveURL(/\/settings$/)
   await expect(page.getByRole('heading', { name: 'Workspace & modules' })).toBeVisible()
+  await page.getByRole('button', { name: 'Customize Navbar Layout' }).click()
+  const mobileLayoutDialog = page.getByRole('dialog', { name: 'Customize Navbar Layout' })
+  await expect(mobileLayoutDialog.getByText('Current viewport · Mobile')).toBeVisible()
+  await expect(mobileLayoutDialog.getByRole('switch', { name: 'Show Accounts in mobile navbar' })).toBeDisabled()
+  await mobileLayoutDialog.getByRole('button', { name: 'Move Chittis up' }).click()
+  await mobileLayoutDialog.getByRole('button', { name: 'Close navbar customization' }).click()
+  await expect.poll(() => page.evaluate(userId => {
+    const layout = JSON.parse(localStorage.getItem(`rr-capital.workspace-layout.v1.${userId}`) || '{}')
+    return layout.navbarLayout
+  }, syntheticUserId)).toEqual({ mobileSelectedUrls: ['/chittis', '/ledger'], desktopSelectedUrls: ['/ledger', '/calendar', '/chittis'] })
+  await expect(mobile.getByRole('link', { name: 'Dashboard' })).toBeVisible()
+  await expect(mobile.getByRole('link', { name: 'Chittis' })).toBeVisible()
+  await expect(mobile.getByRole('link', { name: 'Ledger' })).toBeVisible()
+  await expect(mobile.getByRole('link', { name: 'Settings' })).toBeVisible()
   const analytics = page.getByRole('region', { name: 'Analytics, Planning & Wellness' })
   await expect(analytics.getByRole('link', { name: 'Reports' })).toBeVisible()
   await analytics.getByRole('link', { name: 'Reports' }).click()
@@ -616,7 +699,7 @@ test('settings presents release information and manual update check', async ({ p
   await page.goto('/settings?section=updates')
   await expect(page.getByRole('heading', { name: 'App updates' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Check for updates' })).toBeVisible()
-  await expect(page.getByText(/Latest release .*2026\.10\.03\.6/)).toBeVisible()
+  await expect(page.getByText(/Latest release .*2026\.10\.03\.7/)).toBeVisible()
   await expect(page.getByRole('button', { name: 'View detailed summary' })).toBeVisible()
 })
 

@@ -1,5 +1,11 @@
 # RR Capital Environment Baseline
 
+## Workspace preferences migration and readiness checks (2026-10-03)
+
+Applied `profile_navbar_layout_preferences` to the RR Capital project (`hnebvwfgsotrknxpgpmv`) through Supabase. Supabase recorded version `20261003182502`; the local migration file uses that exact version to prevent a later CLI push from treating the hosted change as an unmatched migration. Postflight verified the `navbar_layout` column and shape constraint, authenticated column-level UPDATE is allowed for `navbar_layout`, UPDATE remains denied for `telegram_chat_id` and the profile table as a whole, and the single retained owner profile plus six flags remain while accounts, transactions, obligations, and obligation payments remain empty.
+
+Current worktree verification passed: `npm test`, `npx tsc -b`, `npm run typecheck:e2e`, `npm audit --audit-level=high` (zero vulnerabilities), `npm run build`, and all 16 Playwright tests against the synthetic backend. The core-only isolated replay passed 55 migrations / 33 SQL files / 157 pgTAP assertions; staged-then-Perry passed 58 migrations / 34 SQL files / 184 assertions. Both replay runners dropped their uniquely named scratch databases. Fresh catalog inspection found no `SECURITY DEFINER` functions without a fixed `search_path`; all 12 advisor-flagged no-policy relations had RLS enabled and no direct `anon` or `authenticated` SELECT/INSERT privileges. The Vercel preview corresponding to the last pushed commit returned HTTP 200 with expected security headers, but does not include the current local, uncommitted worktree. The latest worktree changes are not yet pushed, previewed, or promoted.
+
 ## Current verified state (2026-10-03)
 
 This is the authoritative current snapshot. Later dated sections are historical implementation notes; when they disagree with this snapshot, use this section. RR Capital is the production target. Financial OS v2 is a separate legacy/test project and must not receive RR Capital migrations.
