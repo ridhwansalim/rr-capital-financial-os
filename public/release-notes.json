@@ -1,6 +1,6 @@
 {
   "version": "2026.10.03",
-  "releasedAt": "2026-10-03T06:36:00+05:30",
+  "releasedAt": "2026-10-03T06:08:15+05:30",
   "brief": "Clearer navigation, a creator profile from the RR Capital logo, and a Settings page for update details.",
   "details": [
     "Desktop navigation keeps Dashboard, Calendar, Ledger, Reports, and Accounts in the top bar, with the Add action beside them.",
