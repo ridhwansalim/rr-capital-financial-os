@@ -817,6 +817,8 @@ test('Settings still loads profile preferences while the Telegram status migrati
 
   await page.goto('/settings')
   await expect(page.getByRole('heading', { name: 'Profile & Identity' })).toBeVisible()
+  await expect(page.getByText('Telegram link status is unavailable until the security update is applied.')).toBeVisible()
+  await expect(page.getByText('Connect your private Telegram chat for alerts.')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Link Telegram' })).toBeVisible()
   expect(evidence.unexpectedRpcs).toEqual([])
   expect(evidence.unexpectedOrigins).toEqual([])
