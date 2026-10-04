@@ -2,6 +2,14 @@
 
 This checkpoint reflects fresh hosted reads and supersedes earlier dated observations below where they conflict.
 
+## Live readiness recheck - 2026-10-04 17:33 UTC
+
+Fresh production reads reconfirm the dedicated test owner has zero finance rows (accounts, contacts/categories, transactions, obligations/payments, settlements, recurring EMIs, Chittis, installment occurrences, budgets, templates, savings goals/contributions, shopping lists/items, Split Groups, and account-health settings). Its Auth identity/profile and six feature flags remain. The other owner still has one account, one Chitti, and ten installment occurrences.
+
+RR Capital's hosted migration ledger is current through Group Split metadata hardening (`20261004163119`). Security Advisor reports only `auth_leaked_password_protection`; the user chose to keep the project on Free and leave the warning open. Performance Advisor reports four unused indexes on recent Group Split tables/relations. No indexes were removed: current counters are not evidence of a steady-state workload, and those indexes support foreign-key lookups. The fresh API catalog audit found no API table without RLS, no RLS table without policies, no exposed view missing `security_invoker`, no exposed SECURITY DEFINER RPC, no public function missing/using an unexpected search path, and no anon-executable business RPC. The authenticated Group Split RPC surface uses invoker-rights functions.
+
+The production Vercel deployment remains READY at `https://financial-os-orcin-ten.vercel.app`, sourced from app commit `fda4be2ec73a0af02e2f780976575de8f2d70954`. `npm audit --omit=dev --audit-level=moderate` found zero vulnerabilities; the complete `npm test` suite and `npx tsc -b --pretty false` passed. These checks did not modify the hosted project or deployment. The separate `0cedf0f` follow-up changes only fixture-cleanup safety tests and documentation, so it does not require a frontend redeploy.
+
 ## Owner-scoped sample cleanup hardening - 2026-10-04 17:25 UTC
 
 Hardened `supabase/fixtures/rr_capital_sample_cleanup.sql` after confirming the hosted project now has multiple Auth owners. Removed the project-global one-user assumption, scoped profile-directory checks to the dedicated fixture owner, and left feature preferences untouched without imposing a fixed feature-flag count. The guard now validates fixture transaction IDs, descriptions, account/contact/category links, and profile tags; blocks cleanup when fixture obligations have settlement/payment history, transactions have payment references, schedules reference fixture accounts/obligations, other obligations reference fixture contacts, split groups reference fixture contacts, or account-health settings are attached to fixture accounts. Installment postconditions are scoped to the fixture schedule IDs. Optional split-group schema is handled safely for protected older snapshots.
