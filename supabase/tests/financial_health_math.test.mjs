@@ -1,11 +1,19 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { isEligiblePersonalScoreTransaction, lastThreeCompleteMonths, scoreFinancialHealth } from '../../src/lib/financialHealth.ts'
+import { isEligiblePersonalScoreTransaction, lastThreeCompleteMonths, observedHistoryDays, scoreFinancialHealth } from '../../src/lib/financialHealth.ts'
 
 test('uses the last three complete months, including year boundaries', () => {
   assert.deepEqual(lastThreeCompleteMonths('2026-01-15'), {
     start: '2025-10-01', endExclusive: '2026-01-01', months: ['2025-10', '2025-11', '2025-12'],
   })
+})
+
+test('normalizes runway history to dates the owner could actually have tracked', () => {
+  assert.equal(observedHistoryDays('2026-01-01', '2026-04-01', ['2026-02-01']), 59)
+  assert.equal(observedHistoryDays('2026-01-01', '2026-04-01', ['2025-11-15']), 90)
+  assert.equal(observedHistoryDays('2026-01-01', '2026-04-01', ['2026-04-01']), 0)
+  assert.equal(observedHistoryDays('2026-01-01', '2026-04-01', []), 90)
+  assert.equal(observedHistoryDays('bad-date', '2026-04-01', []), 0)
 })
 
 test('matches approved factors and bands', () => {

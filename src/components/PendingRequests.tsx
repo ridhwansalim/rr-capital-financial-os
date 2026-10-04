@@ -4,7 +4,7 @@ import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { Check, X, Loader2, Wallet, AlertCircle, Trash2, CalendarDays, ArrowDownLeft } from 'lucide-react'
 import { formatIndiaDate, isAccountOpenForOccurrence } from '../lib/financeDate'
 
-export default function PendingRequests() {
+export default function PendingRequests({ compact = false, showEmpty = false }: { compact?: boolean; showEmpty?: boolean } = {}) {
   const [requests, setRequests] = useState<any[]>([])
   const [declinedAlerts, setDeclinedAlerts] = useState<any[]>([])
   const [accounts, setAccounts] = useState<any[]>([])
@@ -102,6 +102,7 @@ export default function PendingRequests() {
         const { error } = await supabase.rpc(rpcName, { [idParam]: id, p_reason: reason })
         if (error) throw error
       }
+      window.dispatchEvent(new Event('rr:financial-data-changed'))
       setRequests(requests.filter(req => !(req.id === id && req.req_category === category)))
     } catch (error) { alert(safeCaughtErrorMessage(error, 'Could not decline this request. Refresh the inbox and try again.')) } finally { setProcessingId(null) }
   }
@@ -129,6 +130,17 @@ export default function PendingRequests() {
       if (category === 'debt' || category === 'settlement') {
         const request = requests.find(item => item.id === id && item.req_category === category)
         if (!request) throw new Error('This request is no longer available. Refresh the inbox.')
+        if (category === 'debt' && request.is_split_share) {
+          const { error } = await supabase.rpc('accept_split_share', {
+            p_obligation_id: id,
+            p_receiver_user_id: user.id,
+          } as never)
+          if (error) throw error
+          setRequests(current => current.filter(item => !(item.id === id && item.req_category === category)))
+          setAcceptingId(null)
+          window.dispatchEvent(new Event('rr:financial-data-changed'))
+          return
+        }
         const eligibleAccounts = eligibleAccountsFor(request)
         if (!eligibleAccounts.some(account => account.id === selectedAccountId)) {
           throw new Error('Choose an account that was open on the transaction occurrence date.')
@@ -145,6 +157,7 @@ export default function PendingRequests() {
         if (error) throw error
       }
       
+      window.dispatchEvent(new Event('rr:financial-data-changed'))
       setRequests(requests.filter(req => !(req.id === id && req.req_category === category)))
       setAcceptingId(null)
       window.location.reload()
@@ -167,18 +180,21 @@ export default function PendingRequests() {
         const { error } = await supabase.rpc(rpcName, { [idParam]: id })
         if (error) throw error
       }
+      window.dispatchEvent(new Event('rr:financial-data-changed'))
       setDeclinedAlerts(declinedAlerts.filter(req => !(req.id === id && req.req_category === category)))
     } catch (error) { alert(safeCaughtErrorMessage(error, 'Could not dismiss this notice. Refresh the inbox and try again.')) } finally { setProcessingId(null) }
   }
 
-  if (isLoading || (requests.length === 0 && declinedAlerts.length === 0)) return null
+  if (isLoading || (requests.length === 0 && declinedAlerts.length === 0 && !showEmpty)) return null
 
   return (
-    <div className="mb-6 space-y-3 animate-in fade-in slide-in-from-top-4">
+    <div className={`${compact ? '' : 'mb-6 '}space-y-3 animate-in fade-in slide-in-from-top-4`}>
+      {showEmpty && requests.length === 0 && declinedAlerts.length === 0 && <p className="rounded-2xl border border-dashed border-[var(--line)] p-6 text-center text-sm text-[var(--muted)]">You’re all caught up. There are no pending approvals.</p>}
       {requests.length > 0 && <h3 className="text-sm font-bold text-amber-500 uppercase tracking-wider">Pending Approvals</h3>}
       {requests.map(req => {
         const isEmi = req.req_category === 'emi'
         const isSettlement = req.req_category === 'settlement'
+        const isSplitShare = req.req_category === 'debt' && req.is_split_share === true
         const isAccepting = acceptingId === req.id
         const eligibleAccounts = isEmi ? [] : eligibleAccountsFor(req)
         const occurrence = occurrenceForRequest(req)
@@ -197,7 +213,7 @@ export default function PendingRequests() {
                     <span className="font-bold text-white">{req.display_name}</span> 
                     {isEmi ? ' wants to set up a Proxy EMI for you.' 
                     : isSettlement ? ' sent a repayment to you.' 
-                    : ' wants to log a Transfer.'}
+                    : isSplitShare ? ' invited you to pay a Split Bill Share.' : ' wants to log a Transfer.'}
                   </p>
                   
                   {isEmi ? (
@@ -213,7 +229,9 @@ export default function PendingRequests() {
                     </div>
                   ) : (
                     <div className="mt-2 space-y-1">
-                      <p className="text-sm text-slate-300">Amount: <span className="font-black text-white ml-1">₹{req.amount}</span></p>
+                      {isSplitShare && <p className="text-xs font-bold uppercase tracking-wide text-emerald-300">Split Bill Share</p>}
+                      <p className="text-sm text-slate-300">{isSplitShare ? 'Your share:' : 'Amount:'} <span className="font-black text-white ml-1">₹{req.amount}</span></p>
+                      {isSplitShare && <p className="text-xs text-slate-400">Full bill: <span className="font-semibold text-slate-200">₹{Number(req.total_bill_amount || req.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></p>}
                       <p className="text-xs text-amber-400/70 font-medium">"{req.description}"</p>
                       <p className="text-xs text-slate-400">Occurred on: <span className="text-slate-200">{formatIndiaDate(req.created_at)}</span></p>
                     </div>
@@ -223,7 +241,7 @@ export default function PendingRequests() {
               
               {!isAccepting && (
                 <div className="flex gap-2">
-                  <button onClick={() => isEmi ? confirmAccept(req.id, 'emi') : startAccept(req)} className="flex-1 md:flex-none flex justify-center items-center px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-xl transition-colors shadow-lg shadow-emerald-500/20">
+                  <button onClick={() => isEmi ? confirmAccept(req.id, 'emi') : isSplitShare ? confirmAccept(req.id, 'debt') : startAccept(req)} className="flex-1 md:flex-none flex justify-center items-center px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-bold rounded-xl transition-colors shadow-lg shadow-emerald-500/20">
                     {processingId === req.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Check className="w-4 h-4 mr-1" /> Accept</>}
                   </button>
                   <button onClick={() => handleDecline(req.id, req.req_category)} disabled={processingId === req.id} className="flex-1 md:flex-none flex justify-center items-center px-4 py-2 bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 text-sm font-bold rounded-xl transition-colors">
@@ -234,7 +252,7 @@ export default function PendingRequests() {
             </div>
 
             {/* DEPOSIT ACCOUNT SELECTION UI */}
-            {isAccepting && !isEmi && (
+            {isAccepting && !isEmi && !isSplitShare && (
               <div className="mt-2 pt-4 border-t border-amber-500/20 animate-in slide-in-from-top-2">
                 <label className="text-xs font-bold text-amber-500 uppercase tracking-wider mb-2 block">
                   Select your account for this transfer:

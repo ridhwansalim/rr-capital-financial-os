@@ -524,15 +524,16 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="app-financial-entry-modal w-full max-w-md p-4 sm:p-6 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl relative animate-in zoom-in-95 duration-200 text-white max-h-[calc(100dvh-1rem)] overflow-hidden">
+      <div className="app-financial-entry-modal app-transaction-modal w-full max-w-md p-4 sm:p-6 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl relative animate-in zoom-in-95 duration-200 text-white max-h-[calc(100dvh-1rem)] overflow-hidden">
         
-        <button type="button" aria-label="Close transaction" onClick={() => handleClose()} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10">
-          <X className="w-5 h-5" />
-        </button>
-
-        <h2 className="text-xl font-bold mb-6 text-center">
-          {isCreatingAccount ? 'Create New Account' : 'New Transaction'}
-        </h2>
+        <div className="mb-2.5 flex shrink-0 items-start justify-between gap-3">
+          <h2 className="min-w-0 pt-1 text-left text-xl font-bold">
+            {isCreatingAccount ? 'Create New Account' : 'New Transaction'}
+          </h2>
+          <button type="button" aria-label="Close transaction" onClick={() => handleClose()} className="-mr-1 -mt-1 shrink-0 rounded-full p-2 text-white/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)]">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
         {error && (
           <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-start text-sm text-rose-400">
@@ -586,7 +587,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
           <>
             <form onSubmit={handleSubmit} className="transaction-entry-form flex flex-col space-y-4">
               
-              <LiquidGlassSwitcher activeKey={type} label="Transaction type" className="w-full">
+              <LiquidGlassSwitcher activeKey={type} label="Transaction type" className="app-modal-liquid-switcher w-full">
                 {(['expense', 'income', 'transfer'] as const).map((t) => (
                   <button
                     key={t} type="button" onClick={() => setType(t)}

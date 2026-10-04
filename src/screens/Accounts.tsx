@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Wallet, Landmark, CreditCard, Plus, IndianRupee, Loader2, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import AddAccountModal from '../components/AddAccountModal'
@@ -17,6 +18,7 @@ interface Account {
 }
 
 export default function Accounts() {
+  const [searchParams] = useSearchParams()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [healthSettings, setHealthSettings] = useState<Record<string, AccountHealthSetting>>({})
   const [isLoading, setIsLoading] = useState(true)
@@ -80,6 +82,18 @@ export default function Accounts() {
     return () => window.clearTimeout(timer)
   }, [fetchAccounts])
 
+  useEffect(() => {
+    const focusId = searchParams.get('focus')
+    if (!focusId || isLoading) return
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(`account-${focusId}`)
+      if (!target) return
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [isLoading, searchParams, accounts])
+
   const liquidAccounts = accounts.filter(a => a.type === 'bank' || a.type === 'cash' || a.type === 'wallet')
   const creditAccounts = accounts.filter(a => a.type === 'credit' || a.type === 'credit_card' || a.type === 'pay_later')
 
@@ -114,7 +128,7 @@ export default function Accounts() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {liquidAccounts.map(acc => (
-                <div key={acc.id} className="surface-panel p-5 rounded-2xl transition-colors group">
+                <div id={`account-${acc.id}`} tabIndex={-1} key={acc.id} className={`surface-panel p-5 rounded-2xl transition-colors group ${searchParams.get('focus') === acc.id ? 'ring-2 ring-[var(--brand-primary)] ring-offset-2 ring-offset-[var(--canvas)]' : ''}`}>
                   <div className="flex items-center justify-between mb-4">
                     <div className="p-3 rounded-full bg-indigo-500/20">
                   {acc.type === 'bank' ? <Landmark className="w-5 h-5 text-indigo-400" /> : <Wallet className="w-5 h-5 text-emerald-400" />}
@@ -171,7 +185,7 @@ export default function Accounts() {
                 if (utilization > 85) barColor = 'bg-rose-500'
 
                 return (
-                  <div key={acc.id} className="surface-panel p-5 rounded-2xl relative overflow-hidden group">
+                  <div id={`account-${acc.id}`} tabIndex={-1} key={acc.id} className={`surface-panel p-5 rounded-2xl relative overflow-hidden group ${searchParams.get('focus') === acc.id ? 'ring-2 ring-[var(--brand-primary)] ring-offset-2 ring-offset-[var(--canvas)]' : ''}`}>
                     <CreditCard className="absolute -right-6 -bottom-6 w-32 h-32 text-white/5 -rotate-12 pointer-events-none" />
                     
                     <div className="relative z-10">

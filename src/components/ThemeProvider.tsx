@@ -11,6 +11,15 @@ export function normalizeThemeMode(value: unknown): ThemeMode {
   return 'light'
 }
 
+function applyThemeToDocument(mode: ThemeMode) {
+  const canvas = mode === 'light' ? '#faf9f5' : '#141413'
+  document.documentElement.dataset.theme = mode
+  document.documentElement.style.colorScheme = mode
+  document.documentElement.style.backgroundColor = canvas
+  document.body.style.backgroundColor = canvas
+  document.getElementById('root')?.style.setProperty('background-color', canvas)
+}
+
 interface ThemeContextType {
   themeMode: ThemeMode
   setTheme: (mode: ThemeMode) => void
@@ -27,8 +36,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   })
 
   const setTheme = useCallback((mode: ThemeMode) => {
-    setThemeMode(mode)
     localStorage.setItem('rr_theme_mode', mode)
+    const apply = () => {
+      applyThemeToDocument(mode)
+      setThemeMode(mode)
+    }
+
+    const doc = document as Document & {
+      startViewTransition?: (callback: () => void) => { finished: Promise<void> }
+    }
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (doc.startViewTransition && !prefersReducedMotion) {
+      doc.startViewTransition(apply)
+    } else {
+      apply()
+    }
   }, [])
 
   useEffect(() => {
@@ -40,14 +62,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     })
   }, [setTheme])
 
-  useEffect(() => {
-    const canvas = themeMode === 'light' ? '#faf9f5' : '#141413'
-    document.documentElement.dataset.theme = themeMode
-    document.documentElement.style.colorScheme = themeMode
-    document.documentElement.style.backgroundColor = canvas
-    document.body.style.backgroundColor = canvas
-    document.getElementById('root')?.style.setProperty('background-color', canvas)
-  }, [themeMode])
+  useEffect(() => applyThemeToDocument(themeMode), [themeMode])
 
   return <ThemeContext.Provider value={{ themeMode, setTheme }}>{children}</ThemeContext.Provider>
 }

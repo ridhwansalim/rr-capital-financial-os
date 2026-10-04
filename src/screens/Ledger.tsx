@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { ArrowRightLeft, Search, Loader2, User, Wallet, ArrowDownRight, ArrowUpRight } from 'lucide-react'
+import { ArrowRightLeft, Search, Loader2, User, Wallet, ArrowDownRight, ArrowUpRight, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDate } from '../lib/financeDate'
 import PageHeader from '../components/PageHeader'
 import LiquidGlassSwitcher from '../components/ui/LiquidGlassSwitcher'
 import { liquidGlassItemProps } from '../components/ui/liquidGlassSwitcherItem'
+import { Link, useSearchParams } from 'react-router-dom'
 
 interface Transaction {
   id: string
@@ -14,9 +15,14 @@ interface Transaction {
   type: 'income' | 'expense' | 'transfer'
   accountName: string
   taggedName: string | null
+  contactId: string | null
+  profileId: string | null
+  categoryId: string | null
+  categoryName: string | null
 }
 
 export default function Ledger() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -28,7 +34,7 @@ export default function Ledger() {
       // 1. Fetch all transactions
       const { data: txData, error: txError } = await supabase
         .from('transactions')
-        .select('id, amount, description, created_at, from_account_id, to_account_id, tagged_profile_id, contact_id')
+        .select('id, amount, description, created_at, from_account_id, to_account_id, tagged_profile_id, contact_id, category_id')
         .order('created_at', { ascending: false })
 
       if (txError) throw txError
@@ -38,12 +44,14 @@ export default function Ledger() {
       const accountIds = new Set<string>()
       const profileIds = new Set<string>()
       const contactIds = new Set<string>()
+      const categoryIds = new Set<string>()
 
       txData.forEach(tx => {
         if (tx.from_account_id) accountIds.add(tx.from_account_id)
         if (tx.to_account_id) accountIds.add(tx.to_account_id)
         if (tx.tagged_profile_id) profileIds.add(tx.tagged_profile_id)
         if (tx.contact_id) contactIds.add(tx.contact_id)
+        if (tx.category_id) categoryIds.add(tx.category_id)
       })
 
       // 3. Fetch all related names
@@ -51,7 +59,7 @@ export default function Ledger() {
       
       // Enrichment tables are independent; query them together to avoid serial
       // round trips after the transaction list on higher-latency mobile networks.
-      const [accountResult, profileResult, contactResult] = await Promise.all([
+      const [accountResult, profileResult, contactResult, categoryResult] = await Promise.all([
         accountIds.size > 0
           ? supabase.from('accounts').select('id, name').in('id', Array.from(accountIds))
           : Promise.resolve({ data: [], error: null }),
@@ -61,10 +69,14 @@ export default function Ledger() {
         contactIds.size > 0
           ? supabase.from('contacts').select('id, name').in('id', Array.from(contactIds))
           : Promise.resolve({ data: [], error: null }),
+        categoryIds.size > 0
+          ? supabase.from('transaction_categories').select('id, name').in('id', Array.from(categoryIds))
+          : Promise.resolve({ data: [], error: null }),
       ])
       accountResult.data?.forEach(a => nameMap[a.id] = a.name)
       profileResult.data?.forEach((p: { id: string; full_name: string | null; username: string | null }) => nameMap[p.id] = p.full_name || p.username || 'User')
       contactResult.data?.forEach(c => nameMap[c.id] = c.name)
+      categoryResult.data?.forEach(c => nameMap[`category:${c.id}`] = c.name)
 
       // 4. Map the raw data into our clean UI interface
       const formattedData = txData.map(tx => {
@@ -92,7 +104,11 @@ export default function Ledger() {
           created_at: tx.created_at,
           type,
           accountName,
-          taggedName
+          taggedName,
+          contactId: tx.contact_id,
+          profileId: tx.tagged_profile_id,
+          categoryId: tx.category_id,
+          categoryName: tx.category_id ? nameMap[`category:${tx.category_id}`] || 'Category' : null,
         }
       })
 
@@ -108,6 +124,13 @@ export default function Ledger() {
     void fetchTransactions()
   }, [])
 
+  useEffect(() => {
+    const type = searchParams.get('type')
+    if (type === 'income' || type === 'expense' || type === 'transfer') setFilterType(type)
+    else if (!type) setFilterType('all')
+    setVisibleCount(50)
+  }, [searchParams])
+
   // Client-side filtering and searching
   const filteredTransactions = useMemo(() => transactions.filter(tx => {
     const matchesFilter = filterType === 'all' || tx.type === filterType
@@ -117,8 +140,11 @@ export default function Ledger() {
       (tx.taggedName && tx.taggedName.toLowerCase().includes(searchLower)) ||
       tx.accountName.toLowerCase().includes(searchLower)
     
-    return matchesFilter && matchesSearch
-  }), [transactions, filterType, searchQuery])
+    const contactMatch = !searchParams.get('contact_id') || tx.contactId === searchParams.get('contact_id')
+    const profileMatch = !searchParams.get('profile_id') || tx.profileId === searchParams.get('profile_id')
+    const categoryMatch = !searchParams.get('category_id') || tx.categoryId === searchParams.get('category_id')
+    return matchesFilter && matchesSearch && contactMatch && profileMatch && categoryMatch
+  }), [transactions, filterType, searchQuery, searchParams])
   const visibleTransactions = filteredTransactions.slice(0, visibleCount)
 
   return (
@@ -154,6 +180,7 @@ export default function Ledger() {
         </LiquidGlassSwitcher>
 
       </div>
+      {(searchParams.has('contact_id') || searchParams.has('profile_id') || searchParams.has('category_id')) && <div className="-mt-4 mb-6 flex items-center gap-2 rounded-xl border border-indigo-500/20 bg-indigo-500/5 px-3 py-2 text-xs text-[var(--ink)]"><span className="min-w-0 flex-1 truncate">Filtered from Dashboard{searchParams.has('type') ? ` · ${searchParams.get('type')}` : ''}</span><button type="button" onClick={() => setSearchParams({})} className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 font-semibold text-[var(--brand-primary)] hover:bg-indigo-500/10"><X className="h-3 w-3" /> Clear filter</button></div>}
 
       {/* Transaction List */}
       {isLoading ? (
@@ -201,11 +228,12 @@ export default function Ledger() {
                     {tx.taggedName && (
                       <>
                         <span className="text-slate-700 text-xs">•</span>
-                        <span className="flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                        <Link to={`/ledger?${tx.contactId ? `contact_id=${encodeURIComponent(tx.contactId)}` : `profile_id=${encodeURIComponent(tx.profileId || '')}`}&type=${encodeURIComponent(tx.type)}`} className="flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30">
                           <User className="w-3 h-3 mr-1" /> {tx.taggedName}
-                        </span>
+                        </Link>
                       </>
                     )}
+                    {tx.categoryId && <><span className="text-slate-700 text-xs">â€¢</span><Link to={`/ledger?category_id=${encodeURIComponent(tx.categoryId)}&type=${encodeURIComponent(tx.type)}`} className="rounded-md border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 hover:bg-amber-500/20">{tx.categoryName || 'Category'}</Link></>}
                   </div>
                 </div>
               </div>

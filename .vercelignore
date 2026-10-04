@@ -1,0 +1,13 @@
+.env*
+.git/
+.vercel/
+node_modules/
+dist/
+dev-dist/
+test-results/
+playwright-report/
+design-backups/
+docs/
+e2e/
+.tmp-supabase-cli/
+supabase/

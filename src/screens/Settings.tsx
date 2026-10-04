@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
-import { Settings as SettingsIcon, Search, User, Key, Lock, RotateCcw, Save, Trash2, Loader2, Palette, Bot, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut, Sun, Moon, RefreshCw, Download, ArrowLeftRight, ArrowRight, LayoutGrid, X, ArrowUp, ArrowDown } from 'lucide-react'
+import { Settings as SettingsIcon, Search, User, Key, Lock, RotateCcw, Trash2, Loader2, Palette, Bot, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut, Sun, Moon, RefreshCw, Download, ArrowLeftRight, ArrowRight, LayoutGrid, X, ArrowUp, ArrowDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDate } from '../lib/financeDate'
 import { normalizeThemeMode, useTheme } from '../components/ThemeProvider'
@@ -14,6 +14,7 @@ import PageHeader from '../components/PageHeader'
 import { currentRelease, type ReleaseNotes } from '../lib/releaseNotes'
 import LiquidSwitch from '../components/ui/LiquidSwitch'
 import LiquidGlassSwitcher from '../components/ui/LiquidGlassSwitcher'
+import { getExpandedCapBounds } from '../components/ui/liquidGlassCapGeometry'
 import { liquidGlassItemProps } from '../components/ui/liquidGlassSwitcherItem'
 import { ROUTE_REGISTRY, SETTINGS_GROUPS } from '../lib/routeRegistry'
 import { useWorkspaceLayoutContext } from '../lib/workspaceLayoutContext'
@@ -133,6 +134,86 @@ export default function Settings() {
   }))
   const [originalProfile, setOriginalProfile] = useState(defaultProfile)
   const [draftProfile, setDraftProfile] = useState(defaultProfile)
+  const isProfileModified = JSON.stringify(originalProfile) !== JSON.stringify(draftProfile)
+  const unsavedActionsRef = useRef<HTMLDivElement>(null)
+  const discardActionRef = useRef<HTMLButtonElement>(null)
+  const saveActionRef = useRef<HTMLButtonElement>(null)
+  const capIndexRef = useRef<0 | 1>(1)
+  const capFrameRef = useRef<number | null>(null)
+
+  const moveUnsavedCap = useCallback((index: 0 | 1, animate = true) => {
+    const actions = unsavedActionsRef.current
+    const target = index === 0 ? discardActionRef.current : saveActionRef.current
+    if (!actions || !target) return
+
+    if (index !== capIndexRef.current) {
+      actions.style.setProperty('--cap-origin', index > capIndexRef.current ? 'left' : 'right')
+      capIndexRef.current = index
+    }
+
+    // Measure both elements in the same rendered coordinate space. The dialog
+    // animates with `scale`, which changes getBoundingClientRect() dimensions;
+    // normalize by the track's rendered/layout width ratio so the cap's CSS
+    // coordinates stay exact during its first reveal as well as later hovers.
+    const actionsRect = actions.getBoundingClientRect()
+    const targetRect = target.getBoundingClientRect()
+    const scaleX = actions.offsetWidth > 0 ? actionsRect.width / actions.offsetWidth : 1
+    const targetX = (targetRect.left - actionsRect.left) / (scaleX || 1)
+    const targetWidth = targetRect.width / (scaleX || 1)
+    const cap = getExpandedCapBounds(actions.offsetWidth, targetX, targetWidth)
+    actions.style.setProperty('--cap-x', `${cap.x}px`)
+    actions.style.setProperty('--cap-w', `${cap.width}px`)
+    actions.dataset.capPositioned = 'true'
+    if (animate) {
+      actions.classList.remove('is-squishing')
+      void actions.offsetWidth
+      actions.classList.add('is-squishing')
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!isProfileModified) return
+
+    const actions = unsavedActionsRef.current
+    const discard = discardActionRef.current
+    const save = saveActionRef.current
+    if (!actions || !discard || !save) return
+
+    // Hide the cap and disable its slide while a newly visible dialog is
+    // being measured. The first animation frame gets the final rendered
+    // button geometry before the cap is revealed or transitions are enabled.
+    actions.classList.remove('is-ready')
+    actions.dataset.capPositioned = 'false'
+    if (capFrameRef.current !== null) cancelAnimationFrame(capFrameRef.current)
+    capFrameRef.current = requestAnimationFrame(() => {
+      moveUnsavedCap(capIndexRef.current, false)
+      // Let the exact geometry paint once with transitions disabled. Only
+      // enable the spring slide on the following frame for later interaction.
+      capFrameRef.current = requestAnimationFrame(() => {
+        actions.classList.add('is-ready')
+        capFrameRef.current = null
+      })
+    })
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => moveUnsavedCap(capIndexRef.current, false))
+      : null
+    resizeObserver?.observe(actions)
+    resizeObserver?.observe(discard)
+    resizeObserver?.observe(save)
+    window.addEventListener('resize', onUnsavedCapResize)
+    if (document.fonts) void document.fonts.ready.then(() => moveUnsavedCap(capIndexRef.current, false))
+
+    return () => {
+      if (capFrameRef.current !== null) cancelAnimationFrame(capFrameRef.current)
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize', onUnsavedCapResize)
+    }
+
+    function onUnsavedCapResize() {
+      moveUnsavedCap(capIndexRef.current, false)
+    }
+  }, [isProfileModified, moveUnsavedCap])
 
   // Local Security State
   const [autoLock, setAutoLock] = useState(false)
@@ -200,8 +281,6 @@ export default function Settings() {
     }
     fetchSettings()
   }, [defaultProfile])
-
-  const isProfileModified = JSON.stringify(originalProfile) !== JSON.stringify(draftProfile)
 
   const signOut = async () => {
     if (isSigningOut) return
@@ -567,9 +646,9 @@ export default function Settings() {
   const showModules = 'optional features modules budgets envelopes planning calculators guided help tips savings goals shopping lists account health minimum balance due date credit financial wellness score'.includes(query) || query === ''
   const settingsSections = workspace.settingsSections
   const editorKey = navbarEditorViewport === 'mobile' ? 'mobileSelectedUrls' : 'desktopSelectedUrls'
-  const editorLimit = navbarEditorViewport === 'mobile' ? 2 : 10
+  const editorLimit = navbarEditorViewport === 'mobile' ? 3 : 10
   const editorSelected = workspace.navbarLayout[editorKey]
-  const availableNavbarRoutes = ROUTE_REGISTRY.filter(route => route.path !== '/' && route.path !== '/settings' && (!route.optionalFeature || Boolean(featureFlags[route.optionalFeature])))
+  const availableNavbarRoutes = ROUTE_REGISTRY.filter(route => route.path !== '/' && route.path !== '/settings' && !route.utility && (!route.optionalFeature || Boolean(featureFlags[route.optionalFeature])))
   const toggleNavbarRoute = (path: string, selected: boolean) => {
     workspace.setNavbarLayout(current => {
       const selectedUrls = current[editorKey]
@@ -632,25 +711,25 @@ export default function Settings() {
 
       <button type="button" onClick={() => setNavbarModalOpen(true)} className="surface-panel mb-6 flex w-full items-center gap-4 rounded-2xl p-4 text-left transition-colors hover:bg-[var(--surface-strong)] sm:p-5" aria-haspopup="dialog">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><ArrowLeftRight className="h-5 w-5" /></span>
-        <span className="min-w-0 flex-1"><span className="block font-semibold">Customize Navbar Layout</span><span className="mt-1 block text-sm text-[var(--muted)]">{workspace.navbarLayout.mobileSelectedUrls.length}/2 mobile slots Â· {workspace.navbarLayout.desktopSelectedUrls.length}/10 desktop slots</span></span>
+        <span className="min-w-0 flex-1"><span className="block font-semibold">Customize Navbar Layout</span><span className="mt-1 block text-sm text-[var(--muted)]">{workspace.navbarLayout.mobileSelectedUrls.length}/3 mobile slots · {workspace.navbarLayout.desktopSelectedUrls.length}/10 desktop slots</span></span>
         <ArrowRight className="h-4 w-4 shrink-0 text-[var(--muted)]" />
       </button>
 
       {navbarModalOpen && createPortal(<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-4" onMouseDown={event => { if (event.target === event.currentTarget) setNavbarModalOpen(false) }}>
         <section role="dialog" aria-modal="true" aria-labelledby="navbar-customization-title" className="surface-panel flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-[var(--line)] shadow-2xl">
           <header className="shrink-0 border-b border-[var(--line)]"><div className="flex items-start gap-3 p-4 sm:p-5"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><LayoutGrid className="h-5 w-5" /></span><div className="min-w-0 flex-1"><h2 id="navbar-customization-title" className="text-lg font-bold">Customize Navbar Layout</h2><p className="mt-1 text-sm text-[var(--muted)]">Choose pages and set their order. Dashboard, Add, and Settings stay fixed.</p></div><button type="button" aria-label="Close navbar customization" onClick={() => setNavbarModalOpen(false)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[var(--muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--ink)]"><X className="h-4 w-4" /></button></div>
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5"><LiquidGlassSwitcher activeKey={navbarEditorViewport} label="Navbar viewport layout" role="tablist" className="navbar-viewport-switcher inline-flex items-center">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5"><LiquidGlassSwitcher activeKey={navbarEditorViewport} label="Navbar viewport layout" role="tablist" className="app-modal-liquid-switcher navbar-viewport-switcher inline-flex items-center">
             {(['mobile', 'desktop'] as const).map(viewport => {
               const selectedCount = workspace.navbarLayout[viewport === 'mobile' ? 'mobileSelectedUrls' : 'desktopSelectedUrls'].length
               const visibleCount = viewport === 'mobile' ? selectedCount : Math.min(selectedCount, workspace.desktopCapacity)
-              const slotLimit = viewport === 'mobile' ? 2 : workspace.desktopCapacity
-              return <button key={viewport} id={`navbar-${viewport}-tab`} type="button" role="tab" aria-selected={navbarEditorViewport === viewport} aria-controls="navbar-editor-panel" onClick={() => setNavbarEditorViewport(viewport)} {...liquidGlassItemProps(viewport, navbarEditorViewport === viewport, 'min-h-10 gap-2 px-4 text-xs font-semibold')}>
-                {viewport === 'mobile' ? <Smartphone className="h-4 w-4" /> : <Laptop className="h-4 w-4" />}<span>{viewport === 'mobile' ? 'Mobile' : 'Desktop'}</span><span aria-label={viewport === 'mobile' ? `${selectedCount} of 2 mobile slots selected` : `${visibleCount} of ${slotLimit} desktop slots visible; ${selectedCount} of 10 saved`} className="navbar-viewport-switcher__count">{visibleCount} / {slotLimit}</span>
+              const slotLimit = viewport === 'mobile' ? 3 : workspace.desktopCapacity
+              return <button key={viewport} id={`navbar-${viewport}-tab`} type="button" role="tab" aria-selected={navbarEditorViewport === viewport} aria-controls="navbar-editor-panel" onClick={() => setNavbarEditorViewport(viewport)} {...liquidGlassItemProps(viewport, navbarEditorViewport === viewport, 'min-h-10 flex-1 justify-center gap-2 px-2 text-center text-xs font-semibold')}>
+                {viewport === 'mobile' ? <Smartphone className="h-4 w-4" /> : <Laptop className="h-4 w-4" />}<span>{viewport === 'mobile' ? 'Mobile' : 'Desktop'}</span><span aria-label={viewport === 'mobile' ? `${selectedCount} of 3 mobile slots selected` : `${visibleCount} of ${slotLimit} desktop slots visible; ${selectedCount} of 10 saved`} className="navbar-viewport-switcher__count">{visibleCount} / {slotLimit}</span>
               </button>
             })}
-          </LiquidGlassSwitcher><span className="text-right text-xs text-[var(--muted)]">{workspace.isMobile ? 'Current viewport Â· Mobile' : 'Current viewport Â· Desktop'}<br /><strong className="text-[var(--ink)]">{editorSelected.length}/{editorLimit} saved Â· {navbarEditorViewport === 'mobile' ? editorSelected.length : Math.min(editorSelected.length, workspace.desktopCapacity)}/{navbarEditorViewport === 'mobile' ? 2 : workspace.desktopCapacity} visible</strong></span></div></header>
+          </LiquidGlassSwitcher><span className="text-right text-xs text-[var(--muted)]">{workspace.isMobile ? 'Current viewport · Mobile' : 'Current viewport · Desktop'}<br /><strong className="text-[var(--ink)]">{editorSelected.length}/{editorLimit} saved · {navbarEditorViewport === 'mobile' ? editorSelected.length : Math.min(editorSelected.length, workspace.desktopCapacity)}/{navbarEditorViewport === 'mobile' ? 3 : workspace.desktopCapacity} visible</strong></span></div></header>
           <div id="navbar-editor-panel" role="tabpanel" aria-labelledby={`navbar-${navbarEditorViewport}-tab`} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
-            <div className="mb-4 rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">{navbarEditorViewport === 'mobile' ? 'Fixed order: Dashboard Â· page Â· Add Â· page Â· Settings. Select up to 2 pages.' : `Dashboard and Settings are fixed at the ends. Save up to 10 pages; ${workspace.desktopCapacity} custom slots fit this viewport. Trailing pages stay saved and return when more space is available.`}</div>
+            <div className="mb-4 rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">{navbarEditorViewport === 'mobile' ? 'Fixed order: Dashboard · page · Add · page · page. Select up to 3 pages. Settings and Notifications are in the header.' : `Dashboard and Settings are fixed at the ends. Save up to 10 pages; ${workspace.desktopCapacity} custom slots fit this viewport. Trailing pages stay saved and return when more space is available.`}</div>
             <div className="space-y-5">{SETTINGS_GROUPS.map(group => {
               const routes = availableNavbarRoutes.filter(route => route.settingsGroup === group)
               if (!routes.length) return null
@@ -669,28 +748,61 @@ export default function Settings() {
         </section>
       </div>, document.body)}
 
-      {isProfileModified && (
-        <div className="sticky top-4 z-50 mb-8 p-4 bg-indigo-500/10 border border-indigo-500/30 backdrop-blur-xl rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl animate-in slide-in-from-top-4">
-          <div className="flex items-center text-indigo-300 font-medium">
-            <Save className="w-5 h-5 mr-2" /> You have unsaved changes
-          </div>
-          <div className="flex gap-3 w-full sm:w-auto">
-            <button 
+      {createPortal(
+        <div
+          role="region"
+          aria-label="Unsaved changes"
+          aria-hidden={!isProfileModified}
+          inert={!isProfileModified}
+          data-state={isProfileModified ? 'visible' : 'hidden'}
+          className={`liquid-unsaved-dialog ${isProfileModified ? 'is-visible' : ''}`}
+        >
+          <span className="liquid-unsaved-dialog__label">
+            <span className="liquid-unsaved-dialog__dot" aria-hidden="true" />
+            You have unsaved changes
+          </span>
+          <div
+            ref={unsavedActionsRef}
+            className="liquid-unsaved-dialog__actions"
+            data-cap-positioned="false"
+            onPointerLeave={() => moveUnsavedCap(1)}
+            onPointerMove={(event) => {
+              const discard = discardActionRef.current
+              const save = saveActionRef.current
+              if (!discard || !save) return
+              const x = event.clientX
+              const discardRect = discard.getBoundingClientRect()
+              const saveRect = save.getBoundingClientRect()
+              if (x >= discardRect.left && x <= discardRect.right) moveUnsavedCap(0)
+              else if (x >= saveRect.left && x <= saveRect.right) moveUnsavedCap(1)
+            }}
+          >
+            <button
+              ref={discardActionRef}
+              type="button"
+              className="liquid-unsaved-dialog__btn"
+              onPointerEnter={() => moveUnsavedCap(0)}
+              onPointerMove={() => moveUnsavedCap(0)}
+              onFocus={() => moveUnsavedCap(0)}
               onClick={() => setDraftProfile(originalProfile)}
-              className="flex-1 sm:flex-none px-6 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl font-bold transition-all border border-white/10"
             >
               Discard
             </button>
-            <button 
+            <button
+              ref={saveActionRef}
+              type="button"
+              className="liquid-unsaved-dialog__btn liquid-unsaved-dialog__btn--save"
+              onPointerEnter={() => moveUnsavedCap(1)}
+              onPointerMove={() => moveUnsavedCap(1)}
+              onFocus={() => moveUnsavedCap(1)}
               onClick={handleSaveProfile}
               disabled={isSavingProfile}
-              className="flex-1 sm:flex-none flex items-center justify-center px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-bold transition-all disabled:opacity-50"
             >
-              {isSavingProfile ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Save All Changes
+              {isSavingProfile ? <Loader2 className="h-4 w-4 animate-spin" aria-label="Saving" /> : 'Save All Changes'}
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <div className="space-y-6">
@@ -807,7 +919,7 @@ export default function Settings() {
                   {(['light', 'dark'] as const).map(mode => {
                     const selected = draftProfile.theme_mode === mode
                     const Icon = mode === 'light' ? Sun : Moon
-                    return <button key={mode} type="button" {...liquidGlassItemProps(mode, selected, 'flex min-h-24 min-w-24 flex-col items-start justify-between px-4 py-3 text-left')} role="radio" aria-checked={selected} onClick={() => setDraftProfile({ ...draftProfile, theme_mode: mode, theme_accent: 'coral' })}>
+                    return <button key={mode} type="button" {...liquidGlassItemProps(mode, selected, 'flex min-h-24 min-w-24 flex-col items-start justify-between px-4 py-3 text-left')} role="radio" aria-checked={selected} onClick={() => setDraftProfile({ ...draftProfile, theme_mode: mode })}>
                       <Icon className="h-5 w-5 text-[var(--brand-primary)]" />
                       <span className="font-medium">{mode === 'light' ? 'Light' : 'Dark'}</span>
                     </button>
@@ -985,12 +1097,11 @@ export default function Settings() {
                     </h3>
                     <p className="text-sm text-slate-400 mt-1">Register devices to unlock the app with FaceID or TouchID.</p>
                   </div>
-                  <button 
-                    onClick={() => setDraftProfile({...draftProfile, is_biometric_enabled: !draftProfile.is_biometric_enabled})}
-                    className={`w-14 h-8 rounded-full transition-colors relative flex-shrink-0 ${draftProfile.is_biometric_enabled ? 'bg-amber-500' : 'bg-slate-700'}`}
-                  >
-                    <div className={`w-6 h-6 bg-white rounded-full absolute top-1 transition-transform ${draftProfile.is_biometric_enabled ? 'translate-x-7' : 'translate-x-1'}`}></div>
-                  </button>
+                  <LiquidSwitch
+                    label="Biometric / FaceID Lock"
+                    checked={draftProfile.is_biometric_enabled}
+                    onCheckedChange={(enabled) => setDraftProfile({ ...draftProfile, is_biometric_enabled: enabled })}
+                  />
                 </div>
 
                 {draftProfile.is_biometric_enabled && (

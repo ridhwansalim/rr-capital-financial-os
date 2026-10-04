@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { getExpandedCapBounds } from './liquidGlassCapGeometry'
 
 type LiquidGlassSwitcherProps = {
   activeKey: string
@@ -27,8 +28,10 @@ function positionCap(container: HTMLElement, target: HTMLElement) {
     const containerRect = container.getBoundingClientRect()
     x = target.getBoundingClientRect().left - containerRect.left - container.clientLeft
   }
-  container.style.setProperty('--cap-x', `${x - 8}px`)
-  container.style.setProperty('--cap-w', `${target.offsetWidth + 16}px`)
+  // Expand the lens by 5px on each side, keeping both ends inside the track.
+  const cap = getExpandedCapBounds(container.clientWidth, x, target.offsetWidth)
+  container.style.setProperty('--cap-x', `${cap.x}px`)
+  container.style.setProperty('--cap-w', `${cap.width}px`)
 }
 
 /** Sliding liquid-glass cap for existing navigation and selection controls. */
@@ -48,7 +51,11 @@ export default function LiquidGlassSwitcher({ activeKey, label, className = '', 
       const items = Array.from(container.querySelectorAll<HTMLElement>('[data-glass-key]'))
       const activeIndex = items.findIndex(item => item.dataset.glassKey === activeKeyRef.current)
       const target = items[activeIndex]
-      if (!target) return
+      if (!target) {
+        container.style.setProperty('--cap-w', '0px')
+        container.classList.add('is-ready')
+        return
+      }
 
       const previousIndex = previousIndexRef.current
       if (previousIndex !== -1 && activeIndex !== previousIndex) {

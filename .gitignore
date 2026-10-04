@@ -42,3 +42,6 @@ test-results/
 *.sql.gz
 *.backup
 *.bak
+
+# Supabase CLI telemetry/config redirected for sandboxed verification
+.tmp-supabase-cli/

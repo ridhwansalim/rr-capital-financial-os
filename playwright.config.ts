@@ -22,7 +22,9 @@ export default defineConfig({
     command: 'node node_modules/vite/bin/vite.js build --mode test && node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 5191 --strictPort',
     url: baseURL,
     reuseExistingServer: false,
-    timeout: 60_000,
+    // The production-mode PWA build used by E2E can spend ~40-70s in plugin
+    // hooks on Windows CI/agent machines before the preview server binds.
+    timeout: 120_000,
     env: {
       ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('VITE_SUPABASE_'))) as Record<string, string>,
       // Never let browser tests point at either hosted Supabase project.

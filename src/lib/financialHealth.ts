@@ -49,6 +49,34 @@ export function lastThreeCompleteMonths(today: string): { start: string; endExcl
   return { start: `${months[0]}-01`, endExclusive: end, months }
 }
 
+/**
+ * Returns the number of days of completed reporting history that can actually
+ * be observed, respecting the earliest account opening date. A missing date
+ * preserves the full requested window; malformed date-only values are ignored.
+ */
+export function observedHistoryDays(
+  start: string,
+  endExclusive: string,
+  accountOpeningDates: readonly (string | null | undefined)[]
+): number {
+  const parseDate = (value: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+    const timestamp = Date.parse(`${value}T00:00:00Z`)
+    return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value ? timestamp : null
+  }
+  const startTime = parseDate(start)
+  const endTime = parseDate(endExclusive)
+  if (startTime === null || endTime === null || endTime <= startTime) return 0
+
+  const openingTimes = accountOpeningDates
+    .filter((value): value is string => typeof value === 'string')
+    .map(parseDate)
+    .filter((value): value is number => value !== null)
+  const earliestOpening = openingTimes.length ? Math.min(...openingTimes) : startTime
+  const effectiveStart = Math.max(startTime, earliestOpening)
+  return Math.max(0, Math.floor((endTime - effectiveStart) / 86_400_000))
+}
+
 export function scoreFinancialHealth(input: FinancialHealthInputs): FinancialHealthResult {
   const finite = Object.values(input).filter((value): value is number => typeof value === 'number').every(Number.isFinite)
   if (!finite) return { score: null, applicableFactors: 0, reserveMonths: null, savingsRate: null, utilization: null, factors: { reserve: null, cashflow: null, credit: null }, reason: 'Some required totals could not be calculated.' }

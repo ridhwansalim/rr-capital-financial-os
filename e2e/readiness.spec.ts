@@ -107,6 +107,33 @@ function contrastRatio(foreground: string, background: string) {
   return (values[0] + 0.05) / (values[1] + 0.05)
 }
 
+async function expectModalSwitcherEven(switcher: import('@playwright/test').Locator) {
+  const layout = await switcher.evaluate(element => {
+    const track = element.getBoundingClientRect()
+    const items = Array.from(element.querySelectorAll<HTMLElement>('.liquid-switcher__item'))
+    const widths = items.map(item => item.getBoundingClientRect().width)
+    const active = items.find(item => item.classList.contains('is-active'))
+    return {
+      trackWidth: track.width,
+      widths,
+      capWidth: Number.parseFloat(getComputedStyle(element).getPropertyValue('--cap-w')),
+      activeWidth: active?.offsetWidth ?? 0,
+      capX: Number.parseFloat(getComputedStyle(element).getPropertyValue('--cap-x')),
+      activeX: active?.offsetLeft ?? 0,
+    }
+  })
+  expect(layout.trackWidth).toBeGreaterThan(0)
+  expect(Math.max(...layout.widths) - Math.min(...layout.widths)).toBeLessThanOrEqual(1)
+  expect(layout.widths.reduce((sum, width) => sum + width, 0)).toBeGreaterThan(layout.trackWidth * 0.75)
+  const expectedCapWidth = Math.min(layout.activeWidth + 10, layout.trackWidth - 4)
+  const expectedCapX = Math.min(
+    layout.trackWidth - 2 - expectedCapWidth,
+    Math.max(2, layout.activeX - 5)
+  )
+  expect(Math.abs(layout.capWidth - expectedCapWidth)).toBeLessThanOrEqual(1)
+  expect(Math.abs(layout.capX - expectedCapX)).toBeLessThanOrEqual(1)
+}
+
 type MockEvidence = {
   unexpectedOrigins: string[]
   blockedBrowserExtensionOrigins: string[]
@@ -129,7 +156,7 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
   })
 }
 
-async function installSyntheticBackend(page: Page, themeMode: 'light' | 'dark' = 'dark'): Promise<MockEvidence> {
+async function installSyntheticBackend(page: Page, themeMode: 'light' | 'dark' = 'dark', emptyFinanceData = false): Promise<MockEvidence> {
   const evidence: MockEvidence = { unexpectedOrigins: [], blockedBrowserExtensionOrigins: [], tableMutations: [], unexpectedRpcs: [] }
   let featureFlags = [...enabledFeatures]
   let navbarLayout = structuredClone(syntheticProfile.navbar_layout)
@@ -202,22 +229,22 @@ async function installSyntheticBackend(page: Page, themeMode: 'light' | 'dark' =
     }
 
     if (path === '/rest/v1/accounts' && method === 'GET') {
-      await fulfillJson(route, [{ id: syntheticAccountId, owner_id: syntheticUserId, name: 'Synthetic primary bank', type: 'bank', credit_limit: null, opening_balance: 20_000, opening_date: '2026-01-01' }])
+      await fulfillJson(route, emptyFinanceData ? [] : [{ id: syntheticAccountId, owner_id: syntheticUserId, name: 'Synthetic primary bank', type: 'bank', credit_limit: null, opening_balance: 20_000, opening_date: '2026-01-01' }])
       return
     }
 
     if (path === '/rest/v1/account_balances' && method === 'GET') {
-      await fulfillJson(route, [{ id: syntheticAccountId, balance: 68_750 }])
+      await fulfillJson(route, emptyFinanceData ? [] : [{ id: syntheticAccountId, balance: 68_750 }])
       return
     }
 
     if (path === '/rest/v1/transactions' && method === 'GET') {
-      await fulfillJson(route, syntheticTransactions)
+      await fulfillJson(route, emptyFinanceData ? [] : syntheticTransactions)
       return
     }
 
     if (path === '/rest/v1/transaction_categories' && method === 'GET') {
-      await fulfillJson(route, [{ id: syntheticCategoryId, name: 'Synthetic household', color: '#34d399' }])
+      await fulfillJson(route, emptyFinanceData ? [] : [{ id: syntheticCategoryId, name: 'Synthetic household', color: '#34d399' }])
       return
     }
 
@@ -263,7 +290,7 @@ test('protected pages send anonymous visitors to the invitation-only sign-in pag
 
 test('desktop navigation uses the Settings module hub and logo opens the creator profile', async ({ page }) => {
   await installSyntheticBackend(page)
-  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.setViewportSize({ width: 1366, height: 768 })
   await page.goto('/')
   await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toHaveJSProperty('offsetTop', 0)
   expect(await page.locator('.liquid-toggle-filters').evaluate(element => element.getBoundingClientRect().height)).toBe(0)
@@ -277,6 +304,29 @@ test('desktop navigation uses the Settings module hub and logo opens the creator
   await page.getByRole('button', { name: 'About RR Capital and its creator' }).click()
   const creator = page.getByRole('dialog', { name: 'Ridhwan S.' })
   await expect(creator).toBeVisible()
+  await page.evaluate(() => {
+    const surface = document.createElement('div')
+    surface.id = 'creator-contrast-test-surface'
+    Object.assign(surface.style, { position: 'fixed', inset: '0', zIndex: '79', background: 'rgb(24, 28, 34)' })
+    document.body.append(surface)
+  })
+  await page.evaluate(() => window.dispatchEvent(new Event('scroll')))
+  await expect(creator).toHaveAttribute('data-contrast', 'dark-ink')
+  await page.locator('#creator-contrast-test-surface').evaluate(element => {
+    const surface = element as HTMLElement
+    surface.style.transition = 'none'
+    surface.style.background = 'rgb(250, 250, 250)'
+  })
+  await page.evaluate(() => window.dispatchEvent(new Event('scroll')))
+  await expect(creator).toHaveAttribute('data-contrast', 'light-ink')
+  await page.locator('#creator-contrast-test-surface').evaluate(element => element.remove())
+  const creatorBounds = await creator.boundingBox()
+  expect(creatorBounds).not.toBeNull()
+  expect(creatorBounds!.x).toBeGreaterThanOrEqual(0)
+  expect(creatorBounds!.y).toBeGreaterThanOrEqual(0)
+  expect(creatorBounds!.x + creatorBounds!.width).toBeLessThanOrEqual(1366)
+  expect(creatorBounds!.y + creatorBounds!.height).toBeLessThanOrEqual(768)
+  await expect(creator.getByRole('button', { name: 'Close creator profile' })).toBeInViewport()
   await expect(creator.getByRole('img', { name: 'Ridhwan S., creator of RR Capital' })).toHaveJSProperty('complete', true)
   await expect(creator.getByRole('img', { name: 'Ridhwan S., creator of RR Capital' })).not.toHaveJSProperty('naturalWidth', 0)
   await page.screenshot({ path: 'test-results/creator-modal-visual-check.png' })
@@ -299,7 +349,7 @@ test('desktop navigation uses the Settings module hub and logo opens the creator
   expect(glassSurface.topHighlight).toContain('linear-gradient')
   expect(glassSurface.edgeHighlight).toContain('linear-gradient')
   expect(glassSurface.adaptiveColor).toBe('rgb(255, 255, 255)')
-  expect(glassSurface.adaptiveBlend).toBe('difference')
+  expect(glassSurface.adaptiveBlend).toBe('normal')
   expect(glassSurface.pointerHighlight).not.toContain('radial-gradient')
   await creator.hover({ position: { x: 80, y: 80 } })
   const tilt = await creator.evaluate(element => ({
@@ -326,12 +376,12 @@ test('desktop navigation uses the Settings module hub and logo opens the creator
   await expect(page.getByRole('heading', { name: 'Workspace & modules' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Analytics, Planning & Wellness' }).getByRole('link', { name: 'Reports' })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Vaults, Directory & Sync' }).getByRole('link', { name: 'Accounts' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Customize Navbar Layout' })).toContainText('2/2 mobile slots')
+  await expect(page.getByRole('button', { name: 'Customize Navbar Layout' })).toContainText('2/3 mobile slots')
   await page.getByRole('button', { name: 'Customize Navbar Layout' }).click()
   const layoutDialog = page.getByRole('dialog', { name: 'Customize Navbar Layout' })
   await expect(layoutDialog).toBeVisible()
   const viewportTabs = layoutDialog.getByRole('tablist', { name: 'Navbar viewport layout' })
-  await expect(viewportTabs).toContainText('2 / 2')
+  await expect(viewportTabs).toContainText('2 / 3')
   await expect(viewportTabs).toContainText('3 / 10')
   await expect(viewportTabs).toHaveClass(/is-ready/)
   await expect.poll(() => viewportTabs.evaluate(element => Number.parseFloat(getComputedStyle(element).getPropertyValue('--cap-w')))).toBeGreaterThan(0)
@@ -399,6 +449,20 @@ test('desktop navigation uses the Settings module hub and logo opens the creator
   await addButton.click()
   const dashboardHeading = page.getByRole('heading', { name: 'Financial overview' })
   await expect(dashboardHeading).toBeVisible()
+  for (const label of ['Quick date ranges', 'Account filters', 'Transaction filters']) {
+    const switcher = page.locator(`.liquid-switcher[aria-label="${label}"]`)
+    const sizing = await switcher.evaluate(element => {
+      const track = element.getBoundingClientRect()
+      const card = element.closest('section')!.getBoundingClientRect()
+      const active = element.querySelector<HTMLElement>('.liquid-switcher__item.is-active')!
+      return { trackWidth: track.width, cardWidth: card.width, activeWidth: active.offsetWidth, activeX: active.offsetLeft, capX: Number.parseFloat(getComputedStyle(element).getPropertyValue('--cap-x')), capWidth: Number.parseFloat(getComputedStyle(element).getPropertyValue('--cap-w')) }
+    })
+    expect(sizing.trackWidth).toBeLessThan(sizing.cardWidth * 0.8)
+    const expectedCapWidth = Math.min(sizing.activeWidth + 10, sizing.trackWidth - 4)
+    const expectedCapX = Math.min(sizing.trackWidth - 2 - expectedCapWidth, Math.max(2, sizing.activeX - 5))
+    expect(Math.abs(sizing.capWidth - expectedCapWidth)).toBeLessThanOrEqual(1)
+    expect(Math.abs(sizing.capX - expectedCapX)).toBeLessThanOrEqual(1)
+  }
   const headingGap = await dashboardHeading.evaluate(element => {
     const main = element.closest('main')
     if (!main) throw new Error('Dashboard heading is outside the app main region')
@@ -406,6 +470,63 @@ test('desktop navigation uses the Settings module hub and logo opens the creator
   })
   expect(headingGap).toBeLessThan(100)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440)
+})
+
+test('Global quick add exposes Split a Bill on desktop and mobile', async ({ page }) => {
+  const evidence = await installSyntheticBackend(page)
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await page.goto('/')
+
+  const desktopFab = page.locator('button.app-desktop-fab')
+  await expect(desktopFab).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Split a bill' })).toHaveCount(0)
+  await desktopFab.click()
+  await expect(desktopFab).toHaveAttribute('aria-expanded', 'true')
+  const splitButton = page.getByRole('button', { name: 'Split a Bill' })
+  await expect(splitButton).toBeVisible()
+  await splitButton.click()
+
+  const dialog = page.getByRole('dialog', { name: 'Split a Bill' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.locator('input[aria-label="Total bill amount"]')).toBeVisible()
+  await expect(dialog.locator('input[aria-label="Bill description"]')).toBeVisible()
+  await expect(dialog.locator('select[aria-label="Account that paid for the bill"]')).toBeVisible()
+  const desktopFit = await dialog.evaluate(element => {
+    const box = element.getBoundingClientRect()
+    const tabs = element.querySelector('[aria-label="Split calculation mode"]')!
+    const tabItems = Array.from(tabs.querySelectorAll<HTMLElement>('[data-glass-key]'))
+    return { top: box.top, bottom: box.bottom, height: box.height, viewport: window.innerHeight, widths: tabItems.map(item => item.getBoundingClientRect().width) }
+  })
+  expect(desktopFit.top).toBeGreaterThanOrEqual(0)
+  expect(desktopFit.bottom).toBeLessThanOrEqual(desktopFit.viewport)
+  expect(Math.max(...desktopFit.widths) - Math.min(...desktopFit.widths)).toBeLessThanOrEqual(1)
+  await expect(dialog.getByRole('button', { name: 'Record Split' })).toBeDisabled()
+  await dialog.getByRole('button', { name: 'Close split bill' }).click()
+
+  await page.setViewportSize({ width: 375, height: 667 })
+  await page.locator('button.app-mobile-fab').click()
+  const mobileQuickAdd = page.getByRole('group', { name: 'Quick add actions' })
+  const mobileSplitButton = mobileQuickAdd.getByRole('button', { name: 'Split a Bill' })
+  await expect(mobileSplitButton).toBeVisible()
+  await mobileSplitButton.click()
+  await expect(dialog).toBeVisible()
+  const mobileFit = await dialog.evaluate(element => {
+    const box = element.getBoundingClientRect()
+    return { top: box.top, bottom: box.bottom, width: box.width, viewportWidth: window.innerWidth, viewportHeight: window.innerHeight }
+  })
+  expect(mobileFit.top).toBeGreaterThanOrEqual(0)
+  expect(mobileFit.bottom).toBeLessThanOrEqual(mobileFit.viewportHeight)
+  expect(mobileFit.width).toBeLessThanOrEqual(mobileFit.viewportWidth)
+  const modeTabs = dialog.getByRole('group', { name: 'Split calculation mode' })
+  for (const mode of ['Exact', 'Percent', 'Equal']) {
+    await modeTabs.getByRole('button', { name: mode }).click()
+    const formFit = await dialog.locator('form').evaluate(form => ({ scrollHeight: form.scrollHeight, clientHeight: form.clientHeight, bottom: form.getBoundingClientRect().bottom }))
+    expect(formFit.scrollHeight).toBeLessThanOrEqual(formFit.clientHeight + 1)
+    expect(formFit.bottom).toBeLessThanOrEqual(mobileFit.viewportHeight)
+  }
+  expect(evidence.unexpectedOrigins).toEqual([])
+  expect(evidence.tableMutations).toEqual([])
+  expect(evidence.unexpectedRpcs).toEqual([])
 })
 
 test('creator profile remains usable on mobile', async ({ page }) => {
@@ -445,10 +566,17 @@ test('creator profile remains usable on mobile', async ({ page }) => {
     expect(portraitGeometry.face.bottom).toBeLessThan(portraitGeometry.frame.bottom)
   }
 
-  for (const viewport of [{ width: 320, height: 568 }, { width: 360, height: 800 }, { width: 390, height: 844 }]) {
+  for (const viewport of [{ width: 320, height: 568 }, { width: 360, height: 800 }, { width: 375, height: 667 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport)
     await openCreator.click()
     await assertPortraitFits()
+    const dialogBounds = await creator.boundingBox()
+    expect(dialogBounds).not.toBeNull()
+    expect(dialogBounds!.x).toBeGreaterThanOrEqual(0)
+    expect(dialogBounds!.y).toBeGreaterThanOrEqual(0)
+    expect(dialogBounds!.x + dialogBounds!.width).toBeLessThanOrEqual(viewport.width)
+    expect(dialogBounds!.y + dialogBounds!.height).toBeLessThanOrEqual(viewport.height)
+    await expect(creator.getByRole('button', { name: 'Close creator profile' })).toBeInViewport()
   await creator.evaluate(element => { element.scrollTop = element.scrollHeight })
   const portraitStaysVisible = await creator.locator('.creator-profile-photo').evaluate(photo => {
     const bounds = photo.getBoundingClientRect()
@@ -462,6 +590,18 @@ test('creator profile remains usable on mobile', async ({ page }) => {
   await openCreator.click()
   await assertPortraitFits()
   await page.screenshot({ path: 'test-results/creator-modal-mobile-face.png' })
+  await page.waitForTimeout(80)
+  await page.evaluate(() => {
+    const dispatchOrientation = (beta: number, gamma: number) => {
+      const event = new Event('deviceorientation')
+      Object.defineProperties(event, { beta: { value: beta }, gamma: { value: gamma } })
+      window.dispatchEvent(event)
+    }
+    dispatchOrientation(0, 0) // Calibrate to the phone's current hold angle.
+    dispatchOrientation(8, -6)
+  })
+  await expect.poll(() => creator.evaluate(element => element.style.getPropertyValue('--tilt-x'))).not.toBe('0deg')
+  await expect.poll(() => creator.evaluate(element => element.style.getPropertyValue('--glare-x'))).not.toBe('50%')
   await creator.locator('.creator-profile-photo').click()
   const photoViewer = page.getByRole('dialog', { name: 'Creator photo' })
   await expect(photoViewer).toBeVisible()
@@ -571,6 +711,7 @@ test('navbar viewport selector fits the narrow-phone customization modal', async
   const dialog = page.getByRole('dialog', { name: 'Customize Navbar Layout' })
   const tabs = dialog.getByRole('tablist', { name: 'Navbar viewport layout' })
   await expect(tabs).toBeVisible()
+  await expectModalSwitcherEven(tabs)
   const geometry = await tabs.evaluate(element => {
     const bounds = element.getBoundingClientRect()
     const dialogBounds = element.closest('[role="dialog"]')!.getBoundingClientRect()
@@ -584,7 +725,49 @@ test('navbar viewport selector fits the narrow-phone customization modal', async
   await expect.poll(() => tabs.evaluate(element => Number.parseFloat(getComputedStyle(element).getPropertyValue('--cap-w')))).toBeGreaterThan(0)
 })
 
-test('mobile navigation keeps a floating Settings hub and grouped module launcher', async ({ page }) => {
+test('recurring plan tabs fit the iPhone SE viewport without an inner scrollbar', async ({ page }) => {
+  await installSyntheticBackend(page)
+  await page.setViewportSize({ width: 375, height: 667 })
+  await page.goto('/calendar')
+  await page.getByRole('button', { name: /Add Recurring/ }).click()
+
+  const dialog = page.locator('.app-recurring-plan-modal')
+  await expect(dialog).toBeVisible()
+  const modalBackdrop = dialog.locator('xpath=..')
+  await expect(dialog.getByRole('button', { name: 'Close recurring plan' })).toBeVisible()
+  await expect(modalBackdrop).toHaveCSS('z-index', '100')
+  expect(Number(await page.locator('.app-mobile-nav').evaluate(element => getComputedStyle(element).zIndex))).toBeLessThan(Number(await modalBackdrop.evaluate(element => getComputedStyle(element).zIndex)))
+  await expectModalSwitcherEven(dialog.getByRole('group', { name: 'Recurring plan type' }))
+  for (const tabSelector of ['[data-glass-key="personal"]', '[data-glass-key="lent"]', '[data-glass-key="borrowed"]']) {
+    await dialog.locator(tabSelector).click()
+    await expect(dialog.getByRole('button', { name: /Save Personal EMI|Send EMI Request/ })).toBeVisible()
+    const layout = await dialog.evaluate(element => {
+      const card = element.getBoundingClientRect()
+      const body = element.querySelector<HTMLElement>('.app-recurring-plan-body')!
+      const submit = element.querySelector<HTMLButtonElement>('button[type="submit"]')!.getBoundingClientRect()
+      const action = element.querySelector<HTMLElement>('.app-recurring-plan-actions')!.getBoundingClientRect()
+      const submitHit = document.elementFromPoint(submit.left + submit.width / 2, submit.top + submit.height / 2)
+      const actionStyle = getComputedStyle(element.querySelector<HTMLElement>('.app-recurring-plan-actions')!)
+      return { left: card.left, right: card.right, top: card.top, bottom: card.bottom, submitBottom: submit.bottom, actionBottom: action.bottom, actionWidth: action.width, submitWidth: submit.width, actionBackground: actionStyle.backgroundColor, actionBorderTopWidth: actionStyle.borderTopWidth, bodyClientHeight: body.clientHeight, bodyScrollHeight: body.scrollHeight, submitHit: submitHit ? `${submitHit.tagName}.${(submitHit as HTMLElement).className}` : 'none', submitClickable: submitHit === element.querySelector('button[type="submit"]') || element.querySelector('button[type="submit"]')!.contains(submitHit) }
+    })
+    expect(layout.left).toBeGreaterThanOrEqual(0)
+    expect(layout.right).toBeLessThanOrEqual(375)
+    expect(layout.top).toBeGreaterThanOrEqual(0)
+    expect(layout.bottom).toBeLessThanOrEqual(667)
+    expect(layout.submitBottom).toBeLessThanOrEqual(layout.bottom)
+    expect(layout.actionBottom).toBeLessThanOrEqual(layout.bottom)
+    expect(layout.submitClickable, `submit layout: ${JSON.stringify(layout)}`).toBeTruthy()
+    expect(layout.submitWidth).toBeGreaterThan(layout.actionWidth - 40)
+    expect(layout.actionBackground).toBe('rgba(0, 0, 0, 0)')
+    expect(layout.actionBorderTopWidth).toBe('0px')
+    expect(layout.bodyScrollHeight).toBeLessThanOrEqual(layout.bodyClientHeight + 1)
+  }
+  page.once('dialog', alert => alert.accept())
+  await dialog.getByRole('button', { name: 'Close recurring plan' }).click()
+  await expect(dialog).toBeHidden()
+})
+
+test('mobile navigation keeps three custom slots and exposes Settings plus notifications in the header', async ({ page }) => {
   await installSyntheticBackend(page, 'light')
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
@@ -601,6 +784,9 @@ test('mobile navigation keeps a floating Settings hub and grouped module launche
   expect(await page.locator('.liquid-toggle-filters').evaluate(element => element.getBoundingClientRect().height)).toBe(0)
 
   const mobile = page.getByRole('navigation', { name: 'Mobile navigation' })
+  await expect(page.locator('.app-mobile-context').getByRole('link', { name: 'Notifications and approvals' })).toBeVisible()
+  await expect(page.locator('.app-mobile-context').getByRole('link', { name: 'Settings' })).toBeVisible()
+  await expect(mobile.getByRole('link', { name: 'Settings' })).toHaveCount(0)
   const dockBounds = await mobile.boundingBox()
   expect(dockBounds).not.toBeNull()
   expect(dockBounds!.x + dockBounds!.width / 2).toBeCloseTo(195, 0)
@@ -612,6 +798,34 @@ test('mobile navigation keeps a floating Settings hub and grouped module launche
   await expect(mobile.getByRole('link', { name: 'Dashboard' })).toBeVisible()
   await expect(mobile.getByRole('link', { name: 'Ledger' })).toBeVisible()
   await expect(mobile.getByRole('button', { name: 'Add transaction or debt' })).toBeVisible()
+  await page.locator('.app-mobile-context').getByRole('link', { name: 'Notifications and approvals' }).click()
+  await expect(page).toHaveURL(/\/notifications$/)
+  await expect(page.getByRole('heading', { name: 'Notifications & approvals' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /Pending Approvals/ })).toBeVisible()
+  await page.getByRole('tab', { name: /Actionable Alerts/ }).click()
+  await expect(page.getByText('No actionable alerts')).toBeVisible()
+  await page.goto('/')
+  await page.setViewportSize({ width: 375, height: 667 })
+  const assertModalFitsPhone = async (dialog: import('@playwright/test').Locator, submitName: RegExp) => {
+    const geometry = await dialog.evaluate(element => {
+      const card = element.getBoundingClientRect()
+      const submit = element.querySelector<HTMLButtonElement>('button[type="submit"]')?.getBoundingClientRect()
+      return { left: card.left, right: card.right, top: card.top, bottom: card.bottom, submitBottom: submit?.bottom ?? Number.POSITIVE_INFINITY }
+    })
+    expect(geometry.left).toBeGreaterThanOrEqual(0)
+    expect(geometry.right).toBeLessThanOrEqual(375)
+    expect(geometry.top).toBeGreaterThanOrEqual(0)
+    expect(geometry.bottom).toBeLessThanOrEqual(667)
+    expect(geometry.submitBottom).toBeLessThanOrEqual(geometry.bottom)
+    await expect(dialog.getByRole('button', { name: submitName })).toBeVisible()
+  }
+  const assertModalCloseAboveTabs = async (dialog: import('@playwright/test').Locator, closeName: string, tabsName: string) => {
+    const close = await dialog.getByRole('button', { name: closeName }).boundingBox()
+    const tabs = await dialog.getByRole('group', { name: tabsName }).boundingBox()
+    expect(close).not.toBeNull()
+    expect(tabs).not.toBeNull()
+    expect(close!.y + close!.height).toBeLessThanOrEqual(tabs!.y)
+  }
   const addButton = mobile.locator('button.app-mobile-fab')
   await expect(addButton).toHaveClass(/rounded-full/)
   await expect(addButton).toHaveClass(/h-12/)
@@ -626,6 +840,12 @@ test('mobile navigation keeps a floating Settings hub and grouped module launche
   await expect(quickAdd.getByRole('button', { name: 'Transaction' })).toBeVisible()
   await quickAdd.getByRole('button', { name: 'Transaction' }).click()
   await expect(page.getByRole('heading', { name: 'New Transaction' })).toBeVisible()
+  const transactionDialog = page.locator('.app-transaction-modal')
+  await expectModalSwitcherEven(transactionDialog.getByRole('group', { name: 'Transaction type' }))
+  await assertModalCloseAboveTabs(transactionDialog, 'Close transaction', 'Transaction type')
+  await assertModalFitsPhone(transactionDialog, /Log Transaction/)
+  await transactionDialog.getByRole('button', { name: /transfer/i }).click()
+  await assertModalFitsPhone(transactionDialog, /Log Transaction/)
   const transactionPlaceholderColors = await page.locator('.app-financial-entry-modal input[placeholder]').evaluateAll(elements => elements.map(element => getComputedStyle(element, '::placeholder').color))
   expect(transactionPlaceholderColors.length).toBeGreaterThan(0)
   expect(transactionPlaceholderColors.every(color => color === 'rgb(89, 87, 79)')).toBe(true)
@@ -634,6 +854,10 @@ test('mobile navigation keeps a floating Settings hub and grouped module launche
   await addButton.click()
   await quickAdd.getByRole('button', { name: 'Add Debt / IOU' }).click()
   await expect(page.getByRole('heading', { name: 'Track P2P Debt' })).toBeVisible()
+  const debtDialog = page.locator('.app-debt-entry-modal')
+  await assertModalFitsPhone(debtDialog, /Log Handshake Transfer/)
+  await expectModalSwitcherEven(debtDialog.getByRole('group', { name: 'Debt direction' }))
+  await assertModalCloseAboveTabs(debtDialog, 'Close debt form', 'Debt direction')
   const debtPlaceholderColors = await page.locator('.app-financial-entry-modal input[placeholder]').evaluateAll(elements => elements.map(element => getComputedStyle(element, '::placeholder').color))
   expect(debtPlaceholderColors.length).toBeGreaterThan(0)
   expect(debtPlaceholderColors.every(color => color === 'rgb(89, 87, 79)')).toBe(true)
@@ -689,29 +913,32 @@ test('mobile navigation keeps a floating Settings hub and grouped module launche
   })
   for (const pair of lightContrast.labels) expect(contrastRatio(pair.foreground, pair.background), JSON.stringify(pair)).toBeGreaterThanOrEqual(4.5)
   for (const pair of [...lightContrast.icons, lightContrast.fab]) expect(contrastRatio(pair.foreground, pair.background), JSON.stringify(pair)).toBeGreaterThanOrEqual(3)
-  await mobile.getByRole('link', { name: 'Settings' }).click()
+  await page.locator('.app-mobile-context').getByRole('link', { name: 'Settings' }).click()
   await expect(page).toHaveURL(/\/settings$/)
   await expect(page.getByRole('heading', { name: 'Workspace & modules' })).toBeVisible()
   await page.getByRole('button', { name: 'Customize Navbar Layout' }).click()
   const mobileLayoutDialog = page.getByRole('dialog', { name: 'Customize Navbar Layout' })
-  await expect(mobileLayoutDialog.getByText('Current viewport Â· Mobile')).toBeVisible()
-  await expect(mobileLayoutDialog.getByRole('switch', { name: 'Show Accounts in mobile navbar' })).toBeDisabled()
+  await expect(mobileLayoutDialog.getByText(/Current viewport.*Mobile/)).toBeVisible()
+  await expect(mobileLayoutDialog.getByRole('switch', { name: 'Show Accounts in mobile navbar' })).toBeEnabled()
+  await mobileLayoutDialog.getByRole('switch', { name: 'Show Accounts in mobile navbar' }).click()
+  await expect(mobileLayoutDialog.getByRole('switch', { name: 'Show Debts & IOUs in mobile navbar' })).toBeDisabled()
   await mobileLayoutDialog.getByRole('button', { name: 'Move Chittis up' }).click()
   await mobileLayoutDialog.getByRole('button', { name: 'Close navbar customization' }).click()
   await expect.poll(() => page.evaluate(userId => {
     const layout = JSON.parse(localStorage.getItem(`rr-capital.workspace-layout.v1.${userId}`) || '{}')
     return layout.navbarLayout
-  }, syntheticUserId)).toEqual({ mobileSelectedUrls: ['/chittis', '/ledger'], desktopSelectedUrls: ['/ledger', '/calendar', '/chittis'] })
+  }, syntheticUserId)).toEqual({ mobileSelectedUrls: ['/chittis', '/ledger', '/accounts'], desktopSelectedUrls: ['/ledger', '/calendar', '/chittis'] })
   await expect(mobile.getByRole('link', { name: 'Dashboard' })).toBeVisible()
   await expect(mobile.getByRole('link', { name: 'Chittis' })).toBeVisible()
   await expect(mobile.getByRole('link', { name: 'Ledger' })).toBeVisible()
-  await expect(mobile.getByRole('link', { name: 'Settings' })).toBeVisible()
+  await expect(mobile.getByRole('link', { name: 'Accounts' })).toBeVisible()
+  await expect(page.locator('.app-mobile-context').getByRole('link', { name: 'Settings' })).toBeVisible()
   const analytics = page.getByRole('region', { name: 'Analytics, Planning & Wellness' })
   await expect(analytics.getByRole('link', { name: 'Reports' })).toBeVisible()
   await analytics.getByRole('link', { name: 'Reports' }).click()
   await expect(page).toHaveURL(/\/reports$/)
   await expect(page.getByRole('navigation', { name: 'Workspace breadcrumb' })).toContainText('Analytics, Planning & Wellness')
-  await expect(mobile.getByRole('link', { name: 'Settings' })).toHaveClass(/is-active/)
+  await expect(page.locator('.app-mobile-context').getByRole('link', { name: 'Settings' })).toHaveClass(/is-active/)
   await page.goto('/')
   await expect(page.locator('.app-mobile-context')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
@@ -824,6 +1051,95 @@ test('Settings still loads profile preferences while the Telegram status migrati
   expect(evidence.unexpectedOrigins).toEqual([])
 })
 
+test('biometric lock uses the shared liquid switch and reveals device registration controls', async ({ page }) => {
+  await installSyntheticBackend(page)
+  await page.goto('/settings')
+
+  const biometricSwitch = page.getByRole('switch', { name: 'Biometric / FaceID Lock' })
+  await expect(biometricSwitch).toBeVisible()
+  await expect(biometricSwitch).not.toBeChecked()
+  await biometricSwitch.click()
+  await expect(biometricSwitch).toBeChecked()
+  await expect(page.getByText('Registered Devices')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Add Device' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Unsaved changes' })).toBeVisible()
+})
+
+test('Settings theme changes keep the floating unsaved dialog fixed without changing scroll position', async ({ page }) => {
+  await installSyntheticBackend(page, 'dark')
+  await page.goto('/settings')
+  const appearance = page.getByRole('heading', { name: 'Appearance' })
+  await expect(appearance).toBeVisible()
+  await appearance.scrollIntoViewIfNeeded()
+  await page.waitForTimeout(100)
+
+  const scrollBefore = await page.evaluate(() => window.scrollY)
+  const light = page.getByRole('radio', { name: 'Light' })
+  const dark = page.getByRole('radio', { name: 'Dark' })
+
+  await light.click()
+  await expect(page.getByText('You have unsaved changes')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scrollBefore)
+  const dirtyPill = page.getByRole('region', { name: 'Unsaved changes' })
+  await expect(dirtyPill).toHaveCSS('position', 'fixed')
+  await expect.poll(() => dirtyPill.locator('.liquid-unsaved-dialog__actions').evaluate((element) => {
+    const actions = element as HTMLElement
+    return actions.classList.contains('is-ready') && Number.parseFloat(actions.style.getPropertyValue('--cap-w')) > 0
+  })).toBe(true)
+  const initialCap = await dirtyPill.locator('.liquid-unsaved-dialog__actions').evaluate((element) => {
+    const actions = element as HTMLElement
+    const save = actions.querySelector<HTMLButtonElement>('.liquid-unsaved-dialog__btn--save')
+    if (!save) throw new Error('Save action is missing from the unsaved dialog')
+    return {
+      capX: Number.parseFloat(actions.style.getPropertyValue('--cap-x')),
+      capW: Number.parseFloat(actions.style.getPropertyValue('--cap-w')),
+      expectedX: Math.min(actions.offsetWidth - 2 - Math.min(save.offsetWidth + 10, actions.offsetWidth - 4), Math.max(2, save.offsetLeft - 5)),
+      expectedW: Math.min(save.offsetWidth + 10, actions.offsetWidth - 4),
+      textFits: save.scrollWidth <= save.clientWidth,
+      ready: actions.classList.contains('is-ready'),
+      positioned: actions.dataset.capPositioned === 'true',
+    }
+  })
+  expect(initialCap.ready).toBe(true)
+  expect(initialCap.positioned).toBe(true)
+  expect(initialCap.textFits).toBe(true)
+  expect(initialCap.capW).toBeGreaterThan(0)
+  expect(Math.abs(initialCap.capX - initialCap.expectedX)).toBeLessThanOrEqual(1)
+  expect(Math.abs(initialCap.capW - initialCap.expectedW)).toBeLessThanOrEqual(1)
+  const initialCapX = String(initialCap.capX)
+  await dirtyPill.getByRole('button', { name: 'Discard' }).hover()
+  await expect.poll(() => dirtyPill.locator('.liquid-unsaved-dialog__actions').evaluate((el) => (el as HTMLElement).style.getPropertyValue('--cap-x'))).not.toBe(initialCapX)
+  await dirtyPill.getByRole('button', { name: 'Save All Changes' }).hover()
+
+  await dark.click()
+  await expect(page.getByText('You have unsaved changes')).toBeHidden()
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scrollBefore)
+
+  await light.click()
+  await expect(page.getByText('You have unsaved changes')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(scrollBefore)
+
+  const lightBaselinePage = await page.context().newPage()
+  await installSyntheticBackend(lightBaselinePage, 'light')
+  await lightBaselinePage.goto('/settings')
+  const lightBaselineAppearance = lightBaselinePage.getByRole('heading', { name: 'Appearance' })
+  await expect(lightBaselineAppearance).toBeVisible()
+  await lightBaselineAppearance.scrollIntoViewIfNeeded()
+  const lightBaselineDark = lightBaselinePage.getByRole('radio', { name: 'Dark' })
+  await lightBaselineDark.scrollIntoViewIfNeeded()
+  // Let asynchronous settings sections finish laying out before capturing
+  // the scroll baseline, so the assertion isolates the appearance change.
+  await lightBaselinePage.waitForTimeout(350)
+  const lightScrollBefore = await lightBaselinePage.evaluate(() => window.scrollY)
+  await lightBaselineDark.click()
+  await expect(lightBaselinePage.getByText('You have unsaved changes')).toBeVisible()
+  await expect.poll(() => lightBaselinePage.evaluate(() => window.scrollY)).toBe(lightScrollBefore)
+  await lightBaselinePage.getByRole('radio', { name: 'Light' }).click()
+  await expect(lightBaselinePage.getByText('You have unsaved changes')).toBeHidden()
+  await expect.poll(() => lightBaselinePage.evaluate(() => window.scrollY)).toBe(lightScrollBefore)
+  await lightBaselinePage.close()
+})
+
 test('Telegram setup failure does not issue or display a link challenge', async ({ page }) => {
   const evidence = await installSyntheticBackend(page)
   const configurationRequests: Array<{ body: unknown; authorization: string }> = []
@@ -862,6 +1178,7 @@ test('Telegram setup failure does not issue or display a link challenge', async 
 
 test('dated opening balance submission stays inside the synthetic backend', async ({ page }) => {
   const evidence = await installSyntheticBackend(page)
+  await page.setViewportSize({ width: 375, height: 667 })
   const submittedAccounts: Array<Record<string, unknown>> = []
   const submittedAuthorization: string[] = []
 
@@ -888,6 +1205,20 @@ test('dated opening balance submission stays inside the synthetic backend', asyn
 
   await page.goto('/accounts')
   await page.getByRole('button', { name: /Add Account/ }).click()
+  const accountDialog = page.getByRole('dialog', { name: 'Add New Account' })
+  await expectModalSwitcherEven(accountDialog.getByRole('group', { name: 'Account family' }))
+  const accountBounds = await accountDialog.boundingBox()
+  expect(accountBounds).not.toBeNull()
+  expect(accountBounds!.x).toBeGreaterThanOrEqual(0)
+  expect(accountBounds!.y).toBeGreaterThanOrEqual(0)
+  expect(accountBounds!.x + accountBounds!.width).toBeLessThanOrEqual(375)
+  expect(accountBounds!.y + accountBounds!.height).toBeLessThanOrEqual(667)
+  const accountClose = await accountDialog.getByRole('button', { name: 'Close account form' }).boundingBox()
+  const accountTabs = await accountDialog.getByRole('group', { name: 'Account family' }).boundingBox()
+  expect(accountClose).not.toBeNull()
+  expect(accountTabs).not.toBeNull()
+  expect(accountClose!.y + accountClose!.height).toBeLessThanOrEqual(accountTabs!.y)
+  await expect(accountDialog.getByRole('button', { name: 'Create Account' })).toBeVisible()
   await page.getByPlaceholder('e.g., SBI Savings').fill('Synthetic dated account')
   await page.getByLabel('Starting balance').fill('1250.50')
   await page.getByLabel('Start tracking from').fill('2026-09-01')
@@ -906,6 +1237,26 @@ test('dated opening balance submission stays inside the synthetic backend', asyn
   expect(evidence.unexpectedOrigins).toEqual([])
   expect(evidence.blockedBrowserExtensionOrigins.every(origin => /\.kis\.v2\.scr\.kaspersky-labs\.com$/i.test(new URL(origin).hostname))).toBe(true)
   expect(evidence.unexpectedRpcs).toEqual([])
+})
+
+test('light-theme account and recurring modals keep helper copy legible', async ({ page }) => {
+  await installSyntheticBackend(page, 'light')
+  await page.setViewportSize({ width: 1366, height: 768 })
+
+  await page.goto('/accounts')
+  await page.getByRole('button', { name: /Add Account/ }).click()
+  const accountDialog = page.getByRole('dialog', { name: 'Add New Account' })
+  const accountDescription = accountDialog.locator('.app-account-tab-detail').first()
+  await expect(accountDescription).toHaveText('Money you hold')
+  await expect(accountDescription).toHaveCSS('color', 'rgb(108, 106, 100)')
+  await accountDialog.getByRole('button', { name: /Liquid/ }).click()
+  await expect(accountDescription).toHaveCSS('color', 'rgb(108, 106, 100)')
+  await page.goto('/calendar')
+  await page.getByRole('button', { name: /Add Recurring/ }).click()
+  const recurringDialog = page.locator('.app-recurring-plan-modal')
+  const subtitle = recurringDialog.getByText('Set the payment, dates, and account')
+  await expect(subtitle).toBeVisible()
+  await expect(subtitle).toHaveCSS('color', 'rgb(108, 106, 100)')
 })
 
 test('transaction before its account opening date is rejected before an outbox or network write', async ({ page }) => {
@@ -1080,6 +1431,7 @@ test('all application pages render from synthetic data on desktop and mobile wit
     { path: '/debts', title: 'Debts & IOUs' },
     { path: '/contacts', title: 'Shadow Contacts' },
     { path: '/settings', title: 'Settings' },
+    { path: '/notifications', title: 'Notifications & approvals' },
     { path: '/offline', title: 'Offline transactions' },
     { path: '/chittis', title: 'Chitti / ROSCA' },
   ]
@@ -1091,6 +1443,40 @@ test('all application pages render from synthetic data on desktop and mobile wit
       await expect(page).toHaveURL(new RegExp(`${item.path.replaceAll('/', '\\/')}$`))
       await expect(page.locator('main').first()).toBeVisible()
       await expect(page.getByRole('heading', { name: item.title, exact: true }).first()).toBeVisible()
+      if (item.path === '/') {
+        const geometry = await page.evaluate(() => {
+          const netWorth = document.querySelector('.ed-networth')!.getBoundingClientRect()
+          const commitments = document.querySelector('.ed-commitments')!.getBoundingClientRect()
+          const cashFlow = document.querySelector('.ed-chart')!.getBoundingClientRect()
+          const accounts = document.querySelector('.dashboard-accounts-card')!.getBoundingClientRect()
+          const list = document.querySelector('.dashboard-accounts-card .dashboard-card-scroll') as HTMLElement
+          const row = list.querySelector('.ed-account')
+          if (row) {
+            for (let index = 0; index < 16; index += 1) list.append(row.cloneNode(true))
+          }
+          const populated = {
+            cashFlowHeight: document.querySelector('.ed-chart')!.getBoundingClientRect().height,
+            accountsHeight: document.querySelector('.dashboard-accounts-card')!.getBoundingClientRect().height,
+            scrollHeight: list.scrollHeight,
+            clientHeight: list.clientHeight,
+          }
+          list.querySelectorAll('.ed-account').forEach((account, index) => { if (index > 0) account.remove() })
+          return {
+            heroHeightDifference: Math.abs(netWorth.height - commitments.height),
+            cashFlowHeight: cashFlow.height,
+            accountsHeight: accounts.height,
+            populated,
+          }
+        })
+        if (viewport.width >= 768) {
+          expect(geometry.heroHeightDifference).toBeLessThanOrEqual(1)
+          expect(Math.abs(geometry.cashFlowHeight - geometry.accountsHeight)).toBeLessThanOrEqual(1)
+          expect(Math.abs(geometry.populated.cashFlowHeight - geometry.populated.accountsHeight)).toBeLessThanOrEqual(1)
+          expect(geometry.populated.scrollHeight).toBeGreaterThan(geometry.populated.clientHeight)
+        } else {
+          expect(geometry.accountsHeight).toBeLessThanOrEqual(342)
+        }
+      }
       if (item.path === '/accounts') await expect(page.getByText('Synthetic primary bank')).toBeVisible()
       if (item.path === '/ledger' || item.path === '/reports') await expect(page.getByText('Synthetic groceries')).toBeVisible()
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width)
@@ -1101,5 +1487,35 @@ test('all application pages render from synthetic data on desktop and mobile wit
   expect(evidence.tableMutations).toEqual([])
   expect(evidence.unexpectedRpcs).toEqual([])
   expect(browserErrors).toEqual([])
+})
+
+test('financial workspaces render safely for the reset owner with no finance rows', async ({ page }) => {
+  const evidence = await installSyntheticBackend(page, 'dark', true)
+  const browserErrors: string[] = []
+  page.on('pageerror', error => browserErrors.push(error.message))
+  const pages = [
+    { path: '/', title: 'Financial overview' },
+    { path: '/calendar', title: 'Calendar & EMIs' },
+    { path: '/ledger', title: 'Transactions' },
+    { path: '/reports', title: 'Reports' },
+    { path: '/accounts', title: 'Accounts' },
+    { path: '/debts', title: 'Debts & IOUs' },
+    { path: '/contacts', title: 'Shadow Contacts' },
+    { path: '/notifications', title: 'Notifications & approvals' },
+    { path: '/chittis', title: 'Chitti / ROSCA' },
+  ]
+
+  for (const viewport of [{ width: 1366, height: 768 }, { width: 375, height: 667 }]) {
+    await page.setViewportSize(viewport)
+    for (const item of pages) {
+      await page.goto(item.path, { waitUntil: 'domcontentloaded' })
+      await expect(page).toHaveURL(new RegExp(`${item.path.replaceAll('/', '\\/')}$`))
+      await expect(page.getByRole('heading', { name: item.title, exact: true }).first()).toBeVisible()
+    }
+  }
+
+  expect(browserErrors).toEqual([])
+  expect(evidence.tableMutations).toEqual([])
+  expect(evidence.unexpectedRpcs).toEqual([])
 })
 

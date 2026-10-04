@@ -76,25 +76,28 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 bg-black/60 backdrop-blur-md animate-in fade-in duration-200 sm:p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="add-account-title" className="relative w-full max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-1.5rem)] overflow-y-auto p-3 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl animate-in zoom-in-95 duration-200 text-white sm:max-w-md sm:p-6">
+      <div role="dialog" aria-modal="true" aria-labelledby="add-account-title" className="app-account-entry-modal relative w-full max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-1.5rem)] overflow-hidden p-3 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl animate-in zoom-in-95 duration-200 text-white sm:max-w-md sm:p-6">
         
-        <button 
-          onClick={() => handleClose()}
-          className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        <h2 id="add-account-title" className="text-xl font-bold mb-4 text-center sm:mb-6">Add New Account</h2>
+        <div className="mb-2.5 flex shrink-0 items-start justify-between gap-3">
+          <h2 id="add-account-title" className="min-w-0 pt-1 text-left text-xl font-bold">Add New Account</h2>
+          <button
+            type="button"
+            aria-label="Close account form"
+            onClick={() => handleClose()}
+            className="-mr-1 -mt-1 shrink-0 rounded-full p-2 text-white/60 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)]"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col space-y-2 sm:space-y-6">
           
           {/* Choose the account family first, then its specific kind. */}
           <div className="space-y-2 sm:space-y-3">
-            <LiquidGlassSwitcher activeKey={accountGroup} label="Account family" className="w-full">
+            <LiquidGlassSwitcher activeKey={accountGroup} label="Account family" className="app-modal-liquid-switcher w-full">
               {([
                 { id: 'liquid', title: 'Liquid', detail: 'Money you hold', icon: Wallet },
-                { id: 'credit', title: 'Credit line', detail: 'Borrowed spending limit', icon: CreditCard },
+                { id: 'credit', title: 'Credit Line', detail: 'Borrowed spending limit', icon: CreditCard },
               ] as const).map(({ id, title, detail, icon: Icon }) => (
                 <button
                   key={id}
@@ -109,7 +112,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
                   <Icon className={`h-5 w-5 shrink-0 ${accountGroup === id ? 'text-indigo-300' : ''}`} />
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold">{title}</span>
-                    <span className="block text-[11px] text-white/45">{detail}</span>
+                    <span className="app-account-tab-detail block text-[11px] text-[var(--muted)]">{detail}</span>
                   </span>
                 </button>
               ))}

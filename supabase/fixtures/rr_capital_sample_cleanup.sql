@@ -40,10 +40,27 @@ DELETE FROM public.accounts WHERE id::text LIKE 'a7300000-0000-4000-8000-%' AND 
 DELETE FROM public.parties WHERE id::text LIKE 'a7300000-0000-4000-8004-%';
 
 DO $$
+DECLARE v_owner uuid := '5bf09e85-e346-4c79-808f-29d8577d04ae';
 BEGIN
   IF EXISTS (SELECT 1 FROM public.accounts WHERE id::text LIKE 'a7300000-0000-4000-8000-%')
+     OR EXISTS (SELECT 1 FROM public.contacts WHERE id::text LIKE 'a7300000-0000-4000-8001-%')
+     OR EXISTS (SELECT 1 FROM public.transaction_categories WHERE id::text LIKE 'a7300000-0000-4000-8002-%')
      OR EXISTS (SELECT 1 FROM public.transactions WHERE id::text LIKE 'a7300000-0000-4000-8003-%')
      OR EXISTS (SELECT 1 FROM public.parties WHERE id::text LIKE 'a7300000-0000-4000-8004-%')
+     OR EXISTS (SELECT 1 FROM public.obligations WHERE id::text LIKE 'a7300000-0000-4000-8005-%')
+     OR EXISTS (SELECT 1 FROM public.recurring_emis WHERE id::text LIKE 'a7300000-0000-4000-8006-%')
+     OR EXISTS (SELECT 1 FROM public.chittis WHERE id::text LIKE 'a7300000-0000-4000-8007-%')
+     OR EXISTS (SELECT 1 FROM public.budget_envelopes WHERE id::text LIKE 'a7300000-0000-4000-8008-%')
+     OR EXISTS (SELECT 1 FROM public.transaction_templates WHERE id::text LIKE 'a7300000-0000-4000-8009-%')
+     OR EXISTS (SELECT 1 FROM public.savings_goals WHERE id::text LIKE 'a7300000-0000-4000-8010-%')
+     OR EXISTS (SELECT 1 FROM public.savings_goal_contributions WHERE id::text LIKE 'a7300000-0000-4000-8011-%')
+     OR EXISTS (SELECT 1 FROM public.shopping_lists WHERE id::text LIKE 'a7300000-0000-4000-8012-%')
+     OR EXISTS (SELECT 1 FROM public.shopping_list_items WHERE id::text LIKE 'a7300000-0000-4000-8013-%')
+     OR EXISTS (SELECT 1 FROM private.installment_occurrences WHERE owner_id = v_owner)
+     OR NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = v_owner)
+     OR NOT EXISTS (SELECT 1 FROM public.profile_directory)
+     OR (SELECT count(*) FROM public.user_feature_flags) <> 6
+     OR (SELECT count(*) FROM auth.users) <> 1
   THEN RAISE EXCEPTION 'Cleanup postcondition failed'; END IF;
 END $$;
 COMMIT;

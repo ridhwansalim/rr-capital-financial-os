@@ -11,9 +11,9 @@ export interface NavbarLayoutPreferences {
 }
 export type NavbarLayoutUpdate = NavbarLayoutPreferences | ((current: NavbarLayoutPreferences) => NavbarLayoutPreferences)
 
-const CUSTOM_ROUTES = ROUTE_REGISTRY.filter(route => route.path !== '/' && route.path !== '/settings')
+const CUSTOM_ROUTES = ROUTE_REGISTRY.filter(route => route.path !== '/' && route.path !== '/settings' && !route.utility)
 const DEFAULT_LAYOUT: NavbarLayoutPreferences = {
-  mobileSelectedUrls: CUSTOM_ROUTES.filter(route => getDefaultPlacement(route, true) === 'navbar').slice(0, 2).map(route => route.path),
+  mobileSelectedUrls: CUSTOM_ROUTES.filter(route => getDefaultPlacement(route, true) === 'navbar').slice(0, 3).map(route => route.path),
   desktopSelectedUrls: CUSTOM_ROUTES.filter(route => getDefaultPlacement(route, false) === 'navbar').slice(0, 10).map(route => route.path),
 }
 
@@ -26,7 +26,7 @@ function cleanUrls(value: unknown, limit: number) {
 function normalizeLayout(value: unknown): NavbarLayoutPreferences | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const raw = value as Partial<NavbarLayoutPreferences>
-  const mobile = cleanUrls(raw.mobileSelectedUrls, 2)
+  const mobile = cleanUrls(raw.mobileSelectedUrls, 3)
   const desktop = cleanUrls(raw.desktopSelectedUrls, 10)
   return mobile && desktop ? { mobileSelectedUrls: mobile, desktopSelectedUrls: desktop } : null
 }
@@ -44,14 +44,14 @@ function readStoredWorkspace(storageKey: string | null) {
   try {
     const raw = JSON.parse(localStorage.getItem(storageKey) || '{}') as { placements?: unknown; optionalFlags?: unknown; navbarLayout?: unknown }
     const placements = raw.placements && typeof raw.placements === 'object' && !Array.isArray(raw.placements)
-      ? Object.fromEntries(Object.entries(raw.placements).filter(([path, value]) => ROUTE_REGISTRY.some(route => route.path === path && path !== '/' && path !== '/settings') && (value === 'navbar' || value === 'settings'))) as Record<string, RoutePlacement>
+      ? Object.fromEntries(Object.entries(raw.placements).filter(([path, value]) => ROUTE_REGISTRY.some(route => route.path === path && !route.utility && path !== '/' && path !== '/settings') && (value === 'navbar' || value === 'settings'))) as Record<string, RoutePlacement>
       : {}
     const optionalFlags = raw.optionalFlags && typeof raw.optionalFlags === 'object' && !Array.isArray(raw.optionalFlags)
       ? Object.fromEntries(Object.entries(raw.optionalFlags).filter(([, value]) => typeof value === 'boolean')) as FeatureFlags
       : {}
     // Migrate the previous single placement map into separate ordered layouts.
     const legacyLayout = {
-      mobileSelectedUrls: CUSTOM_ROUTES.filter(route => (placements[route.path] || getDefaultPlacement(route, true)) === 'navbar').slice(0, 2).map(route => route.path),
+      mobileSelectedUrls: CUSTOM_ROUTES.filter(route => (placements[route.path] || getDefaultPlacement(route, true)) === 'navbar').slice(0, 3).map(route => route.path),
       desktopSelectedUrls: CUSTOM_ROUTES.filter(route => (placements[route.path] || getDefaultPlacement(route, false)) === 'navbar').slice(0, 10).map(route => route.path),
     }
     return { placements, optionalFlags, navbarLayout: normalizeLayout(raw.navbarLayout) || legacyLayout }
@@ -168,7 +168,7 @@ export function useWorkspaceLayout(userId: string | null, serverFlags: FeatureFl
     setLayoutState(current => {
       const active = current.storageKey === storageKey ? current : { storageKey, ...readStoredWorkspace(storageKey) }
       const next = typeof update === 'function' ? update(active.navbarLayout) : update
-      const normalized = { mobileSelectedUrls: cleanUrls(next.mobileSelectedUrls, 2) || [], desktopSelectedUrls: cleanUrls(next.desktopSelectedUrls, 10) || [] }
+      const normalized = { mobileSelectedUrls: cleanUrls(next.mobileSelectedUrls, 3) || [], desktopSelectedUrls: cleanUrls(next.desktopSelectedUrls, 10) || [] }
       if (JSON.stringify(normalized) === JSON.stringify(active.navbarLayout)) return active
       return { ...active, navbarLayout: normalized }
     })
@@ -179,7 +179,7 @@ export function useWorkspaceLayout(userId: string | null, serverFlags: FeatureFl
     if (!route || path === '/' || path === '/settings') return
     const current = layoutState.storageKey === storageKey ? layoutState.navbarLayout : readStoredWorkspace(storageKey).navbarLayout
     const key = isMobile ? 'mobileSelectedUrls' : 'desktopSelectedUrls'
-    const limit = isMobile ? 2 : 10
+    const limit = isMobile ? 3 : 10
     const urls = current[key].filter(item => item !== path)
     if (placement === 'navbar' && urls.length < limit) urls.push(path)
     setNavbarLayout({ ...current, [key]: urls })
@@ -189,12 +189,12 @@ export function useWorkspaceLayout(userId: string | null, serverFlags: FeatureFl
     if (path === '/' || path === '/settings') return 'navbar'
     const key = isMobile ? 'mobileSelectedUrls' : 'desktopSelectedUrls'
     const current = layoutState.storageKey === storageKey ? layoutState.navbarLayout : readStoredWorkspace(storageKey).navbarLayout
-    const visible = current[key].slice(0, isMobile ? 2 : desktopCapacity)
+    const visible = current[key].slice(0, isMobile ? 3 : desktopCapacity)
     return visible.includes(path) ? 'navbar' : 'settings'
   }, [desktopCapacity, isMobile, layoutState, storageKey])
 
   const selectedUrls = isMobile ? navbarLayout.mobileSelectedUrls : navbarLayout.desktopSelectedUrls
-  const visibleNavbarUrls = selectedUrls.slice(0, isMobile ? 2 : desktopCapacity)
+  const visibleNavbarUrls = selectedUrls.slice(0, isMobile ? 3 : desktopCapacity)
   const visibleSet = new Set(visibleNavbarUrls)
   const navbarRoutes = [
     ROUTE_REGISTRY.find(route => route.path === '/')!,

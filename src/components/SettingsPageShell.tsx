@@ -9,7 +9,7 @@ export default function SettingsPageShell({ route, placement, onPlacementChange,
   onPlacementChange: (placement: RoutePlacement) => void
   children: ReactNode
 }) {
-  if (placement !== 'settings' || route.path === '/' || route.path === '/settings') return <>{children}</>
+  if (route.utility || placement !== 'settings' || route.path === '/' || route.path === '/settings') return <>{children}</>
   return <>
     <div className="settings-page-context mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 pt-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
       <nav aria-label="Workspace breadcrumb" className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-[var(--muted)]">

@@ -9,33 +9,172 @@ const creatorLinks = [
   { label: 'Portfolio', href: 'https://ridhwansalim.github.io/Portfolio', brand: 'portfolio', icon: '' },
 ]
 
-export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+type DeviceOrientationPermission = typeof DeviceOrientationEvent & {
+  requestPermission?: () => Promise<'granted' | 'denied'>
+}
+
+/** Call from the logo's click handler so iOS can associate permission with a user gesture. */
+export async function requestCreatorMotionPermission(): Promise<boolean> {
+  if (typeof DeviceOrientationEvent === 'undefined') return false
+  const orientationApi = DeviceOrientationEvent as DeviceOrientationPermission
+  if (typeof orientationApi.requestPermission !== 'function') return true
+  try {
+    return (await orientationApi.requestPermission()) === 'granted'
+  } catch {
+    return false
+  }
+}
+
+export default function CreatorProfileDialog({ isOpen, onClose, motionEnabled = false, onRequestMotion }: { isOpen: boolean; onClose: () => void; motionEnabled?: boolean; onRequestMotion?: () => void }) {
   const dialogRef = useRef<HTMLElement>(null)
+  const backdropRef = useRef<HTMLDivElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const [contrastMode, setContrastMode] = useState<'light-ink' | 'dark-ink'>('light-ink')
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    const backdrop = backdropRef.current
+    if (!isOpen || !dialog || !backdrop) return
+
+    let frame = 0
+    const luminance = (r: number, g: number, b: number) => {
+      const linear = [r, g, b].map(value => {
+        const channel = value / 255
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+      })
+      return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+    }
+    const colorAt = (x: number, y: number) => {
+      const previousDialogPointerEvents = dialog.style.pointerEvents
+      const previousBackdropPointerEvents = backdrop.style.pointerEvents
+      dialog.style.pointerEvents = 'none'
+      backdrop.style.pointerEvents = 'none'
+      const stack = document.elementsFromPoint(x, y)
+      dialog.style.pointerEvents = previousDialogPointerEvents
+      backdrop.style.pointerEvents = previousBackdropPointerEvents
+
+      for (const element of stack) {
+        if (dialog.contains(element) || backdrop.contains(element)) continue
+        for (let node: Element | null = element; node; node = node.parentElement) {
+          const background = getComputedStyle(node).backgroundColor
+          const match = background.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/i)
+          if (!match) continue
+          const alphaText = match[4]
+          const alpha = alphaText ? (alphaText.endsWith('%') ? parseFloat(alphaText) / 100 : parseFloat(alphaText)) : 1
+          if (alpha < 0.08) continue
+          return luminance(Number(match[1]), Number(match[2]), Number(match[3])) * alpha + 0.5 * (1 - alpha)
+        }
+      }
+      const bodyColor = getComputedStyle(document.body).backgroundColor
+      const match = bodyColor.match(/[\d.]+/g)
+      return match?.length && Number.isFinite(Number(match[0]))
+        ? luminance(Number(match[0]), Number(match[1]), Number(match[2]))
+        : 0.5
+    }
+
+    const updateContrast = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        const bounds = dialog.getBoundingClientRect()
+        const points = [
+          [0.5, 0.08], [0.5, 0.32], [0.5, 0.56], [0.5, 0.82],
+          [0.12, 0.5], [0.88, 0.5],
+        ] as const
+        const average = points.reduce((total, [x, y]) => total + colorAt(
+          Math.max(0, Math.min(window.innerWidth - 1, bounds.left + bounds.width * x)),
+          Math.max(0, Math.min(window.innerHeight - 1, bounds.top + bounds.height * y))
+        ), 0) / points.length
+        setContrastMode(average < 0.35 ? 'dark-ink' : 'light-ink')
+      })
+    }
+
+    updateContrast()
+    window.addEventListener('scroll', updateContrast, { capture: true, passive: true })
+    window.addEventListener('resize', updateContrast, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', updateContrast, true)
+      window.removeEventListener('resize', updateContrast)
+      cancelAnimationFrame(frame)
+    }
+  }, [isOpen])
 
   useEffect(() => {
     const dialog = dialogRef.current
     if (!isOpen || !dialog) return
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const mobileViewport = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches
+    let initialBeta: number | null = null
+    let initialGamma: number | null = null
+    let hasOrientation = false
+    let raf = 0
+    let currentX = 0
+    let currentY = 0
+    let targetX = 0
+    let targetY = 0
+    const maxTilt = 10
+    const clamp = (value: number) => Math.max(-maxTilt, Math.min(maxTilt, value))
+    const writeTilt = (rotateX: number, rotateY: number) => {
+      dialog.style.setProperty('--tilt-x', `${rotateX}deg`)
+      dialog.style.setProperty('--tilt-y', `${rotateY}deg`)
+      dialog.style.setProperty('--glare-x', `${50 + (rotateY / maxTilt) * 35}%`)
+      dialog.style.setProperty('--glare-y', `${50 - (rotateX / maxTilt) * 35}%`)
+      // Keep the aliases used by older pointer styles in sync.
+      dialog.style.setProperty('--glass-tilt-x', `${rotateX}deg`)
+      dialog.style.setProperty('--glass-tilt-y', `${rotateY}deg`)
+    }
+    const animateTilt = () => {
+      raf = 0
+      currentX += (targetX - currentX) * 0.12
+      currentY += (targetY - currentY) * 0.12
+      if (Math.abs(targetX - currentX) < 0.01) currentX = targetX
+      if (Math.abs(targetY - currentY) < 0.01) currentY = targetY
+      writeTilt(currentX, currentY)
+      if (currentX !== targetX || currentY !== targetY) raf = requestAnimationFrame(animateTilt)
+    }
+    const setTarget = (x: number, y: number) => {
+      targetX = clamp(x)
+      targetY = clamp(y)
+      if (!raf) raf = requestAnimationFrame(animateTilt)
+    }
+    const handleOrientation = (event: DeviceOrientationEvent) => {
+      if (event.beta === null || event.gamma === null) return
+      if (initialBeta === null || initialGamma === null) {
+        initialBeta = event.beta
+        initialGamma = event.gamma
+      }
+      hasOrientation = true
+      // Damp sensor movement so a 10° phone movement yields a subtle card response.
+      setTarget(-(event.beta - initialBeta) * 0.45, (event.gamma - initialGamma) * 0.45)
+    }
+    const handlePointerDown = () => {
+      if (!motionEnabled) onRequestMotion?.()
+    }
     const handlePointerMove = (event: PointerEvent) => {
-      if (event.pointerType !== 'mouse') return
+      if (reduceMotion || hasOrientation) return
       const bounds = dialog.getBoundingClientRect()
       const x = (event.clientX - bounds.left) / bounds.width - 0.5
       const y = (event.clientY - bounds.top) / bounds.height - 0.5
-      dialog.style.setProperty('--glass-tilt-x', `${Math.max(-1, Math.min(1, -y * 4))}deg`)
-      dialog.style.setProperty('--glass-tilt-y', `${Math.max(-1, Math.min(1, x * 4))}deg`)
+      setTarget(-y * (event.pointerType === 'touch' ? 6 : 4), x * (event.pointerType === 'touch' ? 6 : 4))
     }
     const resetTilt = () => {
-      dialog.style.setProperty('--glass-tilt-x', '0deg')
-      dialog.style.setProperty('--glass-tilt-y', '0deg')
+      if (hasOrientation) return
+      setTarget(0, 0)
     }
+    if (!reduceMotion && mobileViewport && motionEnabled && typeof DeviceOrientationEvent !== 'undefined') {
+      window.addEventListener('deviceorientation', handleOrientation, { passive: true })
+    }
+    dialog.addEventListener('pointerdown', handlePointerDown)
     dialog.addEventListener('pointermove', handlePointerMove)
     dialog.addEventListener('pointerleave', resetTilt)
     return () => {
+      window.removeEventListener('deviceorientation', handleOrientation)
+      dialog.removeEventListener('pointerdown', handlePointerDown)
       dialog.removeEventListener('pointermove', handlePointerMove)
       dialog.removeEventListener('pointerleave', resetTilt)
-      resetTilt()
+      if (raf) cancelAnimationFrame(raf)
+      writeTilt(0, 0)
     }
-  }, [isOpen])
+  }, [isOpen, motionEnabled, onRequestMotion])
 
   useModalBack(isOpen, onClose)
 
@@ -77,11 +216,13 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
 
   return (
     <div
+        ref={backdropRef}
         className="creator-profile-backdrop fixed inset-0 z-[80] grid place-items-center overflow-hidden p-2 sm:p-4"
       onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}
     >
       <section
         ref={dialogRef}
+        data-contrast={contrastMode}
         role="dialog"
         aria-modal="true"
         aria-labelledby="creator-profile-title"
@@ -100,7 +241,7 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
           </span>
         </button>
 
-        <div className="creator-profile-glass__content relative z-[1] flex min-h-0 flex-col p-3 text-[var(--ink)] sm:p-6">
+        <div className="creator-profile-glass__content relative z-[1] flex min-h-0 flex-col p-3 sm:p-6">
           <button
             ref={closeButtonRef}
             type="button"

@@ -10,8 +10,8 @@ import {
   SETTINGS_GROUPS,
 } from '../../src/lib/routeRegistry.ts'
 
-test('the registry contains 15 protected pages and the standalone public auth page', () => {
-  assert.equal(ROUTE_REGISTRY.length, 15)
+test('the registry contains 16 protected pages and the standalone public auth page', () => {
+  assert.equal(ROUTE_REGISTRY.length, 16)
   assert.equal(new Set(ROUTE_REGISTRY.map(route => route.path)).size, ROUTE_REGISTRY.length)
   assert.equal(AUTH_ROUTE.path, '/auth')
   assert.deepEqual(new Set(ROUTE_REGISTRY.map(route => route.settingsGroup)), new Set(SETTINGS_GROUPS))
@@ -52,6 +52,7 @@ test('dashboard and settings remain fixed anchors instead of movable settings mo
   const paths = grouped.flatMap(section => section.routes.map(route => route.path))
   assert.ok(!paths.includes('/'))
   assert.ok(!paths.includes('/settings'))
+  assert.ok(!paths.includes('/notifications'))
 })
 
 test('the requested routes keep their canonical groups, defaults, and screen loaders', () => {
@@ -71,6 +72,7 @@ test('the requested routes keep their canonical groups, defaults, and screen loa
     '/calculators': ['Tools & Lifestyle Utilities', 'settings'],
     '/shopping-lists': ['Tools & Lifestyle Utilities', 'settings'],
     '/settings': ['Core Operations & Daily Flow', 'navbar'],
+    '/notifications': ['Core Operations & Daily Flow', 'settings'],
   }
 
   for (const [path, [group, placement]] of Object.entries(expected)) {
@@ -81,7 +83,8 @@ test('the requested routes keep their canonical groups, defaults, and screen loa
     assert.equal(typeof ROUTE_COMPONENT_LOADERS[path], 'function', `missing screen loader for ${path}`)
   }
 
-  assert.equal(ROUTE_REGISTRY.length, 15)
+  assert.equal(ROUTE_REGISTRY.find(route => route.path === '/notifications')?.utility, true)
+  assert.equal(ROUTE_REGISTRY.length, 16)
 })
 
 console.log('Passed 6 route registry and workspace grouping checks.')

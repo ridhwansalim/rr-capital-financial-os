@@ -24,6 +24,10 @@ SELECT ok(
 SELECT ok(
   has_function_privilege('authenticated','public.get_telegram_link_status()','EXECUTE')
   AND NOT has_function_privilege('anon','public.get_telegram_link_status()','EXECUTE')
+  AND NOT (SELECT prosecdef FROM pg_proc WHERE oid='public.get_telegram_link_status()'::regprocedure)
+  AND (SELECT prosecdef FROM pg_proc WHERE oid='private.get_telegram_link_status()'::regprocedure)
+  AND has_function_privilege('authenticated','private.get_telegram_link_status()','EXECUTE')
+  AND NOT has_function_privilege('anon','private.get_telegram_link_status()','EXECUTE')
   AND NOT EXISTS (
     SELECT 1 FROM pg_proc p
     CROSS JOIN LATERAL aclexplode(p.proacl) a

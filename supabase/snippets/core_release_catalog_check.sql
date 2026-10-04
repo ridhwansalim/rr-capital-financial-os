@@ -18,7 +18,14 @@ BEGIN
       ('20261002040700'),
       ('20261002040800'),
       ('20261002040900'),
-      ('20261002040950')
+      ('20261002040950'),
+      ('20261004120000'),
+      ('20261004130000'),
+      ('20261004140000'),
+      ('20261004162756'),
+      ('20261004114017'),
+      ('20261004160000'),
+      ('20261004163119')
     ) AS expected(version)
    WHERE NOT EXISTS (
      SELECT 1 FROM supabase_migrations.schema_migrations m
@@ -45,6 +52,73 @@ BEGIN
      OR has_table_privilege('authenticated','public.account_balances','DELETE')
      OR has_table_privilege('authenticated','public.account_balances','TRUNCATE') THEN
     RAISE EXCEPTION 'account_balances grants do not match the read-only contract';
+  END IF;
+
+  -- The final core release also protects credit-line history, keeps Telegram
+  -- delivery destinations out of the browser surface, and makes the private
+  -- workflow/API deny boundary explicit in RLS.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+     WHERE tgrelid='public.transactions'::regclass
+       AND tgname='z_validate_credit_line_limit' AND NOT tgisinternal
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+     WHERE tgrelid='public.accounts'::regclass
+       AND tgname='validate_credit_line_limit_history' AND NOT tgisinternal
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+     WHERE tgrelid='public.accounts'::regclass
+       AND tgname='prevent_account_type_change_with_history' AND NOT tgisinternal
+  ) THEN
+    RAISE EXCEPTION 'Chronological credit-line history protections are missing';
+  END IF;
+
+  IF has_table_privilege('authenticated','public.profiles','SELECT')
+     OR has_table_privilege('anon','public.profiles','SELECT')
+     OR has_column_privilege('authenticated','public.profiles','telegram_chat_id','SELECT')
+     OR has_column_privilege('anon','public.profiles','telegram_chat_id','SELECT')
+     OR has_column_privilege('authenticated','public.profiles','telegram_chat_id','UPDATE')
+     OR NOT has_column_privilege('authenticated','public.profiles','full_name','SELECT')
+     OR NOT has_function_privilege('authenticated','public.get_telegram_link_status()','EXECUTE')
+     OR has_function_privilege('anon','public.get_telegram_link_status()','EXECUTE') THEN
+    RAISE EXCEPTION 'Telegram destination privacy boundary is missing or too broad';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc
+     WHERE oid='public.get_telegram_link_status()'::regprocedure
+       AND NOT prosecdef
+       AND proconfig @> ARRAY['search_path=pg_catalog, public, private, pg_temp']
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_proc
+     WHERE oid='private.get_telegram_link_status()'::regprocedure
+       AND prosecdef
+       AND proconfig @> ARRAY['search_path=pg_catalog, public, private, pg_temp']
+  ) OR has_function_privilege('anon','private.get_telegram_link_status()','EXECUTE')
+     OR has_function_privilege('public','private.get_telegram_link_status()','EXECUTE')
+     OR NOT has_function_privilege('authenticated','private.get_telegram_link_status()','EXECUTE') THEN
+    RAISE EXCEPTION 'Telegram status SECURITY DEFINER implementation is not isolated behind an invoker RPC';
+  END IF;
+
+  IF (SELECT count(*) FROM pg_policies p
+       WHERE (p.schemaname, p.tablename) IN (
+         ('private','chitti_action_requests'),
+         ('private','emi_bank_action_requests'),
+         ('private','installment_occurrences'),
+         ('private','ledger_request_metadata'),
+         ('private','p2p_request_metadata'),
+         ('private','receipt_scan_rate_limits'),
+         ('private','telegram_link_challenges'),
+         ('private','transaction_corrections'),
+         ('private','user_gemini_key_refs'),
+         ('public','obligation_payments'),
+         ('public','parties'),
+         ('public','profile_directory')
+       ) AND p.policyname='api_roles_denied'
+         AND p.permissive='RESTRICTIVE' AND p.cmd='ALL'
+         AND p.roles @> ARRAY['anon','authenticated']::name[]
+         AND p.qual='false' AND p.with_check='false') <> 12 THEN
+    RAISE EXCEPTION 'Explicit API-role deny policies are missing from protected relations';
   END IF;
 
   IF NOT EXISTS (
@@ -238,11 +312,109 @@ BEGIN
      OR NOT has_function_privilege('authenticated', 'public.accept_settlement(uuid,uuid,uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'Settlement function execute grants do not match the caller boundary';
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema='public' AND table_name='obligations'
+       AND column_name='is_split_share' AND data_type='boolean' AND is_nullable='NO'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema='public' AND table_name='obligations'
+       AND column_name='total_bill_amount' AND data_type='numeric'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema='public' AND table_name='obligations'
+       AND column_name='split_group_id' AND data_type='uuid'
+  ) THEN
+    RAISE EXCEPTION 'Group Split obligation columns are missing or malformed';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_class WHERE oid='public.split_groups'::regclass AND relrowsecurity
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_class WHERE oid='public.split_group_members'::regclass AND relrowsecurity
+  ) OR has_table_privilege('anon','public.split_groups','SELECT')
+     OR has_table_privilege('anon','public.split_group_members','SELECT')
+     OR NOT has_table_privilege('authenticated','public.split_groups','SELECT')
+     OR NOT has_table_privilege('authenticated','public.split_group_members','SELECT')
+     OR has_table_privilege('authenticated','public.split_groups','INSERT')
+     OR has_table_privilege('authenticated','public.split_group_members','INSERT')
+     OR has_table_privilege('authenticated','public.split_groups','UPDATE')
+     OR has_table_privilege('authenticated','public.split_group_members','UPDATE')
+     OR has_table_privilege('authenticated','public.split_groups','DELETE')
+     OR has_table_privilege('authenticated','public.split_group_members','DELETE') THEN
+    RAISE EXCEPTION 'Split-group tables do not have the owner-scoped read-only API boundary';
+  END IF;
+
+  IF to_regclass('private.group_split_request_metadata') IS NULL
+     OR NOT EXISTS (
+       SELECT 1 FROM pg_class WHERE oid='private.group_split_request_metadata'::regclass AND relrowsecurity
+     ) OR has_table_privilege('anon','private.group_split_request_metadata','SELECT')
+     OR has_table_privilege('authenticated','private.group_split_request_metadata','SELECT')
+     OR has_table_privilege('authenticated','private.group_split_request_metadata','INSERT') THEN
+    RAISE EXCEPTION 'Group Split idempotency metadata is missing or directly exposed';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies p
+     WHERE p.schemaname='private' AND p.tablename='group_split_request_metadata'
+       AND p.policyname='group_split_request_metadata_api_deny'
+       AND p.permissive='RESTRICTIVE' AND p.cmd='ALL'
+       AND p.roles @> ARRAY['anon','authenticated']::name[]
+       AND p.qual='false' AND p.with_check='false'
+  ) THEN
+    RAISE EXCEPTION 'Group Split metadata lacks an explicit API-role deny policy';
+  END IF;
+  IF to_regclass('private.group_split_request_metadata_transaction_id_idx') IS NULL
+     OR to_regclass('public.split_group_members_profile_id_idx') IS NULL
+     OR to_regclass('public.split_group_members_shadow_contact_id_idx') IS NULL THEN
+    RAISE EXCEPTION 'Group Split foreign-key support indexes are missing';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc p
+     WHERE p.oid=to_regprocedure('public.process_group_split(uuid,uuid,numeric,text,uuid,jsonb,timestamp with time zone,uuid)')
+       AND NOT p.prosecdef
+       AND p.proconfig @> ARRAY['search_path=pg_catalog, public, private, pg_temp']
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_proc p
+     WHERE p.oid=to_regprocedure('public.accept_split_share(uuid,uuid)') AND NOT p.prosecdef
+       AND p.proconfig @> ARRAY['search_path=pg_catalog, public, private, pg_temp']
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_proc p
+     WHERE p.oid=to_regprocedure('public.save_split_group(text,jsonb)') AND NOT p.prosecdef
+       AND p.proconfig @> ARRAY['search_path=pg_catalog, public, private, pg_temp']
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_proc p
+     WHERE p.oid=to_regprocedure('private.process_group_split(uuid,uuid,numeric,text,uuid,jsonb,timestamp with time zone,uuid)')
+       AND p.prosecdef AND p.proconfig @> ARRAY['search_path=""']
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_proc p
+     WHERE p.oid=to_regprocedure('private.accept_split_share(uuid,uuid)')
+       AND p.prosecdef AND p.proconfig @> ARRAY['search_path=""']
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_proc p
+     WHERE p.oid=to_regprocedure('private.save_split_group(text,jsonb)')
+       AND p.prosecdef AND p.proconfig @> ARRAY['search_path=""']
+  ) THEN
+    RAISE EXCEPTION 'Group Split RPC invoker/definer boundary or fixed search_path is incorrect';
+  END IF;
+
+  IF has_function_privilege('anon','public.process_group_split(uuid,uuid,numeric,text,uuid,jsonb,timestamp with time zone,uuid)','EXECUTE')
+     OR has_function_privilege('public','public.process_group_split(uuid,uuid,numeric,text,uuid,jsonb,timestamp with time zone,uuid)','EXECUTE')
+     OR NOT has_function_privilege('authenticated','public.process_group_split(uuid,uuid,numeric,text,uuid,jsonb,timestamp with time zone,uuid)','EXECUTE')
+     OR has_function_privilege('anon','public.accept_split_share(uuid,uuid)','EXECUTE')
+     OR has_function_privilege('public','public.accept_split_share(uuid,uuid)','EXECUTE')
+     OR NOT has_function_privilege('authenticated','public.accept_split_share(uuid,uuid)','EXECUTE')
+     OR has_function_privilege('anon','public.save_split_group(text,jsonb)','EXECUTE')
+     OR has_function_privilege('public','public.save_split_group(text,jsonb)','EXECUTE')
+     OR NOT has_function_privilege('authenticated','public.save_split_group(text,jsonb)','EXECUTE') THEN
+    RAISE EXCEPTION 'Group Split public RPC grants do not match the authenticated-only contract';
+  END IF;
 END
 $check$;
 
 SELECT version FROM supabase_migrations.schema_migrations
- WHERE version IN ('20261002040000','20261002040300','20261002040400','20261002040500','20261002040700','20261002040800','20261002040900','20261002040950')
+WHERE version IN ('20261002040000','20261002040300','20261002040400','20261002040500','20261002040700','20261002040800','20261002040900','20261002040950','20261004114017','20261004120000','20261004130000','20261004140000','20261004160000','20261004162756','20261004163119')
  ORDER BY version;
 
 COMMIT;

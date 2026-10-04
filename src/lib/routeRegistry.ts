@@ -1,7 +1,7 @@
 import {
   ArrowRightLeft, CalendarDays, ChartNoAxesCombined, CloudUpload, Calculator,
   HeartPulse, Landmark, LayoutDashboard, PiggyBank, Receipt, Settings, ShoppingBasket,
-  Users, Wallet, type LucideIcon,
+  Users, Wallet, Bell, type LucideIcon,
 } from 'lucide-react'
 import type { ComponentType } from 'react'
 
@@ -22,6 +22,7 @@ export interface RouteDefinition {
   defaultPlacement: RoutePlacement
   mobileDefaultPlacement?: RoutePlacement
   optionalFeature?: FeatureKey
+  utility?: boolean
   slots: string[]
 }
 
@@ -50,6 +51,7 @@ export const ROUTE_REGISTRY: RouteDefinition[] = [
   { path: '/savings-goals', title: 'Savings goals', icon: PiggyBank, settingsGroup: SETTINGS_GROUPS[3], defaultPlacement: 'settings', optionalFeature: 'savings_goals', slots: ['Active Sinking Funds, Total Saved and Monthly Auto-Earmark', 'Target Milestones and Projected Completion Dates'] },
   { path: '/calculators', title: 'Calculators', icon: Calculator, settingsGroup: SETTINGS_GROUPS[4], defaultPlacement: 'settings', optionalFeature: 'calculators', slots: ['Chitti Auction Bid and Loan EMI Arbitrage Simulator', 'Prepayment and Compounding Schedule Output'] },
   { path: '/shopping-lists', title: 'Shopping lists', icon: ShoppingBasket, settingsGroup: SETTINGS_GROUPS[4], defaultPlacement: 'settings', optionalFeature: 'shopping_lists', slots: ['Pre-Purchase Checklists and Estimated Cart Total', 'Safe-Leftover Impact and Convert-to-Ledger Preview'] },
+  { path: '/notifications', title: 'Notifications', icon: Bell, settingsGroup: SETTINGS_GROUPS[0], defaultPlacement: 'settings', utility: true, slots: ['Pending approvals and confirmations', 'Actionable operational alerts'] },
   { path: '/settings', title: 'Settings', icon: Settings, settingsGroup: SETTINGS_GROUPS[0], defaultPlacement: 'navbar', slots: [] },
 ]
 
@@ -78,6 +80,7 @@ export const ROUTE_COMPONENT_LOADERS: Record<string, () => Promise<{ default: Co
   '/calculators': () => import('../screens/Calculators'),
   '/shopping-lists': () => import('../screens/ShoppingLists'),
   '/settings': () => import('../screens/Settings'),
+  '/notifications': () => import('../screens/Notifications'),
 }
 
 export function findRoute(path: string) {
@@ -95,6 +98,6 @@ export function getEffectivePlacement(route: RouteDefinition, placements: Record
 export function getGroupedSettingsRoutes(placements: Record<string, RoutePlacement>, enabled: Partial<Record<FeatureKey, boolean>>, isMobile: boolean) {
   return SETTINGS_GROUPS.map(group => ({
     group,
-    routes: ROUTE_REGISTRY.filter(route => route.path !== '/settings' && route.path !== '/' && route.settingsGroup === group && getEffectivePlacement(route, placements, isMobile) === 'settings' && (!route.optionalFeature || Boolean(enabled[route.optionalFeature]))),
+    routes: ROUTE_REGISTRY.filter(route => !route.utility && route.path !== '/settings' && route.path !== '/' && route.settingsGroup === group && getEffectivePlacement(route, placements, isMobile) === 'settings' && (!route.optionalFeature || Boolean(enabled[route.optionalFeature]))),
   })).filter(section => section.routes.length > 0)
 }
