@@ -319,3 +319,7 @@ Current local `npm test`, `npm run typecheck:e2e`, and synthetic-backend `npm ru
 A fresh `npm test` run passed. The core-only isolated SQL replay passed 58 migrations, 34 SQL files, and 165 pgTAP assertions; its uniquely named scratch database was removed. `git diff --check` passed. The production build could not complete in the restricted shell: Tailwind's Windows native oxide binding failed to load and Vite's path resolution hit `spawn EPERM`. No repository change was identified in the settlement/idempotent-ledger review; retry payload checks and atomic settlement approval are covered by the passing SQL suite. No hosted changes occurred.
 
 The previously restricted production build was rerun with local process access and passed (`tsc -b` and Vite/PWA build); only the known chunk-size and `inlineDynamicImports` deprecation warnings remain. `npm run typecheck:e2e` passed, and the synthetic-backend Playwright suite passed 18/18 in 51.5 seconds. No hosted access or deployment was involved.
+
+## CI coverage improvement - 2026-10-04
+
+Extended `.github/workflows/verify.yml` to install Chromium and run `npm run test:e2e` against the isolated synthetic backend after unit tests. The Playwright config removes any inherited `VITE_SUPABASE_*` settings and overrides them with an invalid test endpoint and placeholder key, so this CI stage cannot target either hosted project. The same 18-test suite passed locally on the application commit; the workflow change itself awaits GitHub Actions verification after push.
