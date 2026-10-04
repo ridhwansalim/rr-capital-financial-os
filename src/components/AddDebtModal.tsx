@@ -3,6 +3,8 @@ import { X, Search, UserPlus, IndianRupee, User, Users, Loader2, Wallet } from '
 import { supabase } from '../lib/supabase'
 import { indiaDateInputToIso, isDateBeforeOpeningDate, toIndiaDateInputValue } from '../lib/financeDate'
 import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
+import LiquidGlassSwitcher from './ui/LiquidGlassSwitcher'
+import { liquidGlassItemProps } from './ui/liquidGlassSwitcherItem'
 
 interface AddDebtModalProps {
   isOpen: boolean
@@ -209,31 +211,29 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="app-financial-entry-modal w-full max-w-md p-6 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl relative animate-in zoom-in-95 duration-200 text-white max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="app-financial-entry-modal w-full max-w-md p-3 sm:p-6 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl relative animate-in zoom-in-95 duration-200 text-white max-h-[calc(100dvh-1rem)] overflow-hidden">
         
         <button type="button" aria-label="Close debt form" onClick={() => handleClose()} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10">
           <X className="w-5 h-5" />
         </button>
 
-        <h2 className="text-xl font-bold mb-6 text-center flex justify-center items-center">
+        <h2 className="text-lg font-bold mb-3 text-center flex justify-center items-center sm:mb-6 sm:text-xl">
           <Users className="w-5 h-5 mr-2 text-emerald-400" /> Track P2P Debt
         </h2>
 
-        <form onSubmit={handleSubmit} className="flex flex-col space-y-4">
+        <form onSubmit={handleSubmit} className="flex flex-col space-y-2 sm:space-y-4">
           
-          <div className="flex p-1 bg-black/20 rounded-xl backdrop-blur-sm border border-white/10">
+          <LiquidGlassSwitcher activeKey={type} label="Debt direction" className="w-full">
             {(['lent', 'borrowed'] as const).map((t) => (
               <button
                 key={t} type="button" onClick={() => setType(t)}
-                className={`flex-1 py-2 text-sm font-bold rounded-lg capitalize transition-all duration-200 ${
-                  type === t ? 'bg-emerald-500 text-white shadow-sm' : 'text-white/50 hover:text-white/80'
-                }`}
+                {...liquidGlassItemProps(t, type === t, 'min-w-0 flex-1 px-2 py-2 text-xs font-bold capitalize sm:text-sm')}
               >
                 I {t}
               </button>
             ))}
-          </div>
+          </LiquidGlassSwitcher>
 
           <div className="grid grid-cols-1 min-[360px]:grid-cols-[minmax(0,1fr)_minmax(132px,0.85fr)] gap-3 items-stretch">
             <div className="flex min-w-0 flex-col items-center justify-center space-y-1 py-3 bg-black/20 rounded-2xl border border-white/5">
@@ -250,7 +250,7 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
             </div>
           </div>
 
-          <div className="flex flex-col space-y-2 relative">
+          <div className="flex flex-col space-y-1 relative">
             <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">
               {type === 'lent' ? 'Who borrowed it?' : 'Who lent it to you?'}
             </label>
@@ -305,7 +305,7 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
             <input type="text" placeholder="e.g., iPhone 15, Dinner" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/20 outline-none focus:border-emerald-500/50 transition-colors" required disabled={isSubmitting} />
           </div>
 
-          <div className="space-y-3 p-4 bg-white/5 border border-white/10 rounded-xl">
+          <div className="space-y-2 p-2.5 bg-white/5 border border-white/10 rounded-xl sm:p-4">
             <div className="flex flex-col space-y-1">
               <label className="text-xs font-semibold tracking-wide text-emerald-400 uppercase">
                 {type === 'lent' ? 'Paid From (Compulsory)' : 'Deposited To (Compulsory)'}
@@ -322,7 +322,7 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
             </div>
           </div>
 
-          <button type="submit" disabled={isSubmitting} className="w-full flex items-center justify-center py-4 rounded-xl bg-emerald-500 text-white font-bold text-lg hover:bg-emerald-400 transition-colors shadow-[0_0_20px_rgba(16,185,129,0.2)] disabled:opacity-50">
+          <button type="submit" disabled={isSubmitting} className="w-full flex items-center justify-center py-2.5 rounded-xl bg-emerald-500 text-white font-bold text-base hover:bg-emerald-400 transition-colors shadow-[0_0_20px_rgba(16,185,129,0.2)] disabled:opacity-50 sm:py-4 sm:text-lg">
             {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Log Handshake Transfer'}
           </button>
         </form>

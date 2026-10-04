@@ -462,7 +462,7 @@ test('creator profile remains usable on mobile', async ({ page }) => {
   await openCreator.click()
   await assertPortraitFits()
   await page.screenshot({ path: 'test-results/creator-modal-mobile-face.png' })
-  await creator.getByRole('button', { name: 'View creator photo' }).click()
+  await creator.locator('.creator-profile-photo').click()
   const photoViewer = page.getByRole('dialog', { name: 'Creator photo' })
   await expect(photoViewer).toBeVisible()
   await expect(photoViewer.getByRole('img', { name: 'Ridhwan S., creator of RR Capital' })).toBeVisible()

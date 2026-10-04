@@ -15,7 +15,10 @@ SELECT ok(
   AND has_column_privilege('authenticated','public.profiles','registered_devices','SELECT')
   AND NOT has_column_privilege('authenticated','public.profiles','telegram_chat_id','SELECT')
   AND NOT has_column_privilege('anon','public.profiles','telegram_chat_id','SELECT')
-  AND NOT has_column_privilege('authenticated','public.profiles','telegram_chat_id','UPDATE'),
+  AND NOT has_column_privilege('authenticated','public.profiles','telegram_chat_id','INSERT')
+  AND NOT has_column_privilege('anon','public.profiles','telegram_chat_id','INSERT')
+  AND NOT has_column_privilege('authenticated','public.profiles','telegram_chat_id','UPDATE')
+  AND NOT has_column_privilege('anon','public.profiles','telegram_chat_id','UPDATE'),
   'Telegram destination is not selectable or writable by API roles'
 );
 SELECT ok(

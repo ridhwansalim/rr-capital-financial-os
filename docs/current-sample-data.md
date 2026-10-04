@@ -1,8 +1,10 @@
-# RR Capital sample data — archived three-year test fixture
+# RR Capital sample data — expanded evaluation fixture
 
 ## Current authoritative status (2026-10-04)
 
-Fresh exact `count(*)` queries against both connected Supabase projects confirm there is no financial test data to clear. In RR Capital (`hnebvwfgsotrknxpgpmv`), accounts, contacts, transactions, obligations, obligation payments, parties, recurring EMIs, chittis, settlements, categories, optional-module records, and private workflow records all have zero rows. The owner profile, profile-directory row, and six user feature flags remain. Financial OS v2 (`guvkfuxniprtqdsqlqtx`) has zero rows in its listed public financial tables. No reset was run; preserve the owner profile and preferences.
+At the user's request, RR Capital (`hnebvwfgsotrknxpgpmv`) was populated with a synthetic 40-month dataset on 2026-10-04. The owner has 10 accounts, 12 contacts, 12 categories, 480 transactions dated 2023-06-02 through 2026-09-30, 12 obligations, 12 recurring EMI schedules, 12 chittis, 12 budgets, 15 templates, 12 savings goals, 36 contributions, 12 shopping lists, 48 shopping items, and 10 parties. Financial OS v2 (`guvkfuxniprtqdsqlqtx`) was not modified. All six optional feature flags were already enabled. Per-account health settings remain empty because their trigger requires an authenticated owner context.
+
+The paragraphs below this current-state note that describe zero rows or the former 3-account/864-transaction fixture are historical checkpoints and have been superseded by the expanded fixture described above.
 
 The RR Capital migration ledger currently ends at `20261003182502_profile_navbar_layout_preferences`. Two migrations remain pending: `20261004120000_enforce_chronological_credit_line_limits` and `20261004130000_protect_telegram_destination`. A current read-only privilege check confirms authenticated clients can still select `profiles.telegram_chat_id`, and the safe Telegram link-status RPC is absent. Do not treat the pending protection as deployed.
 
@@ -47,3 +49,14 @@ The cleanup SQL postcondition was tightened to check fixed fixture transaction/c
 ## Hosted sample reset — 2026-10-03 16:15 UTC
 
 Following the active goal's explicit reset instruction, ran the guarded cleanup against RR Capital only after a fresh scope query matched the expected fixture (3 dedicated accounts, 10 categories, 864 tagged transactions, zero untagged account activity). Postflight verifies Auth owner=1, profile=1, directory=1, preferences/feature flags=6, owner accounts=0, owner transactions=0, and zero sample-labeled transactions/categories. Cleanup SQL also checked all dedicated fixture IDs were gone before commit. Financial OS v2 was not modified.
+# Current RR Capital evaluation dataset — 2026-10-04
+
+The user requested a broad synthetic dataset for evaluation. RR Capital (`hnebvwfgsotrknxpgpmv`) now contains a 40-month activity window from 2023-06-01 through 2026-09-30. All inserted sample-facing names and ledger descriptions carry the `[RR SAMPLE]` prefix. The seed was applied atomically to the dedicated test owner after confirming the project had one Auth owner/profile and no existing financial records. The separate Financial OS v2 project was not modified.
+
+Verified counts for the dedicated owner: 10 accounts, 12 contacts, 12 categories, 480 transactions, 12 obligations/IOUs, 12 recurring EMI schedules, 12 chittis, 12 budget envelopes, 15 transaction templates, 12 savings goals, 36 goal contributions, 12 shopping lists, and 48 shopping-list items. Ten `[RR SAMPLE]` parties were also added. Every relevant collection exceeds the requested minimum of 10.
+
+All six optional feature flags (budgets, calculators, financial health, savings goals, shopping lists, account health) were already enabled and were left unchanged. `account_health_settings` remains empty because its database trigger only permits writes in a signed-in owner context; its feature flag remains enabled so the Accounts health area can be evaluated where it does not require a configured account threshold.
+
+Cleanup is available at `supabase/fixtures/rr_capital_sample_cleanup.sql`. It targets only the fixed `a7300000-0000-4000-8000-*` fixture ID families and refuses to delete when unexpected transactions have been attached to fixture accounts. Do not run cleanup unless the user asks to clear the sample data. `rr_capital_three_year_seed.sql` now deliberately refuses replay against the populated owner; create a fresh isolated test owner/database before preparing a future reseed.
+
+The older notes below describe a prior 36-month fixture that was cleared and are historical only.

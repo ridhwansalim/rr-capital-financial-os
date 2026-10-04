@@ -77,7 +77,7 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
 
   return (
     <div
-        className="creator-profile-backdrop fixed inset-0 z-[80] grid place-items-center overflow-y-auto p-4"
+        className="creator-profile-backdrop fixed inset-0 z-[80] grid place-items-center overflow-hidden p-2 sm:p-4"
       onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}
     >
       <section
@@ -85,52 +85,44 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
         role="dialog"
         aria-modal="true"
         aria-labelledby="creator-profile-title"
-        className="creator-profile-glass glass-card relative grid max-h-[min(90dvh,46rem)] w-full max-w-2xl grid-rows-[minmax(16rem,46dvh)_minmax(0,1fr)] overflow-x-hidden overflow-y-auto rounded-3xl text-[var(--ink)] sm:grid-rows-1 sm:max-h-[85dvh] sm:grid-cols-[minmax(180px,0.8fr)_1.2fr] sm:overflow-hidden"
+        className="creator-profile-glass glass-card relative grid h-[calc(100dvh-1rem)] max-h-[620px] w-full max-w-2xl grid-rows-[minmax(0,46%)_minmax(0,1fr)] overflow-hidden rounded-3xl text-[var(--ink)] sm:h-auto sm:max-h-[calc(100dvh-2rem)] sm:grid-rows-1 sm:grid-cols-[minmax(180px,0.8fr)_1.2fr]"
       >
-        <div className="creator-profile-photo pointer-events-none relative h-[min(46dvh,22rem)] min-h-64 overflow-hidden bg-[var(--surface-dark)] sm:h-auto sm:min-h-[390px]">
+        <button type="button" aria-label="Open full-size creator photo" onClick={() => window.dispatchEvent(new Event('creator-photo-open'))} className="creator-profile-photo group relative min-h-0 w-full cursor-zoom-in overflow-hidden border-0 bg-[var(--surface-dark)] p-0 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-white sm:h-full">
           <img
             src="/ridhwan-creator.jpg"
             alt="Ridhwan S., creator of RR Capital"
-            className="pointer-events-none absolute inset-0 h-full w-full object-cover object-[center_28%] sm:object-center"
+            className="absolute inset-0 h-full w-full object-cover object-[center_28%] sm:object-center"
           />
-          <button
-            type="button"
-            aria-label="View creator photo"
-            onClick={() => window.dispatchEvent(new Event('creator-photo-open'))}
-            className="creator-profile-photo__zoom pointer-events-auto absolute right-3 top-3 z-[3] inline-flex h-10 items-center gap-2 rounded-full px-3 text-xs font-medium text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-          >
-            <span aria-hidden="true" className="text-base leading-none">⤢</span>
-            <span>View photo</span>
-          </button>
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent px-5 pb-5 pt-14 text-white sm:hidden">
-            <p className="text-xs font-medium uppercase tracking-[0.16em] text-white/75">Created by</p>
-            <p className="mt-1 text-xl font-semibold">Ridhwan S.</p>
-          </div>
-        </div>
+          <span aria-hidden="true" className="creator-photo-hint absolute right-2 top-2 z-[3] rounded-full px-2 py-1 text-[10px] opacity-0 transition-opacity group-hover:opacity-100 sm:right-3 sm:top-3">Expand photo</span>
+          <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent px-3 pb-3 pt-8 text-white sm:hidden">
+            <span className="block text-xs font-medium uppercase tracking-[0.16em] text-white/75">Created by</span>
+            <span className="mt-0.5 block text-lg font-semibold">Ridhwan S.</span>
+          </span>
+        </button>
 
-        <div className="creator-profile-glass__content relative z-[1] flex flex-col p-5 text-[var(--ink)] sm:p-7">
+        <div className="creator-profile-glass__content relative z-[1] flex min-h-0 flex-col p-3 text-[var(--ink)] sm:p-6">
           <button
             ref={closeButtonRef}
             type="button"
             aria-label="Close creator profile"
             onClick={onClose}
-            className="creator-profile-glass__control absolute right-4 top-4 rounded-full p-2 text-[var(--ink)] transition-colors hover:text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)]"
+            className="creator-profile-glass__control absolute right-2 top-2 rounded-full p-1.5 text-[var(--ink)] transition-colors hover:text-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)] sm:right-3 sm:top-3"
           >
             <X className="h-4 w-4" />
           </button>
 
           <div className="pr-10">
-            <p className="creator-profile-adaptive-copy text-[10px] font-semibold uppercase tracking-[0.18em]">About RR Capital</p>
-            <h2 id="creator-profile-title" className="creator-profile-adaptive-copy mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Ridhwan S.</h2>
-            <p className="creator-profile-adaptive-copy mt-1 text-sm">BI &amp; E-commerce Analyst · Full-stack Developer</p>
+            <p className="creator-profile-adaptive-copy text-[9px] font-semibold uppercase tracking-[0.18em] sm:text-[10px]">About RR Capital</p>
+            <h2 id="creator-profile-title" className="creator-profile-adaptive-copy mt-1 text-xl font-semibold tracking-tight sm:text-3xl">Ridhwan S.</h2>
+            <p className="creator-profile-adaptive-copy mt-0.5 text-xs sm:text-sm">BI &amp; E-commerce Analyst · Full-stack Developer</p>
           </div>
 
-          <p className="creator-profile-adaptive-copy mt-5 text-sm leading-6">
+          <p className="creator-profile-adaptive-copy mt-2 text-xs leading-5 sm:mt-4 sm:text-sm sm:leading-6">
             RR Capital is a personal finance workspace shaped around everyday needs, built for use with family and friends.
           </p>
 
-          <div className="mt-6">
-            <p className="creator-profile-adaptive-copy mb-2 text-[10px] font-semibold uppercase tracking-[0.16em]">Find me online</p>
+          <div className="mt-3 sm:mt-5">
+            <p className="creator-profile-adaptive-copy mb-1.5 text-[9px] font-semibold uppercase tracking-[0.16em] sm:mb-2 sm:text-[10px]">Find me online</p>
             <div className="grid grid-cols-2 gap-2">
               {creatorLinks.map(({ label, href, brand, icon }) => (
                 <a
@@ -138,17 +130,17 @@ export default function CreatorProfileDialog({ isOpen, onClose }: { isOpen: bool
                   href={href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`creator-profile-glass__control creator-profile-social creator-profile-social--${brand} inline-flex min-h-11 items-center justify-between gap-2 rounded-xl border px-3 text-sm font-medium text-[var(--ink)] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)]`}
+                  className={`creator-profile-glass__control creator-profile-social creator-profile-social--${brand} inline-flex min-h-9 items-center justify-between gap-1.5 rounded-lg border px-2 text-xs font-medium text-[var(--ink)] transition-colors sm:min-h-11 sm:rounded-xl sm:px-3 sm:text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-primary)]`}
                 >
                   <span className="inline-flex items-center gap-2"><svg aria-hidden="true" viewBox="0 0 24 24" className="creator-profile-social__icon h-4 w-4" fill="currentColor">{icon ? <path d={icon} /> : <><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" /><path d="M14 14h2v2h-2zM18 14h2v6h-2zM14 18h2v2h-2z" /></>}</svg><span className="creator-profile-adaptive-copy">{label}</span></span>
-                  <ArrowUpRight className="h-3.5 w-3.5 text-[var(--muted)]" />
+                  <ArrowUpRight className="h-3.5 w-3.5 opacity-70" />
                 </a>
               ))}
             </div>
           </div>
 
-          <div className="mt-auto pt-6">
-            <p className="creator-profile-adaptive-copy mb-3 text-[10px] uppercase tracking-[0.14em]">RR Capital · Personal use</p>
+          <div className="mt-auto pt-2 sm:pt-4">
+            <p className="creator-profile-adaptive-copy text-[9px] uppercase tracking-[0.14em] sm:text-[10px]">RR Capital · Personal use</p>
           </div>
         </div>
       </section>

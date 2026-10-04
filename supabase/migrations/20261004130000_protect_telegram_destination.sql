@@ -5,6 +5,8 @@
 -- table-level SELECT grant inherited from the initial schema.
 REVOKE SELECT ON TABLE public.profiles FROM PUBLIC, anon, authenticated;
 REVOKE SELECT (telegram_chat_id) ON TABLE public.profiles FROM PUBLIC, anon, authenticated;
+REVOKE INSERT (telegram_chat_id), UPDATE (telegram_chat_id)
+  ON TABLE public.profiles FROM PUBLIC, anon, authenticated;
 GRANT SELECT (
   id,
   full_name,

@@ -7,6 +7,8 @@ import { indiaDateInputToIso, isDateBeforeOpeningDate, openingBalanceForAccountT
 import { offlineAccountChoices } from '../lib/offlineOwnership'
 import { offlineRejectionMessage } from '../lib/offlineErrorMessages'
 import { safeBackendErrorMessage, safeCaughtErrorMessage } from '../lib/safeErrorMessages'
+import LiquidGlassSwitcher from './ui/LiquidGlassSwitcher'
+import { liquidGlassItemProps } from './ui/liquidGlassSwitcherItem'
 
 interface TransactionModalProps {
   isOpen: boolean
@@ -522,7 +524,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="app-financial-entry-modal w-full max-w-md p-6 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl relative animate-in zoom-in-95 duration-200 text-white max-h-[90vh] overflow-y-auto">
+      <div className="app-financial-entry-modal w-full max-w-md p-4 sm:p-6 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl relative animate-in zoom-in-95 duration-200 text-white max-h-[calc(100dvh-1rem)] overflow-hidden">
         
         <button type="button" aria-label="Close transaction" onClick={() => handleClose()} className="absolute top-4 right-4 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10">
           <X className="w-5 h-5" />
@@ -582,13 +584,13 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
         ) : (
           /* MAIN TRANSACTION FORM */
           <>
-            <form onSubmit={handleSubmit} className="flex flex-col space-y-4">
+            <form onSubmit={handleSubmit} className="transaction-entry-form flex flex-col space-y-4">
               
-              <div className="flex p-1 bg-black/20 rounded-xl backdrop-blur-sm border border-white/10">
+              <LiquidGlassSwitcher activeKey={type} label="Transaction type" className="w-full">
                 {(['expense', 'income', 'transfer'] as const).map((t) => (
                   <button
                     key={t} type="button" onClick={() => setType(t)}
-                    className={`flex-1 py-2 flex items-center justify-center space-x-1 text-sm font-medium rounded-lg capitalize transition-all duration-200 ${type === t ? 'bg-white/20 text-white shadow-sm' : 'text-white/50 hover:text-white/80'}`}
+                    {...liquidGlassItemProps(t, type === t, 'min-w-0 flex-1 gap-1 px-2 py-2 text-xs font-medium capitalize sm:text-sm')}
                   >
                     {t === 'expense' && <ArrowDownRight className={`w-4 h-4 ${type === t ? 'text-rose-400' : ''}`} />}
                     {t === 'income' && <ArrowUpRight className={`w-4 h-4 ${type === t ? 'text-emerald-400' : ''}`} />}
@@ -596,7 +598,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
                     <span>{t}</span>
                   </button>
                 ))}
-              </div>
+              </LiquidGlassSwitcher>
 
               <div className="grid grid-cols-1 gap-4">
                 <div className="flex flex-col items-center justify-center space-y-1 py-2 bg-black/10 rounded-2xl border border-white/5">

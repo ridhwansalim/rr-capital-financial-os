@@ -102,6 +102,49 @@ CREATE TRIGGER validate_credit_line_limit_history
   AFTER UPDATE OF credit_limit, type ON public.accounts
   FOR EACH ROW EXECUTE FUNCTION private.validate_credit_line_limit_history();
 
+-- Account type determines the sign and validation rules used by the ledger.
+-- Reclassifying a used credit line as an ordinary asset would disable future
+-- credit-limit checks for the same historical account, so require a new
+-- account when ledger history already exists.
+CREATE OR REPLACE FUNCTION private.prevent_account_type_change_with_history()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, private, pg_temp
+AS $$
+BEGIN
+  IF NEW.type IS DISTINCT FROM OLD.type
+     AND (
+       EXISTS (
+         SELECT 1 FROM public.transactions AS t
+          WHERE t.from_account_id = OLD.id OR t.to_account_id = OLD.id
+       )
+       OR EXISTS (
+         SELECT 1 FROM public.obligations AS o
+          WHERE o.initiator_account_id = OLD.id
+       )
+       OR EXISTS (
+         SELECT 1 FROM public.recurring_emis AS e
+          WHERE e.initiator_account_id = OLD.id OR e.credit_account_id = OLD.id
+       )
+       OR EXISTS (
+         SELECT 1 FROM public.settlements AS s
+          WHERE s.source_account_id = OLD.id
+       )
+     ) THEN
+    RAISE EXCEPTION 'Account type cannot change while financial records reference it; create a new account instead'
+      USING ERRCODE = '22023';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION private.prevent_account_type_change_with_history()
+  FROM PUBLIC, anon, authenticated, service_role;
+DROP TRIGGER IF EXISTS prevent_account_type_change_with_history ON public.accounts;
+CREATE TRIGGER prevent_account_type_change_with_history
+  BEFORE UPDATE OF type ON public.accounts
+  FOR EACH ROW EXECUTE FUNCTION private.prevent_account_type_change_with_history();
+
 CREATE OR REPLACE FUNCTION private.validate_credit_line_limit()
 RETURNS trigger
 LANGUAGE plpgsql

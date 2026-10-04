@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase'
 import { useModalBack } from '../lib/useModalBack'
 import { openingBalanceForAccountType, toIndiaDateInputValue } from '../lib/financeDate'
 import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
+import LiquidGlassSwitcher from './ui/LiquidGlassSwitcher'
+import { liquidGlassItemProps } from './ui/liquidGlassSwitcherItem'
 
 interface AddAccountModalProps {
   isOpen: boolean
@@ -73,8 +75,8 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 pb-[calc(5.75rem+env(safe-area-inset-bottom))] bg-black/60 backdrop-blur-md animate-in fade-in duration-200 sm:p-4 sm:pb-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="add-account-title" className="relative w-full max-w-md max-h-[calc(100vh-7rem)] overflow-hidden p-4 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl animate-in zoom-in-95 duration-200 text-white sm:max-h-[calc(100vh-2rem)] sm:p-6">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 bg-black/60 backdrop-blur-md animate-in fade-in duration-200 sm:p-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="add-account-title" className="relative w-full max-w-[calc(100vw-1.5rem)] max-h-[calc(100dvh-1.5rem)] overflow-y-auto p-3 rounded-3xl backdrop-blur-2xl bg-white/10 border border-white/20 shadow-2xl animate-in zoom-in-95 duration-200 text-white sm:max-w-md sm:p-6">
         
         <button 
           onClick={() => handleClose()}
@@ -85,11 +87,11 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
 
         <h2 id="add-account-title" className="text-xl font-bold mb-4 text-center sm:mb-6">Add New Account</h2>
 
-        <form onSubmit={handleSubmit} className="flex flex-col space-y-3 sm:space-y-6">
+        <form onSubmit={handleSubmit} className="flex flex-col space-y-2 sm:space-y-6">
           
           {/* Choose the account family first, then its specific kind. */}
           <div className="space-y-2 sm:space-y-3">
-            <div className="grid grid-cols-2 gap-2">
+            <LiquidGlassSwitcher activeKey={accountGroup} label="Account family" className="w-full">
               {([
                 { id: 'liquid', title: 'Liquid', detail: 'Money you hold', icon: Wallet },
                 { id: 'credit', title: 'Credit line', detail: 'Borrowed spending limit', icon: CreditCard },
@@ -102,7 +104,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
                     setType(id === 'liquid' ? 'bank' : 'credit_card')
                   }}
                   aria-pressed={accountGroup === id}
-                  className={`flex items-center gap-2 rounded-xl border px-2.5 py-2.5 text-left transition-colors sm:gap-3 sm:px-3 sm:py-3 ${accountGroup === id ? 'border-indigo-400/60 bg-indigo-400/15 text-white' : 'border-white/10 bg-black/20 text-white/60 hover:bg-white/5'}`}
+                  {...liquidGlassItemProps(id, accountGroup === id, 'min-w-0 flex-1 gap-1.5 px-2 py-2 text-left text-xs sm:gap-3 sm:px-3 sm:py-3 sm:text-sm')}
                 >
                   <Icon className={`h-5 w-5 shrink-0 ${accountGroup === id ? 'text-indigo-300' : ''}`} />
                   <span className="min-w-0">
@@ -111,7 +113,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
                   </span>
                 </button>
               ))}
-            </div>
+            </LiquidGlassSwitcher>
             <label className="relative block">
               <span className="sr-only">Account type</span>
               <select
@@ -138,7 +140,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
               placeholder={type === 'credit_card' ? 'e.g., HDFC Millennia' : type === 'pay_later' ? 'e.g., Amazon Pay Later' : type === 'cash' ? 'e.g., Wallet Cash' : 'e.g., SBI Savings'}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-white/20 outline-none focus:border-indigo-500/50 transition-colors"
+              className="w-full bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/20 outline-none focus:border-indigo-500/50 transition-colors sm:px-4 sm:py-3"
               required
               disabled={isSubmitting}
             />
@@ -164,9 +166,9 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
             </div>
           </div>
 
-          <div className="flex flex-col space-y-1">
+            <div className="flex flex-col space-y-1">
             <label htmlFor="account-opening-date" className="text-xs font-semibold tracking-wide text-white/50 uppercase">Start tracking from</label>
-            <input id="account-opening-date" type="date" max={toIndiaDateInputValue()} value={openingDate} onChange={event => setOpeningDate(event.target.value)} className="w-full color-scheme-dark bg-black/20 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50" required disabled={isSubmitting} />
+            <input id="account-opening-date" type="date" max={toIndiaDateInputValue()} value={openingDate} onChange={event => setOpeningDate(event.target.value)} className="w-full color-scheme-dark bg-black/20 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-indigo-500/50 sm:px-4 sm:py-3" required disabled={isSubmitting} />
           </div>
 
           <button 

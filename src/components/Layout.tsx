@@ -173,13 +173,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </LiquidGlassSwitcher>
       </nav>
 
-      {createPortal(<div ref={desktopAddRef} className="app-desktop-add">
-        <div aria-hidden={!isFabOpen} className={`absolute bottom-[calc(100%+0.65rem)] right-0 flex flex-col items-end gap-2 transition-all duration-200 ${isFabOpen ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-2 opacity-0 pointer-events-none'}`}>
-          <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={openTransaction} className="flex min-h-12 items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--app-panel-strong)] px-4 text-sm font-medium text-[var(--ink)] shadow-xl"><span>Transaction</span><span className="rounded-full bg-[var(--brand-primary)] p-2 text-white"><CreditCard className="h-4 w-4" /></span></button>
-          <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={openDebt} className="flex min-h-12 items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--app-panel-strong)] px-4 text-sm font-medium text-[var(--ink)] shadow-xl"><span>Debt / IOU</span><span className="rounded-full bg-emerald-600 p-2 text-white"><Users className="h-4 w-4" /></span></button>
-        </div>
-        <button type="button" aria-label={isFabOpen ? 'Close add menu' : 'Open add menu'} aria-expanded={isFabOpen} onClick={() => setIsFabOpen(value => !value)} className={`app-desktop-fab app-glass-fab grid h-11 w-11 place-items-center rounded-full transition duration-200 hover:-translate-y-0.5 active:scale-95 ${isFabOpen ? 'rotate-45' : ''}`}><Plus className="relative z-[1] h-5 w-5" /></button>
-      </div>, document.body)}
+      {typeof document !== 'undefined' && createPortal(
+        <div ref={desktopAddRef} className="app-desktop-add">
+          <div aria-hidden={!isFabOpen} className={`absolute bottom-[calc(100%+0.65rem)] right-0 flex flex-col items-end gap-2 transition-all duration-200 ${isFabOpen ? 'translate-y-0 opacity-100 pointer-events-auto' : 'translate-y-2 opacity-0 pointer-events-none'}`}>
+            <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={openTransaction} className="flex min-h-12 items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--app-panel-strong)] px-4 text-sm font-medium text-[var(--ink)] shadow-xl"><span>Transaction</span><span className="rounded-full bg-[var(--brand-primary)] p-2 text-white"><CreditCard className="h-4 w-4" /></span></button>
+            <button type="button" tabIndex={isFabOpen ? 0 : -1} disabled={!isFabOpen} onClick={openDebt} className="flex min-h-12 items-center gap-3 rounded-full border border-[var(--line)] bg-[var(--app-panel-strong)] px-4 text-sm font-medium text-[var(--ink)] shadow-xl"><span>Debt / IOU</span><span className="rounded-full bg-emerald-600 p-2 text-white"><Users className="h-4 w-4" /></span></button>
+          </div>
+          <button type="button" aria-label={isFabOpen ? 'Close add menu' : 'Open add menu'} aria-expanded={isFabOpen} onClick={() => setIsFabOpen(value => !value)} className={`app-desktop-fab app-glass-fab grid h-11 w-11 place-items-center rounded-full transition duration-200 hover:-translate-y-0.5 active:scale-95 ${isFabOpen ? 'rotate-45' : ''}`}><Plus className="relative z-[1] h-5 w-5" /></button>
+        </div>,
+        document.body
+      )}
 
       <div className="app-mobile-context sticky inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b px-4 md:hidden">
         <button type="button" onClick={() => setIsAboutOpen(true)} className="flex min-w-0 items-center gap-2 text-left" aria-label="About RR Capital and its creator"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#f8f9fa]"><img src="/rr-favicon.svg" alt="" className="h-6 w-6" /></span><span className="truncate text-sm font-semibold">RR Capital</span></button>

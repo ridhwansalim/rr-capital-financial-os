@@ -1,4 +1,4 @@
-SELECT plan(5);
+SELECT plan(6);
 BEGIN;
 INSERT INTO auth.users(id, email, raw_user_meta_data) VALUES
   ('00000000-0000-4000-a000-000000000419', 'pay-later@example.invalid', '{}');
@@ -93,6 +93,13 @@ BEGIN
   UPDATE public.accounts SET credit_limit = 85
    WHERE id = '10000000-0000-4000-a000-000000000420';
 
+  BEGIN
+    UPDATE public.accounts SET type = 'bank'
+     WHERE id = '10000000-0000-4000-a000-000000000420';
+    RAISE EXCEPTION 'A credit line with ledger history was reclassified as a bank account';
+  EXCEPTION WHEN invalid_parameter_value THEN NULL;
+  END;
+
   -- A later card credit can make the current net balance look safe while an
   -- earlier backdated purchase would have exceeded the limit when it posted.
   PERFORM public.post_ledger_transaction(
@@ -160,6 +167,7 @@ SELECT pass('credit-line purchases respect limits, repayments reduce Pay Later d
 SELECT pass('backdated credit-line purchases cannot exceed the historical limit even when later credits offset them');
 SELECT pass('approved limits cannot be reduced below a previously reached historical balance');
 SELECT pass('same-timestamp card credits cannot mask an over-limit purchase');
+SELECT pass('accounts with ledger history cannot change type and bypass credit-line enforcement');
 SELECT ok(EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'private'
   AND tablename = 'emi_bank_action_requests'
   AND indexname = 'emi_bank_action_requests_credit_account_id_idx'),

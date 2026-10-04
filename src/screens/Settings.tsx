@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
 import { Settings as SettingsIcon, Search, User, Key, Lock, RotateCcw, Save, Trash2, Loader2, Palette, Bot, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut, Sun, Moon, RefreshCw, Download, ArrowLeftRight, ArrowRight, LayoutGrid, X, ArrowUp, ArrowDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -635,10 +636,10 @@ export default function Settings() {
         <ArrowRight className="h-4 w-4 shrink-0 text-[var(--muted)]" />
       </button>
 
-      {navbarModalOpen && <div className="fixed inset-0 z-[90] grid place-items-center bg-black/55 p-3 backdrop-blur-sm sm:p-6" onMouseDown={event => { if (event.target === event.currentTarget) setNavbarModalOpen(false) }}>
-        <section role="dialog" aria-modal="true" aria-labelledby="navbar-customization-title" className="surface-panel max-h-[min(90dvh,860px)] w-full max-w-2xl overflow-hidden rounded-3xl border border-[var(--line)] shadow-2xl">
-          <header className="flex items-start gap-3 border-b border-[var(--line)] p-5 sm:p-6"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><LayoutGrid className="h-5 w-5" /></span><div className="min-w-0 flex-1"><h2 id="navbar-customization-title" className="text-lg font-bold">Customize Navbar Layout</h2><p className="mt-1 text-sm text-[var(--muted)]">Choose pages and set their order. Dashboard, Add, and Settings stay fixed.</p></div><button type="button" aria-label="Close navbar customization" onClick={() => setNavbarModalOpen(false)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[var(--muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--ink)]"><X className="h-4 w-4" /></button></header>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--line)] px-5 py-3 sm:px-6"><LiquidGlassSwitcher activeKey={navbarEditorViewport} label="Navbar viewport layout" role="tablist" className="navbar-viewport-switcher inline-flex items-center">
+      {navbarModalOpen && createPortal(<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-4" onMouseDown={event => { if (event.target === event.currentTarget) setNavbarModalOpen(false) }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="navbar-customization-title" className="surface-panel flex max-h-[calc(100dvh-1.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-[var(--line)] shadow-2xl">
+          <header className="shrink-0 border-b border-[var(--line)]"><div className="flex items-start gap-3 p-4 sm:p-5"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><LayoutGrid className="h-5 w-5" /></span><div className="min-w-0 flex-1"><h2 id="navbar-customization-title" className="text-lg font-bold">Customize Navbar Layout</h2><p className="mt-1 text-sm text-[var(--muted)]">Choose pages and set their order. Dashboard, Add, and Settings stay fixed.</p></div><button type="button" aria-label="Close navbar customization" onClick={() => setNavbarModalOpen(false)} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-[var(--muted)] hover:bg-[var(--surface-strong)] hover:text-[var(--ink)]"><X className="h-4 w-4" /></button></div>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5"><LiquidGlassSwitcher activeKey={navbarEditorViewport} label="Navbar viewport layout" role="tablist" className="navbar-viewport-switcher inline-flex items-center">
             {(['mobile', 'desktop'] as const).map(viewport => {
               const selectedCount = workspace.navbarLayout[viewport === 'mobile' ? 'mobileSelectedUrls' : 'desktopSelectedUrls'].length
               const visibleCount = viewport === 'mobile' ? selectedCount : Math.min(selectedCount, workspace.desktopCapacity)
@@ -647,8 +648,8 @@ export default function Settings() {
                 {viewport === 'mobile' ? <Smartphone className="h-4 w-4" /> : <Laptop className="h-4 w-4" />}<span>{viewport === 'mobile' ? 'Mobile' : 'Desktop'}</span><span aria-label={viewport === 'mobile' ? `${selectedCount} of 2 mobile slots selected` : `${visibleCount} of ${slotLimit} desktop slots visible; ${selectedCount} of 10 saved`} className="navbar-viewport-switcher__count">{visibleCount} / {slotLimit}</span>
               </button>
             })}
-          </LiquidGlassSwitcher><span className="text-right text-xs text-[var(--muted)]">{workspace.isMobile ? 'Current viewport Â· Mobile' : 'Current viewport Â· Desktop'}<br /><strong className="text-[var(--ink)]">{editorSelected.length}/{editorLimit} saved Â· {navbarEditorViewport === 'mobile' ? editorSelected.length : Math.min(editorSelected.length, workspace.desktopCapacity)}/{navbarEditorViewport === 'mobile' ? 2 : workspace.desktopCapacity} visible</strong></span></div>
-          <div id="navbar-editor-panel" role="tabpanel" aria-labelledby={`navbar-${navbarEditorViewport}-tab`} className="max-h-[calc(min(90dvh,860px)-178px)] overflow-y-auto p-5 sm:p-6">
+          </LiquidGlassSwitcher><span className="text-right text-xs text-[var(--muted)]">{workspace.isMobile ? 'Current viewport Â· Mobile' : 'Current viewport Â· Desktop'}<br /><strong className="text-[var(--ink)]">{editorSelected.length}/{editorLimit} saved Â· {navbarEditorViewport === 'mobile' ? editorSelected.length : Math.min(editorSelected.length, workspace.desktopCapacity)}/{navbarEditorViewport === 'mobile' ? 2 : workspace.desktopCapacity} visible</strong></span></div></header>
+          <div id="navbar-editor-panel" role="tabpanel" aria-labelledby={`navbar-${navbarEditorViewport}-tab`} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
             <div className="mb-4 rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] px-3 py-2 text-xs leading-5 text-[var(--muted)]">{navbarEditorViewport === 'mobile' ? 'Fixed order: Dashboard Â· page Â· Add Â· page Â· Settings. Select up to 2 pages.' : `Dashboard and Settings are fixed at the ends. Save up to 10 pages; ${workspace.desktopCapacity} custom slots fit this viewport. Trailing pages stay saved and return when more space is available.`}</div>
             <div className="space-y-5">{SETTINGS_GROUPS.map(group => {
               const routes = availableNavbarRoutes.filter(route => route.settingsGroup === group)
@@ -666,7 +667,7 @@ export default function Settings() {
             })}</div>
           </div>
         </section>
-      </div>}
+      </div>, document.body)}
 
       {isProfileModified && (
         <div className="sticky top-4 z-50 mb-8 p-4 bg-indigo-500/10 border border-indigo-500/30 backdrop-blur-xl rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xl animate-in slide-in-from-top-4">

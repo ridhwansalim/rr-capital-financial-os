@@ -9,6 +9,8 @@ import { format } from 'date-fns'
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/dist/style.css'
 import PageHeader from '../components/PageHeader'
+import LiquidGlassSwitcher from '../components/ui/LiquidGlassSwitcher'
+import { liquidGlassItemProps } from '../components/ui/liquidGlassSwitcherItem'
 
 interface EMI {
   id: string
@@ -492,7 +494,7 @@ export default function Calendar() {
       {/* ADD EMI MODAL */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="app-dialog w-full max-w-lg max-h-[min(88dvh,44rem)] flex flex-col rounded-t-3xl sm:rounded-3xl backdrop-blur-2xl bg-slate-900 border border-white/20 shadow-2xl relative animate-in slide-in-from-bottom-4 sm:zoom-in-95 text-white" ref={popoverRef}>
+          <div className="app-dialog w-full max-w-lg max-h-[calc(100dvh-1rem)] flex flex-col rounded-t-3xl sm:rounded-3xl backdrop-blur-2xl bg-slate-900 border border-white/20 shadow-2xl relative animate-in slide-in-from-bottom-4 sm:zoom-in-95 text-white" ref={popoverRef}>
             <div className="shrink-0 px-4 pt-4 pb-3 sm:px-6 border-b border-white/10">
             <button onClick={() => { if (!emiFormDirty || window.confirm('Discard this recurring payment form?')) { resetEmiForm(); setIsAddModalOpen(false) } }} className="absolute top-3 right-3 p-2 text-white/60 hover:text-white rounded-full hover:bg-white/10 transition-colors z-10"><X className="w-5 h-5" /></button>
             
@@ -503,18 +505,18 @@ export default function Calendar() {
 
             </div>
             <form onSubmit={handleAddEMI} className="min-h-0 flex flex-col">
-            <div className="min-h-0 overflow-y-auto overscroll-contain px-4 py-3 sm:px-6 space-y-2.5">
-              <div className="flex p-1 bg-black/20 rounded-xl backdrop-blur-sm border border-white/10">
+            <div className="min-h-0 overflow-y-auto overscroll-contain px-3 py-2 sm:px-6 sm:py-3 space-y-1.5 sm:space-y-2.5">
+              <LiquidGlassSwitcher activeKey={emiType} label="Recurring plan type" className="w-full">
                 {(['personal', 'lent', 'borrowed'] as const).map((t) => (
-                  <button key={t} type="button" aria-pressed={emiType === t} onClick={() => setEmiType(t)} className={`flex-1 py-2 text-[11px] sm:text-xs md:text-sm font-bold rounded-lg capitalize transition-all duration-200 ${emiType === t ? 'bg-indigo-500 text-white shadow-sm' : 'text-white/50 hover:text-white/80'}`}>
+                  <button key={t} type="button" aria-pressed={emiType === t} onClick={() => setEmiType(t)} {...liquidGlassItemProps(t, emiType === t, 'min-w-0 flex-1 px-1.5 py-2 text-[10px] font-bold capitalize sm:text-xs md:text-sm')}>
                   {t === 'personal' ? 'Personal EMI' : t === 'lent' ? 'Proxy · I pay' : 'Proxy · They pay'}
                   </button>
                 ))}
-              </div>
+              </LiquidGlassSwitcher>
 
               <div className="flex flex-col space-y-1">
                 <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Name / Item</label>
-                <input type="text" required placeholder="e.g., Phone installment" value={newEmi.name} onChange={(e) => setNewEmi({...newEmi, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-white outline-none focus:border-indigo-500/50" disabled={isSubmitting} />
+                <input type="text" required placeholder="e.g., Phone installment" value={newEmi.name} onChange={(e) => setNewEmi({...newEmi, name: e.target.value})} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-indigo-500/50" disabled={isSubmitting} />
               </div>
 
               {emiType !== 'personal' && (
@@ -552,14 +554,14 @@ export default function Calendar() {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2">
                     <div className="flex flex-col space-y-1">
                       <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Principal (₹)</label>
-                      <input type="number" step="0.01" required placeholder="60000" value={principal} onChange={(e) => setPrincipal(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50" disabled={isSubmitting} />
+                      <input type="number" step="0.01" required placeholder="60000" value={principal} onChange={(e) => setPrincipal(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-indigo-500/50" disabled={isSubmitting} />
                     </div>
                     <div className="flex flex-col space-y-1">
                       <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Fee (₹)</label>
-                      <input type="number" step="0.01" required placeholder="1500" value={processingFee} onChange={(e) => setProcessingFee(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500/50" disabled={isSubmitting} />
+                      <input type="number" step="0.01" required placeholder="1500" value={processingFee} onChange={(e) => setProcessingFee(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-indigo-500/50" disabled={isSubmitting} />
                     </div>
                   </div>
                 </>
@@ -567,13 +569,13 @@ export default function Calendar() {
 
               <div className="flex flex-col space-y-1">
                 <label className="text-xs font-semibold tracking-wide text-indigo-400 uppercase">Monthly EMI (₹)</label>
-                <input type="number" step="0.01" required placeholder="5000" value={newEmi.amount} onChange={(e) => setNewEmi({...newEmi, amount: e.target.value})} className="app-emi-amount-input w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-rose-400 font-bold outline-none focus:border-indigo-500/50" disabled={isSubmitting} />
+                <input type="number" step="0.01" required placeholder="5000" value={newEmi.amount} onChange={(e) => setNewEmi({...newEmi, amount: e.target.value})} className="app-emi-amount-input w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-rose-400 font-bold outline-none focus:border-indigo-500/50" disabled={isSubmitting} />
               </div>
 
               <div className="grid grid-cols-2 gap-3 relative">
                 <div className="flex flex-col space-y-1">
                   <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Start Date</label>
-                  <button type="button" onClick={() => { setIsStartPopoverOpen(!isStartPopoverOpen); setIsEndPopoverOpen(false); }} className="w-full flex items-center justify-between bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-indigo-500/50 text-left" disabled={isSubmitting}>
+                  <button type="button" onClick={() => { setIsStartPopoverOpen(!isStartPopoverOpen); setIsEndPopoverOpen(false); }} className="w-full flex items-center justify-between bg-black/40 border border-white/10 rounded-xl px-2.5 py-2 text-xs text-white outline-none focus:border-indigo-500/50 text-left sm:text-sm" disabled={isSubmitting}>
                     {startDate ? format(startDate, "MMM d, yyyy") : <span>Pick a date</span>} <CalendarIcon className="w-4 h-4 text-white/50" />
                   </button>
                   {isStartPopoverOpen && (
@@ -585,7 +587,7 @@ export default function Calendar() {
 
                 <div className="flex flex-col space-y-1">
                   <label className="text-xs font-semibold tracking-wide text-rose-400 uppercase">End Date *</label>
-                  <button type="button" onClick={() => { setIsEndPopoverOpen(!isEndPopoverOpen); setIsStartPopoverOpen(false); }} className="w-full flex items-center justify-between bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-rose-500/50 text-left" disabled={isSubmitting}>
+                  <button type="button" onClick={() => { setIsEndPopoverOpen(!isEndPopoverOpen); setIsStartPopoverOpen(false); }} className="w-full flex items-center justify-between bg-black/40 border border-white/10 rounded-xl px-2.5 py-2 text-xs text-white outline-none focus:border-rose-500/50 text-left sm:text-sm" disabled={isSubmitting}>
                     {endDate ? format(endDate, "MMM d, yyyy") : <span className="text-white/50">Required</span>} <CalendarIcon className="w-4 h-4 text-white/50" />
                   </button>
                   {isEndPopoverOpen && (
@@ -619,7 +621,7 @@ export default function Calendar() {
 
             </div>
               <div className="shrink-0 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 border-t border-white/10 bg-slate-900/95">
-              <button type="submit" disabled={isSubmitting} className="w-full flex items-center justify-center py-3 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)] disabled:opacity-50">
+              <button type="submit" disabled={isSubmitting} className="w-full flex items-center justify-center py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-white font-bold transition-all shadow-[0_0_15px_rgba(99,102,241,0.4)] disabled:opacity-50">
                 {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : emiType === 'personal' ? 'Save Personal EMI' : 'Send EMI Request'}
               </button>
               </div>
