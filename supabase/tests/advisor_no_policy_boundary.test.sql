@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(3);
+SELECT plan(4);
 
 -- These are deliberately absent from the PostgREST client surface. Their
 -- advisor notices are the expected deny-by-default shape, not missing RLS.
@@ -43,9 +43,36 @@ SELECT is(
       ('public','obligation_payments'),
       ('public','parties'),
       ('public','profile_directory')
+    )
+      AND p.policyname = 'api_roles_denied'
+      AND p.permissive = 'RESTRICTIVE'
+      AND p.cmd = 'ALL'
+      AND p.roles @> ARRAY['anon','authenticated']::name[]
+      AND p.qual = 'false'
+      AND p.with_check = 'false'),
+  12,
+  'all 12 relations have restrictive deny policies for API roles'
+);
+
+SELECT is(
+  (SELECT count(*)::integer
+     FROM pg_policies p
+    WHERE (p.schemaname, p.tablename) IN (
+      ('private','chitti_action_requests'),
+      ('private','emi_bank_action_requests'),
+      ('private','installment_occurrences'),
+      ('private','ledger_request_metadata'),
+      ('private','p2p_request_metadata'),
+      ('private','receipt_scan_rate_limits'),
+      ('private','telegram_link_challenges'),
+      ('private','transaction_corrections'),
+      ('private','user_gemini_key_refs'),
+      ('public','obligation_payments'),
+      ('public','parties'),
+      ('public','profile_directory')
     )),
-  0,
-  'the relations intentionally have no row policies'
+  12,
+  'no additional policies can silently broaden the API-role surface'
 );
 
 SELECT ok(NOT EXISTS (

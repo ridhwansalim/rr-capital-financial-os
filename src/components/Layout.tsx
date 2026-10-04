@@ -1,5 +1,4 @@
 import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Plus, CreditCard, Users, Settings, CloudUpload } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'

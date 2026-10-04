@@ -1,8 +1,22 @@
 # RR Capital sample data — archived three-year test fixture
 
-## Current authoritative status (2026-10-03 16:23 UTC)
+## Current authoritative status (2026-10-04)
 
-Fresh aggregate-only reads against RR Capital (`hnebvwfgsotrknxpgpmv`) confirm the hosted fixture has been cleared: Auth users=1, profiles=1, accounts=0, transactions=0, obligations=0, obligation payments=0, and feature flags=6. A follow-up catalog count found no `[RR SAMPLE]` transactions/categories. The separate Financial OS v2 project was not modified. The three-year fixture details below are historical and describe the data that was intentionally cleared.
+Fresh exact `count(*)` queries against both connected Supabase projects confirm there is no financial test data to clear. In RR Capital (`hnebvwfgsotrknxpgpmv`), accounts, contacts, transactions, obligations, obligation payments, parties, recurring EMIs, chittis, settlements, categories, optional-module records, and private workflow records all have zero rows. The owner profile, profile-directory row, and six user feature flags remain. Financial OS v2 (`guvkfuxniprtqdsqlqtx`) has zero rows in its listed public financial tables. No reset was run; preserve the owner profile and preferences.
+
+The RR Capital migration ledger currently ends at `20261003182502_profile_navbar_layout_preferences`. Two migrations remain pending: `20261004120000_enforce_chronological_credit_line_limits` and `20261004130000_protect_telegram_destination`. A current read-only privilege check confirms authenticated clients can still select `profiles.telegram_chat_id`, and the safe Telegram link-status RPC is absent. Do not treat the pending protection as deployed.
+
+As of 2026-10-04, the guarded core release dry-run selects three pending migrations: the two above plus `20261004140000_explicit_api_deny_policies`. The latter strengthens deny-by-default boundaries on 12 service/RPC-only relations. Updated local core replay passes 58 migrations and 165 SQL assertions. No hosted migrations were applied during that validation; live data remains unchanged.
+
+Read-only readiness recheck (2026-10-04 Asia/Kolkata): exact hosted counts remain profiles=1, profile directory=1, feature flags=6, and zero accounts, contacts, transactions, obligations, obligation payments, parties, recurring EMIs, Chittis, or settlements. `authenticated` can still select `profiles.telegram_chat_id`; `anon` cannot, and `get_telegram_link_status()` is absent. The Supabase security advisor reports 12 RLS-enabled/no-policy INFO findings and the leaked-password-protection WARN. Direct ACL checks confirm `anon` and `authenticated` have no table SELECT or write privileges on any of those 12 no-policy relations, so those INFO findings currently correspond to inaccessible relations. RR Capital's hosted migration ledger was independently read through `20261003182502`; the guarded CLI dry-run selected exactly the two migrations above and made no hosted changes. A clean local core replay passed 57 migrations, 34 SQL test files, and 164 pgTAP assertions; the temporary replay database was dropped.
+
+The newest verified full application-schema/data backup is `20261003-193017-075`, created at `2026-10-03T14:00:17Z`. It predates the latest schema migrations. The later `20261003-205712-139` snapshot is schema-only. Neither is a current full recovery point for the pending release; managed Auth/Storage data and project settings are also outside their scope.
+
+The application unit/regression suite passed on 2026-10-04 (`npm test`), and both `npm run typecheck:e2e` and `npx tsc -b --pretty false` passed. `git diff --check` passed. Vercel's latest listed READY deployment remains a preview of commit `748fe2aa21d5c653dc227f737579fc8cd8b3c746`; it is not production and predates the current uncommitted layout changes. The local Vite build and Playwright run are still unverified in this environment (`spawn EPERM`; Tailwind Oxide native module failed to load).
+
+Historical reset verification (2026-10-03 16:23 UTC):
+
+Fresh aggregate-only reads at that time confirmed the hosted fixture had been cleared: Auth users=1, profiles=1, accounts=0, transactions=0, obligations=0, obligation payments=0, and feature flags=6. A follow-up catalog count found no `[RR SAMPLE]` transactions/categories. The separate Financial OS v2 project was not modified. The three-year fixture details below are historical and describe the data that was intentionally cleared.
 
 The protected snapshot `%LOCALAPPDATA%\\RR-Capital-Backups\\20261003-205712-139` predates cleanup and still contains the fixture. It must not be restored over the live project as part of routine recovery. The post-cleanup empty-finance checkpoint is `%LOCALAPPDATA%\\RR-Capital-Backups\\20261003-193017-075`. Both are local application database snapshots only; neither covers managed Auth identity, Vault secrets, Storage objects, project settings, or off-site recovery.
 

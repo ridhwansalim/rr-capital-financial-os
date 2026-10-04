@@ -37,6 +37,7 @@ export default function LiquidGlassSwitcher({ activeKey, label, className = '', 
   const activeKeyRef = useRef(activeKey)
   const previousIndexRef = useRef(-1)
   const hasPlacedCapRef = useRef(false)
+  const squishTimerRef = useRef<number | null>(null)
 
   useLayoutEffect(() => {
     activeKeyRef.current = activeKey
@@ -59,6 +60,11 @@ export default function LiquidGlassSwitcher({ activeKey, label, className = '', 
         container.classList.remove('is-squishing')
         void container.offsetWidth
         container.classList.add('is-squishing')
+        if (squishTimerRef.current !== null) window.clearTimeout(squishTimerRef.current)
+        squishTimerRef.current = window.setTimeout(() => {
+          container.classList.remove('is-squishing')
+          squishTimerRef.current = null
+        }, 500)
       }
       previousIndexRef.current = activeIndex
       hasPlacedCapRef.current = true
@@ -101,6 +107,7 @@ export default function LiquidGlassSwitcher({ activeKey, label, className = '', 
       mounted = false
       cancelAnimationFrame(frame)
       cancelAnimationFrame(readyFrame)
+      if (squishTimerRef.current !== null) window.clearTimeout(squishTimerRef.current)
       observer.disconnect()
       window.removeEventListener('resize', scheduleUpdate)
       container.removeEventListener('scroll', scheduleUpdate, true)
