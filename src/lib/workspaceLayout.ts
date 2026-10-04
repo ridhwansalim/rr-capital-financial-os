@@ -9,6 +9,10 @@ export interface NavbarLayoutPreferences {
   mobileSelectedUrls: string[]
   desktopSelectedUrls: string[]
 }
+interface StoredWorkspaceLayout extends NavbarLayoutPreferences {
+  updatedAt: number
+  writerId: string
+}
 export type NavbarLayoutUpdate = NavbarLayoutPreferences | ((current: NavbarLayoutPreferences) => NavbarLayoutPreferences)
 
 const CUSTOM_ROUTES = ROUTE_REGISTRY.filter(route => route.path !== '/' && route.path !== '/settings' && !route.utility)
@@ -31,6 +35,37 @@ function normalizeLayout(value: unknown): NavbarLayoutPreferences | null {
   return mobile && desktop ? { mobileSelectedUrls: mobile, desktopSelectedUrls: desktop } : null
 }
 
+function normalizeStoredLayout(value: unknown): StoredWorkspaceLayout | null {
+  const layout = normalizeLayout(value)
+  if (!layout || !value || typeof value !== 'object') return null
+  const raw = value as { updatedAt?: unknown; writerId?: unknown; _sync?: { updatedAt?: unknown; writerId?: unknown } }
+  const sync = raw._sync && typeof raw._sync === 'object' ? raw._sync : raw
+  return {
+    ...layout,
+    updatedAt: typeof sync.updatedAt === 'number' && Number.isFinite(sync.updatedAt) ? sync.updatedAt : 0,
+    writerId: typeof sync.writerId === 'string' ? sync.writerId : '',
+  }
+}
+
+function makeWriterId(storageKey: string | null) {
+  if (!storageKey) return 'anonymous'
+  const key = `${storageKey}.writer`
+  try {
+    const existing = localStorage.getItem(key)
+    if (existing) return existing
+    const created = crypto.randomUUID()
+    localStorage.setItem(key, created)
+    return created
+  } catch {
+    return 'local'
+  }
+}
+
+function compareStoredLayouts(a: StoredWorkspaceLayout, b: StoredWorkspaceLayout) {
+  if (a.updatedAt !== b.updatedAt) return a.updatedAt - b.updatedAt
+  return a.writerId.localeCompare(b.writerId)
+}
+
 function getUserStorageKey(userId: string | null) {
   return userId ? `${WORKSPACE_LAYOUT_STORAGE_PREFIX}.${userId}` : null
 }
@@ -40,7 +75,7 @@ function isMobileViewport() {
 }
 
 function readStoredWorkspace(storageKey: string | null) {
-  if (!storageKey) return { placements: {} as Record<string, RoutePlacement>, optionalFlags: {} as FeatureFlags, navbarLayout: DEFAULT_LAYOUT }
+  if (!storageKey) return { placements: {} as Record<string, RoutePlacement>, optionalFlags: {} as FeatureFlags, navbarLayout: DEFAULT_LAYOUT, layoutSync: { updatedAt: 0, writerId: '' } }
   try {
     const raw = JSON.parse(localStorage.getItem(storageKey) || '{}') as { placements?: unknown; optionalFlags?: unknown; navbarLayout?: unknown }
     const placements = raw.placements && typeof raw.placements === 'object' && !Array.isArray(raw.placements)
@@ -54,9 +89,17 @@ function readStoredWorkspace(storageKey: string | null) {
       mobileSelectedUrls: CUSTOM_ROUTES.filter(route => (placements[route.path] || getDefaultPlacement(route, true)) === 'navbar').slice(0, 3).map(route => route.path),
       desktopSelectedUrls: CUSTOM_ROUTES.filter(route => (placements[route.path] || getDefaultPlacement(route, false)) === 'navbar').slice(0, 10).map(route => route.path),
     }
-    return { placements, optionalFlags, navbarLayout: normalizeLayout(raw.navbarLayout) || legacyLayout }
+    const savedLayout = normalizeStoredLayout(raw.navbarLayout)
+    return {
+      placements,
+      optionalFlags,
+      navbarLayout: savedLayout
+        ? { mobileSelectedUrls: savedLayout.mobileSelectedUrls, desktopSelectedUrls: savedLayout.desktopSelectedUrls }
+        : legacyLayout,
+      layoutSync: savedLayout ? { updatedAt: savedLayout.updatedAt, writerId: savedLayout.writerId } : { updatedAt: 0, writerId: '' },
+    }
   } catch {
-    return { placements: {} as Record<string, RoutePlacement>, optionalFlags: {} as FeatureFlags, navbarLayout: DEFAULT_LAYOUT }
+    return { placements: {} as Record<string, RoutePlacement>, optionalFlags: {} as FeatureFlags, navbarLayout: DEFAULT_LAYOUT, layoutSync: { updatedAt: 0, writerId: '' } }
   }
 }
 
@@ -65,6 +108,7 @@ export function useWorkspaceLayout(userId: string | null, serverFlags: FeatureFl
   const [isMobile, setIsMobile] = useState(isMobileViewport)
   const [desktopCapacity, setDesktopCapacity] = useState(4)
   const [profileReadyUserId, setProfileReadyUserId] = useState<string | null>(null)
+  const [profileRetry, setProfileRetry] = useState(0)
   const [layoutState, setLayoutState] = useState(() => ({ storageKey, ...readStoredWorkspace(storageKey) }))
   const localEditRevisionRef = useRef(0)
   const stored = layoutState.storageKey === storageKey ? layoutState : { storageKey, ...readStoredWorkspace(storageKey) }
@@ -97,7 +141,10 @@ export function useWorkspaceLayout(userId: string | null, serverFlags: FeatureFl
   const persist = useCallback((nextPlacements: Record<string, RoutePlacement>, nextLayout: NavbarLayoutPreferences, nextFlags: FeatureFlags = serverFlags) => {
     if (!storageKey) return
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ version: 2, placements: nextPlacements, navbarLayout: nextLayout, optionalFlags: nextFlags }))
+      const current = readStoredWorkspace(storageKey)
+      const writerId = makeWriterId(storageKey)
+      const updatedAt = Math.max(Date.now(), current.layoutSync.updatedAt + 1)
+      localStorage.setItem(storageKey, JSON.stringify({ version: 3, placements: nextPlacements, navbarLayout: { ...nextLayout, _sync: { updatedAt, writerId } }, optionalFlags: nextFlags }))
       window.dispatchEvent(new CustomEvent('rr:workspace-layout-changed', { detail: { storageKey } }))
     } catch {
       // Private browsing or a full storage quota must not block navigation.
@@ -113,33 +160,68 @@ export function useWorkspaceLayout(userId: string | null, serverFlags: FeatureFl
   useEffect(() => {
     if (!userId) { setProfileReadyUserId(null); return }
     let cancelled = false
+    let retryTimer = 0
+    let attempts = 0
+    setProfileReadyUserId(null)
     const startingRevision = localEditRevisionRef.current
     const syncProfile = async () => {
       const { data, error } = await supabase.from('profiles').select('navbar_layout').eq('id', userId).maybeSingle()
       if (cancelled) return
-      const remote = normalizeLayout(data?.navbar_layout)
+      const remote = normalizeStoredLayout(data?.navbar_layout)
       const changedDuringRead = localEditRevisionRef.current !== startingRevision
-      if (!error && remote && !changedDuringRead) {
+      if (error) {
+        // Keep local navigation usable, but never let a failed read authorize a write.
+        if (attempts < 5) {
+          attempts += 1
+          retryTimer = window.setTimeout(syncProfile, Math.min(1000 * 2 ** attempts, 15000))
+        }
+        return
+      }
+      if (changedDuringRead) {
+        if (!cancelled) setProfileReadyUserId(userId)
+        return
+      }
+
+      const local = readStoredWorkspace(storageKey)
+      const localVersion: StoredWorkspaceLayout = { ...local.navbarLayout, ...local.layoutSync }
+      if (remote && compareStoredLayouts(remote, localVersion) > 0) {
         setLayoutState(current => ({
           storageKey,
-          placements: current.storageKey === storageKey ? current.placements : readStoredWorkspace(storageKey).placements,
-          optionalFlags: current.storageKey === storageKey ? current.optionalFlags : readStoredWorkspace(storageKey).optionalFlags,
-          navbarLayout: remote,
+          placements: current.storageKey === storageKey ? current.placements : local.placements,
+          optionalFlags: current.storageKey === storageKey ? current.optionalFlags : local.optionalFlags,
+          navbarLayout: { mobileSelectedUrls: remote.mobileSelectedUrls, desktopSelectedUrls: remote.desktopSelectedUrls },
+          layoutSync: { updatedAt: remote.updatedAt, writerId: remote.writerId },
         }))
-      } else if (!error && !remote && !changedDuringRead) {
-        const local = readStoredWorkspace(storageKey)
-        await supabase.from('profiles').update({ navbar_layout: local.navbarLayout }).eq('id', userId)
+      } else {
+        const versioned = { ...local.navbarLayout, _sync: localVersion.updatedAt ? local.layoutSync : { updatedAt: Date.now(), writerId: makeWriterId(storageKey) } }
+        if (!remote || compareStoredLayouts(localVersion, remote) > 0) {
+          const { data: written, error: writeError } = await supabase.from('profiles').update({ navbar_layout: versioned }).eq('id', userId).select('id').maybeSingle()
+          if (writeError || !written) {
+            if (attempts < 5) {
+              attempts += 1
+              retryTimer = window.setTimeout(syncProfile, Math.min(1000 * 2 ** attempts, 15000))
+            }
+            return
+          }
+        }
       }
       if (!cancelled) setProfileReadyUserId(userId)
     }
     void syncProfile()
-    return () => { cancelled = true }
-  }, [storageKey, userId])
+    return () => { cancelled = true; window.clearTimeout(retryTimer) }
+  }, [profileRetry, storageKey, userId])
 
   useEffect(() => {
     if (!userId || profileReadyUserId !== userId) return
     const timer = window.setTimeout(() => {
-      void supabase.from('profiles').update({ navbar_layout: navbarLayout }).eq('id', userId)
+      const local = readStoredWorkspace(storageKey)
+      const versioned = { ...navbarLayout, _sync: local.layoutSync }
+      void supabase.from('profiles').update({ navbar_layout: versioned }).eq('id', userId).select('id').maybeSingle().then(({ data, error }) => {
+        if (error || !data) {
+          setProfileReadyUserId(null)
+          setProfileRetry(value => value + 1)
+        }
+      })
     }, 250)
     return () => window.clearTimeout(timer)
   }, [navbarLayout, profileReadyUserId, userId])
@@ -149,13 +231,13 @@ export function useWorkspaceLayout(userId: string | null, serverFlags: FeatureFl
     const syncAcrossTabs = (event: StorageEvent) => {
       if (event.key === storageKey) {
         const next = readStoredWorkspace(storageKey)
-        setLayoutState(current => current.storageKey === storageKey && JSON.stringify(current.placements) === JSON.stringify(next.placements) && JSON.stringify(current.navbarLayout) === JSON.stringify(next.navbarLayout) ? current : { storageKey, ...next })
+      setLayoutState(current => current.storageKey === storageKey && JSON.stringify(current.placements) === JSON.stringify(next.placements) && JSON.stringify(current.navbarLayout) === JSON.stringify(next.navbarLayout) ? current : { storageKey, ...next })
       }
     }
     const syncWithinTab = (event: Event) => {
       if ((event as CustomEvent<{ storageKey?: string }>).detail?.storageKey === storageKey) {
         const next = readStoredWorkspace(storageKey)
-        setLayoutState(current => current.storageKey === storageKey && JSON.stringify(current.placements) === JSON.stringify(next.placements) && JSON.stringify(current.navbarLayout) === JSON.stringify(next.navbarLayout) ? current : { storageKey, ...next })
+      setLayoutState(current => current.storageKey === storageKey && JSON.stringify(current.placements) === JSON.stringify(next.placements) && JSON.stringify(current.navbarLayout) === JSON.stringify(next.navbarLayout) ? current : { storageKey, ...next })
       }
     }
     window.addEventListener('storage', syncAcrossTabs)

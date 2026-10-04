@@ -17,10 +17,14 @@ DO $$ DECLARE n integer; BEGIN
   WHERE id='00000000-0000-4000-a000-000000000001';
  GET DIAGNOSTICS n=ROW_COUNT;
  IF n <> 1 THEN RAISE EXCEPTION 'Owner navbar preference update denied'; END IF;
+ UPDATE public.profiles SET navbar_layout='{"mobileSelectedUrls":["/ledger","/calendar","/chittis"],"desktopSelectedUrls":[]}'::jsonb
+  WHERE id='00000000-0000-4000-a000-000000000001';
+ GET DIAGNOSTICS n=ROW_COUNT;
+ IF n <> 1 THEN RAISE EXCEPTION 'Three-slot owner mobile navbar preference update denied'; END IF;
  BEGIN
-  UPDATE public.profiles SET navbar_layout='{"mobileSelectedUrls":["/ledger","/calendar","/chittis"],"desktopSelectedUrls":[]}'::jsonb
+  UPDATE public.profiles SET navbar_layout='{"mobileSelectedUrls":["/ledger","/calendar","/chittis","/reports"],"desktopSelectedUrls":[]}'::jsonb
    WHERE id='00000000-0000-4000-a000-000000000001';
-  RAISE EXCEPTION 'Oversized mobile navbar preference accepted';
+  RAISE EXCEPTION 'Four-slot mobile navbar preference accepted';
  EXCEPTION WHEN check_violation THEN NULL;
  END;
 END $$;

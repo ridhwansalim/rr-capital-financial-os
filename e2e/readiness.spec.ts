@@ -139,6 +139,7 @@ type MockEvidence = {
   blockedBrowserExtensionOrigins: string[]
   tableMutations: string[]
   unexpectedRpcs: string[]
+  navbarLayoutUpdates: Record<string, unknown>[]
 }
 
 async function fulfillJson(route: Route, body: unknown, status = 200) {
@@ -157,9 +158,9 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
 }
 
 async function installSyntheticBackend(page: Page, themeMode: 'light' | 'dark' = 'dark', emptyFinanceData = false): Promise<MockEvidence> {
-  const evidence: MockEvidence = { unexpectedOrigins: [], blockedBrowserExtensionOrigins: [], tableMutations: [], unexpectedRpcs: [] }
+  const evidence: MockEvidence = { unexpectedOrigins: [], blockedBrowserExtensionOrigins: [], tableMutations: [], unexpectedRpcs: [], navbarLayoutUpdates: [] }
   let featureFlags = [...enabledFeatures]
-  let navbarLayout = structuredClone(syntheticProfile.navbar_layout)
+  let navbarLayout: Record<string, unknown> = structuredClone(syntheticProfile.navbar_layout)
 
   await page.addInitScript(({ storageKey, session }) => {
     localStorage.setItem(storageKey, JSON.stringify(session))
@@ -222,8 +223,11 @@ async function installSyntheticBackend(page: Page, themeMode: 'light' | 'dark' =
     }
 
     if (path === '/rest/v1/profiles' && method === 'PATCH') {
-      const body = request.postDataJSON() as { navbar_layout?: typeof navbarLayout }
-      if (body.navbar_layout) navbarLayout = body.navbar_layout
+      const body = request.postDataJSON() as { navbar_layout?: Record<string, unknown> }
+      if (body.navbar_layout) {
+        navbarLayout = body.navbar_layout
+        evidence.navbarLayoutUpdates.push(structuredClone(body.navbar_layout))
+      }
       await fulfillJson(route, { ...syntheticProfile, navbar_layout: navbarLayout, theme_mode: themeMode })
       return
     }
@@ -289,7 +293,7 @@ test('protected pages send anonymous visitors to the invitation-only sign-in pag
 })
 
 test('desktop navigation uses the Settings module hub and logo opens the creator profile', async ({ page }) => {
-  await installSyntheticBackend(page)
+  const backendEvidence = await installSyntheticBackend(page)
   await page.setViewportSize({ width: 1366, height: 768 })
   await page.goto('/')
   await expect(page.getByRole('navigation', { name: 'Primary navigation' })).toHaveJSProperty('offsetTop', 0)
@@ -426,6 +430,14 @@ test('desktop navigation uses the Settings module hub and logo opens the creator
     const layout = JSON.parse(localStorage.getItem(`rr-capital.workspace-layout.v1.${userId}`) || '{}')
     return layout.navbarLayout.desktopSelectedUrls
   }, syntheticUserId)).toEqual(['/accounts', '/calendar', '/chittis'])
+  await expect.poll(() => backendEvidence.navbarLayoutUpdates.at(-1)?.desktopSelectedUrls).toEqual(['/accounts', '/calendar', '/chittis'])
+  await page.reload()
+  await expect(page.getByRole('link', { name: 'Accounts' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Ledger' })).toHaveCount(0)
+  await primary.getByRole('link', { name: 'Settings' }).click()
+  await expect(page.getByRole('heading', { name: 'Workspace & modules' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Customize Navbar Layout' })).toBeVisible()
+  await page.goto('/settings')
   await expect(primary.getByRole('link', { name: 'Accounts' })).toBeVisible()
   await expect(primary.getByRole('link', { name: 'Ledger' })).toHaveCount(0)
   await expect(page.getByRole('region', { name: 'Core Operations & Daily Flow' }).getByRole('link', { name: 'Ledger' })).toBeVisible()
@@ -768,7 +780,7 @@ test('recurring plan tabs fit the iPhone SE viewport without an inner scrollbar'
 })
 
 test('mobile navigation keeps three custom slots and exposes Settings plus notifications in the header', async ({ page }) => {
-  await installSyntheticBackend(page, 'light')
+  const backendEvidence = await installSyntheticBackend(page, 'light')
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
 
@@ -927,7 +939,11 @@ test('mobile navigation keeps three custom slots and exposes Settings plus notif
   await expect.poll(() => page.evaluate(userId => {
     const layout = JSON.parse(localStorage.getItem(`rr-capital.workspace-layout.v1.${userId}`) || '{}')
     return layout.navbarLayout
-  }, syntheticUserId)).toEqual({ mobileSelectedUrls: ['/chittis', '/ledger', '/accounts'], desktopSelectedUrls: ['/ledger', '/calendar', '/chittis'] })
+  }, syntheticUserId)).toMatchObject({ mobileSelectedUrls: ['/chittis', '/ledger', '/accounts'], desktopSelectedUrls: ['/ledger', '/calendar', '/chittis'] })
+  await expect.poll(() => backendEvidence.navbarLayoutUpdates.at(-1)?.mobileSelectedUrls).toEqual(['/chittis', '/ledger', '/accounts'])
+  await page.reload()
+  await expect(page.locator('nav[aria-label="Mobile navigation"]')).toBeVisible()
+  await expect(page.locator('nav[aria-label="Mobile navigation"]').getByRole('link', { name: 'Accounts' })).toBeVisible()
   await expect(mobile.getByRole('link', { name: 'Dashboard' })).toBeVisible()
   await expect(mobile.getByRole('link', { name: 'Chittis' })).toBeVisible()
   await expect(mobile.getByRole('link', { name: 'Ledger' })).toBeVisible()
@@ -942,6 +958,62 @@ test('mobile navigation keeps three custom slots and exposes Settings plus notif
   await page.goto('/')
   await expect(page.locator('.app-mobile-context')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+})
+
+test('creator profile calibrates phone tilt and removes sensor state when closed', async ({ page }) => {
+  await installSyntheticBackend(page)
+  await page.setViewportSize({ width: 375, height: 667 })
+  await page.addInitScript(() => {
+    class TestDeviceOrientationEvent extends Event {
+      readonly beta: number | null
+      readonly gamma: number | null
+      constructor(type: string, init: DeviceOrientationEventInit = {}) {
+        super(type)
+        this.beta = init.beta ?? null
+        this.gamma = init.gamma ?? null
+      }
+    }
+    Object.defineProperty(window, 'DeviceOrientationEvent', { configurable: true, value: TestDeviceOrientationEvent })
+    const originalAdd = window.addEventListener.bind(window) as (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => void
+    const originalRemove = window.removeEventListener.bind(window) as (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions) => void
+    const orientationListeners = new Set<EventListenerOrEventListenerObject>()
+    window.addEventListener = ((type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => {
+      if (type === 'deviceorientation') orientationListeners.add(listener)
+      return originalAdd(type, listener, options)
+    }) as Window['addEventListener']
+    window.removeEventListener = ((type: string, listener: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions) => {
+      if (type === 'deviceorientation') orientationListeners.delete(listener)
+      return originalRemove(type, listener, options)
+    }) as Window['removeEventListener']
+    Object.defineProperty(window, '__orientationListenerCount', { get: () => orientationListeners.size })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'About RR Capital and its creator' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Ridhwan S.' })
+  await expect(dialog).toBeVisible()
+  const dialogHandle = await dialog.elementHandle()
+  // The logo click starts the permission promise; wait for its state update to attach the sensor listener.
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __orientationListenerCount: number }).__orientationListenerCount)).toBe(1)
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { beta: 12, gamma: 18 }))
+    window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { beta: 18, gamma: 26 }))
+  })
+  await expect.poll(() => dialog.evaluate(element => element.style.getPropertyValue('--tilt-x'))).toBe('-2.7deg')
+  await expect.poll(() => dialog.evaluate(element => element.style.getPropertyValue('--tilt-y'))).toBe('3.6deg')
+
+  const bounds = await dialog.boundingBox()
+  expect(bounds).not.toBeNull()
+  expect(bounds!.x).toBeGreaterThanOrEqual(0)
+  expect(bounds!.y).toBeGreaterThanOrEqual(0)
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(375)
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(667)
+  await dialog.getByRole('button', { name: 'Close creator profile' }).click()
+  await expect(dialog).toBeHidden()
+  expect(await dialogHandle!.evaluate(element => [element.style.getPropertyValue('--tilt-x'), element.style.getPropertyValue('--tilt-y')])).toEqual(['0deg', '0deg'])
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __orientationListenerCount: number }).__orientationListenerCount)).toBe(0)
+  await page.evaluate(() => window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { beta: 80, gamma: 80 })))
+  expect(await dialogHandle!.evaluate(element => [element.style.getPropertyValue('--tilt-x'), element.style.getPropertyValue('--tilt-y')])).toEqual(['0deg', '0deg'])
 })
 
 test('disabled optional routes return to dashboard and unknown routes show a notice', async ({ page }) => {

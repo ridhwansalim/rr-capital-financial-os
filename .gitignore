@@ -24,6 +24,9 @@ dist-ssr
 *.sw?
 
 .vercel
+.android-sdk/
+android/local.properties
+android/.gradle/
 
 # Supabase CLI local project state
 .temp/
