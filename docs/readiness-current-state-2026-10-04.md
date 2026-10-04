@@ -2,6 +2,12 @@
 
 This checkpoint reflects fresh hosted reads and supersedes earlier dated observations below where they conflict.
 
+## Owner-scoped sample cleanup hardening - 2026-10-04 17:25 UTC
+
+Hardened `supabase/fixtures/rr_capital_sample_cleanup.sql` after confirming the hosted project now has multiple Auth owners. Removed the project-global one-user assumption, scoped profile-directory checks to the dedicated fixture owner, and left feature preferences untouched without imposing a fixed feature-flag count. The guard now validates fixture transaction IDs, descriptions, account/contact/category links, and profile tags; blocks cleanup when fixture obligations have settlement/payment history, transactions have payment references, schedules reference fixture accounts/obligations, other obligations reference fixture contacts, split groups reference fixture contacts, or account-health settings are attached to fixture accounts. Installment postconditions are scoped to the fixture schedule IDs. Optional split-group schema is handled safely for protected older snapshots.
+
+Extended `supabase/Test-RR-Capital-Schema-Restore.ps1` into a multi-owner rehearsal: it seeds a second synthetic owner with a profile, account, and feature flag; verifies the cleanup refuses synthetic settlement, obligation-payment, and saved-group references; then runs the cleanup and confirms the second owner's account and flag survive. The isolated backup restore and cleanup rehearsal passed (30 tables, 1 view, 94 functions, 12 aggregate rows); PowerShell parsing and `git diff --check` passed. No hosted rows were changed. The user chose to keep Supabase on Free and leave the leaked-password-protection warning open, so no paid plan upgrade or Auth-setting change is authorized.
+
 ## Current-turn verification and production deployment - 2026-10-04 16:52 UTC
 
 Fixed a dashboard budget-pace date-window defect: budget calculations now fetch the current India calendar day (half-open end at tomorrow) and preserve the full configured history needed for rollover. Previously the shared analytics query ended before today and could omit the current month entirely for newer budgets. Added regression coverage in `dashboard_insights_math.test.mjs`.

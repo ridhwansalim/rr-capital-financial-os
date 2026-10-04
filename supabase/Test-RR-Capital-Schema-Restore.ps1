@@ -129,6 +129,18 @@ SELECT (jsonb_build_object(
     $OwnerId = '5bf09e85-e346-4c79-808f-29d8577d04ae'
     $SeedOwner = "INSERT INTO auth.users (id, email) VALUES ('$OwnerId', 'rr-sample-cleanup-rehearsal@example.invalid') ON CONFLICT (id) DO NOTHING;"
     Invoke-Docker -Arguments @('exec', '-u', 'postgres', $Container, 'psql', '-X', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', $Database, '-c', $SeedOwner) | Out-Null
+    $OtherOwnerId = '5bf09e85-e346-4c79-808f-29d8577d04af'
+    $SeedOtherOwner = @"
+INSERT INTO auth.users (id, email) VALUES ('$OtherOwnerId', 'rr-other-owner-cleanup-rehearsal@example.invalid') ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.profiles (id, full_name, username) VALUES ('$OtherOwnerId', 'Preserved Owner', 'rr_cleanup_preserved_owner') ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.accounts (id, owner_id, name, type, credit_limit)
+VALUES ('5bf09e85-e346-4c79-808f-29d8577d04b0', '$OtherOwnerId', 'Preserved Account', 'bank', 0)
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.user_feature_flags (owner_id, feature_key, enabled)
+VALUES ('$OtherOwnerId', 'budgets', false)
+ON CONFLICT (owner_id, feature_key) DO NOTHING;
+"@
+    Invoke-Docker -Arguments @('exec', '-u', 'postgres', $Container, 'psql', '-X', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', $Database, '-c', $SeedOtherOwner) | Out-Null
 
     $BeforeSql = @'
 SELECT json_build_object(
@@ -146,8 +158,8 @@ SELECT json_build_object(
   'goal_contributions', (SELECT count(*) FROM public.savings_goal_contributions WHERE id::text LIKE 'a7300000-0000-4000-8011-%' AND owner_id = '5bf09e85-e346-4c79-808f-29d8577d04ae'),
   'shopping_lists', (SELECT count(*) FROM public.shopping_lists WHERE id::text LIKE 'a7300000-0000-4000-8012-%' AND owner_id = '5bf09e85-e346-4c79-808f-29d8577d04ae'),
   'shopping_items', (SELECT count(*) FROM public.shopping_list_items WHERE id::text LIKE 'a7300000-0000-4000-8013-%' AND owner_id = '5bf09e85-e346-4c79-808f-29d8577d04ae'),
-  'installments', (SELECT count(*) FROM private.installment_occurrences WHERE owner_id = '5bf09e85-e346-4c79-808f-29d8577d04ae'),
-  'non_sample_attached', (SELECT count(*) FROM public.transactions WHERE (from_account_id::text LIKE 'a7300000-0000-4000-8000-%' OR to_account_id::text LIKE 'a7300000-0000-4000-8000-%') AND NOT (id::text LIKE 'a7300000-0000-4000-8003-%' AND description LIKE '[RR SAMPLE]%')),
+  'installments', (SELECT count(*) FROM private.installment_occurrences WHERE owner_id = '5bf09e85-e346-4c79-808f-29d8577d04ae' AND ((schedule_kind = 'BANK_EMI' AND schedule_id::text LIKE 'a7300000-0000-4000-8006-%') OR (schedule_kind = 'CHITTI' AND schedule_id::text LIKE 'a7300000-0000-4000-8007-%'))),
+  'non_sample_attached', (SELECT count(*) FROM public.transactions t WHERE (t.from_account_id::text LIKE 'a7300000-0000-4000-8000-%' OR t.to_account_id::text LIKE 'a7300000-0000-4000-8000-%' OR t.contact_id::text LIKE 'a7300000-0000-4000-8001-%' OR t.category_id::text LIKE 'a7300000-0000-4000-8002-%' OR t.id::text LIKE 'a7300000-0000-4000-8003-%') AND NOT (t.owner_id = '5bf09e85-e346-4c79-808f-29d8577d04ae' AND t.id::text LIKE 'a7300000-0000-4000-8003-%' AND t.description LIKE '[RR SAMPLE]%' AND (t.from_account_id IS NULL OR t.from_account_id::text LIKE 'a7300000-0000-4000-8000-%') AND (t.to_account_id IS NULL OR t.to_account_id::text LIKE 'a7300000-0000-4000-8000-%') AND (t.contact_id IS NULL OR t.contact_id::text LIKE 'a7300000-0000-4000-8001-%') AND (t.category_id IS NULL OR t.category_id::text LIKE 'a7300000-0000-4000-8002-%') AND t.tagged_profile_id IS NULL)),
   'fixture_owner_mismatch', (SELECT
     (SELECT count(*) FROM public.accounts WHERE id::text LIKE 'a7300000-0000-4000-8000-%' AND owner_id <> '5bf09e85-e346-4c79-808f-29d8577d04ae') +
     (SELECT count(*) FROM public.contacts WHERE id::text LIKE 'a7300000-0000-4000-8001-%' AND owner_id <> '5bf09e85-e346-4c79-808f-29d8577d04ae') +
@@ -163,12 +175,22 @@ SELECT json_build_object(
     (SELECT count(*) FROM public.shopping_lists WHERE id::text LIKE 'a7300000-0000-4000-8012-%' AND owner_id <> '5bf09e85-e346-4c79-808f-29d8577d04ae') +
     (SELECT count(*) FROM public.shopping_list_items WHERE id::text LIKE 'a7300000-0000-4000-8013-%' AND owner_id <> '5bf09e85-e346-4c79-808f-29d8577d04ae')),
   'profiles', (SELECT count(*) FROM public.profiles WHERE id = '5bf09e85-e346-4c79-808f-29d8577d04ae'),
-  'feature_flags', (SELECT count(*) FROM public.user_feature_flags)
+  'feature_flags', (SELECT count(*) FROM public.user_feature_flags WHERE owner_id = '5bf09e85-e346-4c79-808f-29d8577d04ae'),
+  'fixture_settlements', (SELECT count(*) FROM public.settlements s JOIN public.obligations o ON o.id = s.obligation_id WHERE o.id::text LIKE 'a7300000-0000-4000-8005-%'),
+  'fixture_obligation_payments', (SELECT count(*) FROM public.obligation_payments p JOIN public.obligations o ON o.id = p.obligation_id WHERE o.id::text LIKE 'a7300000-0000-4000-8005-%'),
+  'fixture_transaction_payments', (SELECT count(*) FROM public.obligation_payments p WHERE p.transaction_id::text LIKE 'a7300000-0000-4000-8003-%'),
+  'fixture_account_settlements', (SELECT count(*) FROM public.settlements s WHERE s.source_account_id::text LIKE 'a7300000-0000-4000-8000-%' OR s.destination_account_id::text LIKE 'a7300000-0000-4000-8000-%'),
+  'linked_nonfixture_emis', (SELECT count(*) FROM public.recurring_emis e JOIN public.obligations o ON o.id = e.related_obligation_id WHERE o.id::text LIKE 'a7300000-0000-4000-8005-%' AND (e.owner_id <> '5bf09e85-e346-4c79-808f-29d8577d04ae' OR e.id::text NOT LIKE 'a7300000-0000-4000-8006-%')),
+  'account_linked_nonfixture_emis', (SELECT count(*) FROM public.recurring_emis e WHERE e.account_id::text LIKE 'a7300000-0000-4000-8000-%' AND (e.owner_id <> '5bf09e85-e346-4c79-808f-29d8577d04ae' OR e.id::text NOT LIKE 'a7300000-0000-4000-8006-%')),
+  'contact_linked_nonfixture_obligations', (SELECT count(*) FROM public.obligations o WHERE o.contact_id::text LIKE 'a7300000-0000-4000-8001-%' AND o.id::text NOT LIKE 'a7300000-0000-4000-8005-%'),
+  'fixture_account_health_settings', (SELECT count(*) FROM public.account_health_settings h WHERE h.account_id::text LIKE 'a7300000-0000-4000-8000-%'),
+  'preserved_other_owner_accounts', (SELECT count(*) FROM public.accounts WHERE owner_id = '5bf09e85-e346-4c79-808f-29d8577d04af' AND id = '5bf09e85-e346-4c79-808f-29d8577d04b0'),
+  'preserved_other_owner_flags', (SELECT count(*) FROM public.user_feature_flags WHERE owner_id = '5bf09e85-e346-4c79-808f-29d8577d04af' AND feature_key = 'budgets')
 )::text;
 '@
     $BeforeOutput = Invoke-Docker -Arguments @('exec', '-u', 'postgres', $Container, 'psql', '-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', $Database, '-c', $BeforeSql)
     $Before = (($BeforeOutput -join '').Trim()) | ConvertFrom-Json
-    $ExpectedFixture = @{ accounts = 10; contacts = 12; categories = 12; transactions = 480; parties = 10; obligations = 12; recurring_emis = 12; chittis = 12; budget_envelopes = 12; transaction_templates = 15; savings_goals = 12; goal_contributions = 36; shopping_lists = 12; shopping_items = 48; installments = 300 }
+    $ExpectedFixture = @{ accounts = 10; contacts = 12; categories = 12; transactions = 480; parties = 10; obligations = 12; recurring_emis = 12; chittis = 12; budget_envelopes = 12; transaction_templates = 15; savings_goals = 12; goal_contributions = 36; shopping_lists = 12; shopping_items = 48; installments = 300; fixture_settlements = 0; fixture_obligation_payments = 0; fixture_transaction_payments = 0; fixture_account_settlements = 0; linked_nonfixture_emis = 0; account_linked_nonfixture_emis = 0; contact_linked_nonfixture_obligations = 0; fixture_account_health_settings = 0; preserved_other_owner_accounts = 1; preserved_other_owner_flags = 1 }
     $UnexpectedFixture = @($ExpectedFixture.Keys | Where-Object { [int]$Before.$_ -ne $ExpectedFixture[$_] })
     if ($UnexpectedFixture.Count -gt 0 -or $Before.non_sample_attached -ne 0 -or $Before.fixture_owner_mismatch -ne 0 -or $Before.profiles -ne 1 -or $Before.feature_flags -ne 6) {
       $FixtureSummary = ($ExpectedFixture.Keys | ForEach-Object { "$_=$($Before.$_) (expected $($ExpectedFixture[$_]))" }) -join ', '
@@ -176,6 +198,64 @@ SELECT json_build_object(
     }
 
     Invoke-Docker -Arguments @('cp', $SampleCleanupPath, "${Container}:$ContainerSampleCleanup") | Out-Null
+    $SplitContactSeedSql = @'
+DO $$
+BEGIN
+  IF to_regclass('public.split_groups') IS NOT NULL THEN
+    EXECUTE 'INSERT INTO public.split_groups (id, owner_id, name) VALUES (''5bf09e85-e346-4c79-808f-29d8577d04b3'', ''5bf09e85-e346-4c79-808f-29d8577d04ae'', ''Cleanup guard test'') ON CONFLICT (id) DO NOTHING';
+    EXECUTE 'INSERT INTO public.split_group_members (id, group_id, shadow_contact_id) VALUES (''5bf09e85-e346-4c79-808f-29d8577d04b4'', ''5bf09e85-e346-4c79-808f-29d8577d04b3'', ''a7300000-0000-4000-8001-000000000001'') ON CONFLICT (id) DO NOTHING';
+  ELSE
+    CREATE TABLE public.split_group_members (id uuid PRIMARY KEY, shadow_contact_id uuid);
+    INSERT INTO public.split_group_members (id, shadow_contact_id)
+    VALUES ('5bf09e85-e346-4c79-808f-29d8577d04b4', 'a7300000-0000-4000-8001-000000000001');
+  END IF;
+END $$;
+'@
+    Invoke-Docker -Arguments @('exec', '-u', 'postgres', $Container, 'psql', '-X', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', $Database, '-c', $SplitContactSeedSql) | Out-Null
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+      $ErrorActionPreference = 'Continue'
+      $SplitContactProbeOutput = & $Docker.Source exec -u postgres $Container psql -X -v ON_ERROR_STOP=1 -U postgres -d $Database -f $ContainerSampleCleanup 2>&1
+      $SplitContactProbeExit = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $PreviousErrorActionPreference }
+    if ($SplitContactProbeExit -eq 0 -or (($SplitContactProbeOutput -join "`n") -notmatch 'a saved split group references a fixture contact')) {
+      throw 'Sample cleanup guard did not reject a fixture contact referenced by a saved split group.'
+    }
+    $SplitContactCleanupSql = @'
+DO $$
+BEGIN
+  DELETE FROM public.split_group_members WHERE id = '5bf09e85-e346-4c79-808f-29d8577d04b4';
+  IF to_regclass('public.split_groups') IS NOT NULL THEN
+    EXECUTE 'DELETE FROM public.split_groups WHERE id = ''5bf09e85-e346-4c79-808f-29d8577d04b3''';
+  END IF;
+END $$;
+'@
+    Invoke-Docker -Arguments @('exec', '-u', 'postgres', $Container, 'psql', '-X', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', $Database, '-c', $SplitContactCleanupSql) | Out-Null
+
+    Invoke-Docker -Arguments @('exec', '-u', 'postgres', $Container, 'psql', '-X', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', $Database, '-c', "INSERT INTO public.settlements (id, obligation_id, initiator_id, amount) VALUES ('5bf09e85-e346-4c79-808f-29d8577d04b1', 'a7300000-0000-4000-8005-000000000001', '5bf09e85-e346-4c79-808f-29d8577d04ae', 1)") | Out-Null
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+      $ErrorActionPreference = 'Continue'
+      $SettlementProbeOutput = & $Docker.Source exec -u postgres $Container psql -X -v ON_ERROR_STOP=1 -U postgres -d $Database -f $ContainerSampleCleanup 2>&1
+      $SettlementProbeExit = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $PreviousErrorActionPreference }
+    if ($SettlementProbeExit -eq 0 -or (($SettlementProbeOutput -join "`n") -notmatch 'fixture obligations have settlement or payment history')) {
+      throw 'Sample cleanup guard did not reject a fixture obligation with settlement history.'
+    }
+    Invoke-Docker -Arguments @('exec', '-u', 'postgres', $Container, 'psql', '-X', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', $Database, '-c', "DELETE FROM public.settlements WHERE id = '5bf09e85-e346-4c79-808f-29d8577d04b1'") | Out-Null
+
+    Invoke-Docker -Arguments @('exec', '-u', 'postgres', $Container, 'psql', '-X', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', $Database, '-c', "INSERT INTO public.obligation_payments (id, obligation_id, transaction_id, amount) VALUES ('5bf09e85-e346-4c79-808f-29d8577d04b2', 'a7300000-0000-4000-8005-000000000001', 'a7300000-0000-4000-8003-000000000001', 1)") | Out-Null
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+      $ErrorActionPreference = 'Continue'
+      $PaymentProbeOutput = & $Docker.Source exec -u postgres $Container psql -X -v ON_ERROR_STOP=1 -U postgres -d $Database -f $ContainerSampleCleanup 2>&1
+      $PaymentProbeExit = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $PreviousErrorActionPreference }
+    if ($PaymentProbeExit -eq 0 -or (($PaymentProbeOutput -join "`n") -notmatch 'fixture obligations have settlement or payment history')) {
+      throw 'Sample cleanup guard did not reject a fixture obligation with payment history.'
+    }
+    Invoke-Docker -Arguments @('exec', '-u', 'postgres', $Container, 'psql', '-X', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', $Database, '-c', "DELETE FROM public.obligation_payments WHERE id = '5bf09e85-e346-4c79-808f-29d8577d04b2'") | Out-Null
+
     Invoke-Docker -Arguments @('exec', '-u', 'postgres', $Container, 'psql', '-X', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', $Database, '-f', $ContainerSampleCleanup) | Out-Null
     $AfterSql = @'
 SELECT json_build_object(
@@ -194,17 +274,19 @@ SELECT json_build_object(
   'goal_contributions', (SELECT count(*) FROM public.savings_goal_contributions WHERE id::text LIKE 'a7300000-0000-4000-8011-%'),
   'shopping_lists', (SELECT count(*) FROM public.shopping_lists WHERE id::text LIKE 'a7300000-0000-4000-8012-%'),
   'shopping_items', (SELECT count(*) FROM public.shopping_list_items WHERE id::text LIKE 'a7300000-0000-4000-8013-%'),
-  'installments', (SELECT count(*) FROM private.installment_occurrences WHERE owner_id = '5bf09e85-e346-4c79-808f-29d8577d04ae'),
+  'installments', (SELECT count(*) FROM private.installment_occurrences WHERE owner_id = '5bf09e85-e346-4c79-808f-29d8577d04ae' AND ((schedule_kind = 'BANK_EMI' AND schedule_id::text LIKE 'a7300000-0000-4000-8006-%') OR (schedule_kind = 'CHITTI' AND schedule_id::text LIKE 'a7300000-0000-4000-8007-%'))),
   'profiles', (SELECT count(*) FROM public.profiles WHERE id = '5bf09e85-e346-4c79-808f-29d8577d04ae'),
-  'profile_directory', (SELECT count(*) FROM public.profile_directory),
-  'feature_flags', (SELECT count(*) FROM public.user_feature_flags)
+  'profile_directory', (SELECT count(*) FROM public.profile_directory WHERE id = '5bf09e85-e346-4c79-808f-29d8577d04ae'),
+  'feature_flags', (SELECT count(*) FROM public.user_feature_flags WHERE owner_id = '5bf09e85-e346-4c79-808f-29d8577d04ae'),
+  'preserved_other_owner_accounts', (SELECT count(*) FROM public.accounts WHERE owner_id = '5bf09e85-e346-4c79-808f-29d8577d04af' AND id = '5bf09e85-e346-4c79-808f-29d8577d04b0'),
+  'preserved_other_owner_flags', (SELECT count(*) FROM public.user_feature_flags WHERE owner_id = '5bf09e85-e346-4c79-808f-29d8577d04af' AND feature_key = 'budgets')
 )::text;
 '@
     $AfterOutput = Invoke-Docker -Arguments @('exec', '-u', 'postgres', $Container, 'psql', '-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', $Database, '-c', $AfterSql)
     $After = (($AfterOutput -join '').Trim()) | ConvertFrom-Json
     $RemainingFixture = @('accounts','sample_accounts','sample_categories','sample_transactions','contacts','parties','obligations','recurring_emis','chittis','budget_envelopes','transaction_templates','savings_goals','goal_contributions','shopping_lists','shopping_items','installments' | Where-Object { [int]$After.$_ -ne 0 })
-    if ($RemainingFixture.Count -gt 0 -or $After.profiles -ne 1 -or $After.profile_directory -ne 1 -or $After.feature_flags -ne 6) {
-      throw "Sample cleanup rehearsal postcondition failed (remaining fixture tables: $($RemainingFixture -join ', '); profiles=$($After.profiles), directory=$($After.profile_directory), flags=$($After.feature_flags))."
+    if ($RemainingFixture.Count -gt 0 -or $After.profiles -ne 1 -or $After.profile_directory -ne 1 -or $After.feature_flags -ne 6 -or $After.preserved_other_owner_accounts -ne 1 -or $After.preserved_other_owner_flags -ne 1) {
+      throw "Sample cleanup rehearsal postcondition failed (remaining fixture tables: $($RemainingFixture -join ', '); profiles=$($After.profiles), directory=$($After.profile_directory), flags=$($After.feature_flags), preserved other-owner accounts=$($After.preserved_other_owner_accounts), flags=$($After.preserved_other_owner_flags))."
     }
     Write-Output 'Sample cleanup rehearsal passed: sample accounts, categories and transactions removed; owner profile, directory and preferences preserved.'
   }
