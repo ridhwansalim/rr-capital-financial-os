@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'r
 import { App as CapacitorApp } from '@capacitor/app'
 import { Browser } from '@capacitor/browser'
 import { Capacitor } from '@capacitor/core'
+import { CapacitorUpdater } from '@capgo/capacitor-updater'
 import { ThemeProvider } from './components/ThemeProvider'
 import { AutoLockProvider } from './components/AutoLockProvider'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -80,6 +81,34 @@ function OAuthDeepLinkHandler() {
   return null
 }
 
+function NativeUpdateBootstrap() {
+  useEffect(() => {
+    const isNative = Capacitor.isNativePlatform()
+    if (isNative) {
+      // Capgo's configured atBackground policy checks the OTA endpoint and stages
+      // compatible web bundles; notifyAppReady confirms this launch is healthy.
+      void CapacitorUpdater.notifyAppReady().catch(() => undefined)
+    }
+
+    // Keep a fresh release snapshot available to Settings without delaying app startup.
+    const versionUrl = isNative ? 'https://financial-os-orcin-ten.vercel.app/version.json' : '/version.json'
+    void fetch(versionUrl, { cache: 'no-store' })
+      .then(async response => {
+        if (!response.ok) return
+        const manifest = await response.json() as Record<string, unknown>
+        if (typeof manifest.version === 'string' && Number.isSafeInteger(manifest.build)) {
+          const checkedAt = new Date().toISOString()
+          localStorage.setItem('rr-capital-remote-version-manifest', JSON.stringify(manifest))
+          localStorage.setItem('rr-capital-remote-version-checked-at', checkedAt)
+          window.dispatchEvent(new CustomEvent('rr:version-manifest', { detail: { manifest, checkedAt } }))
+        }
+      })
+      .catch(() => undefined)
+  }, [])
+
+  return null
+}
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -87,6 +116,7 @@ export default function App() {
         <LiquidToggleFilters />
         <Router>
           <OAuthDeepLinkHandler />
+          <NativeUpdateBootstrap />
           <ReloadPrompt />
             <Routes>
               {/* Public Route */}

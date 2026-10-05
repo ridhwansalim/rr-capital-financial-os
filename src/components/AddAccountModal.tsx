@@ -62,6 +62,7 @@ export default function AddAccountModal({ isOpen, onClose, onSuccess }: AddAccou
       const { error } = await supabase.from('accounts').insert(payload)
       if (error) throw error
 
+      window.dispatchEvent(new Event('rr:financial-data-changed'))
       handleClose(true)
       onSuccess()
     } catch (error: any) {

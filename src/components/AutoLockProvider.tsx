@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Lock, Delete, Fingerprint } from 'lucide-react'
 import { hasAppPinConfigured, migrateLegacyAppPin, verifyAppPin } from '../lib/appPin'
+import { Capacitor } from '@capacitor/core'
+import { BiometryError, BiometryErrorType } from '@aparajita/capacitor-biometric-auth'
+import { App as CapacitorApp } from '@capacitor/app'
+import { supabase } from '../lib/supabase'
+import { authenticateWithBiometrics, isBiometricEnabledForOwner } from '../lib/biometrics'
 
 // WebAuthn Helper to decode saved hardware keys
 const base64ToArrayBuffer = (base64: string) => {
@@ -45,16 +50,13 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
     const lockTimeMinutes = parseInt(localStorage.getItem('financial_os_lock_time') || '3', 10)
     const lastActive = localStorage.getItem('financial_os_last_active')
     const hasValidPin = hasAppPinConfigured()
-    const devices = readRegisteredDevices()
-    const hasBiometrics = localStorage.getItem('financial_os_bio_enabled') === 'true' && devices.length > 0
-
     if (isAutoLockEnabled && (hasValidPin || hasBiometrics) && lastActive) {
       const timePassed = Date.now() - parseInt(lastActive, 10)
       if (timePassed > (lockTimeMinutes * 60 * 1000)) {
         setIsLocked(true)
       }
     }
-  }, [])
+  }, [hasBiometrics])
 
   useEffect(() => {
     void migrateLegacyAppPin().catch(() => {
@@ -75,16 +77,57 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
 
     const interval = setInterval(checkLockState, 5000)
 
-    // Check if we have registered biometric devices locally
-    const devices = readRegisteredDevices()
-    const isBioEnabled = localStorage.getItem('financial_os_bio_enabled') === 'true'
-    setHasBiometrics(isBioEnabled && devices.length > 0)
+    if (Capacitor.isNativePlatform()) {
+      void supabase.auth.getSession().then(async ({ data }) => {
+        setHasBiometrics(data.session?.user.id ? await isBiometricEnabledForOwner(data.session.user.id) : false)
+      }).catch(() => setHasBiometrics(false))
+    } else {
+      const devices = readRegisteredDevices()
+      const isBioEnabled = localStorage.getItem('financial_os_bio_enabled') === 'true'
+      setHasBiometrics(isBioEnabled && devices.length > 0)
+    }
+
+    const syncNativeBiometry = (event: Event) => {
+      const enabled = (event as CustomEvent<{ enabled?: boolean }>).detail?.enabled === true
+      if (!enabled) { setHasBiometrics(false); return }
+      void supabase.auth.getSession().then(async ({ data }) => {
+        setHasBiometrics(data.session?.user.id ? await isBiometricEnabledForOwner(data.session.user.id) : false)
+      }).catch(() => setHasBiometrics(false))
+    }
+    window.addEventListener('rr:native-biometry-enabled', syncNativeBiometry)
+
+    let wasBackgrounded = false
+    const lockNativeSession = async () => {
+      const { data } = await supabase.auth.getSession()
+      const ownerId = data.session?.user.id
+      const shouldLock = ownerId ? await isBiometricEnabledForOwner(ownerId) : false
+      setHasBiometrics(shouldLock)
+      if (shouldLock) setIsLocked(true)
+      else if (!ownerId) setIsLocked(false)
+    }
+
+    let appStateListener: ReturnType<typeof CapacitorApp.addListener> | undefined
+    if (Capacitor.isNativePlatform()) {
+      void lockNativeSession()
+      appStateListener = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+        if (!isActive) {
+          wasBackgrounded = true
+          return
+        }
+        if (!wasBackgrounded) return
+        wasBackgrounded = false
+        checkLockState()
+        void lockNativeSession()
+      })
+    }
 
     return () => {
       window.removeEventListener('mousemove', handleActivity)
       window.removeEventListener('keydown', handleActivity)
       window.removeEventListener('touchstart', handleActivity)
       window.removeEventListener('click', handleActivity)
+      window.removeEventListener('rr:native-biometry-enabled', syncNativeBiometry)
+      void appStateListener?.then(listener => listener.remove())
       clearInterval(interval)
     }
   }, [isLocked, checkLockState])
@@ -118,9 +161,29 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
     setError(false)
   }
 
+  const handleAccountPasswordFallback = async () => {
+    const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' })
+    if (signOutError) {
+      setError(true)
+      return
+    }
+    setIsLocked(false)
+    setPinInput('')
+    localStorage.removeItem('financial_os_last_active')
+  }
+
   // Hardware WebAuthn Request
   const triggerBiometricUnlock = async () => {
     try {
+      if (Capacitor.isNativePlatform()) {
+        await authenticateWithBiometrics('Unlock your RR Capital workspace')
+        setIsLocked(false)
+        setPinInput('')
+        setError(false)
+        localStorage.setItem('financial_os_last_active', Date.now().toString())
+        return
+      }
+
       const savedDevices = readRegisteredDevices()
       if (savedDevices.length === 0) return
 
@@ -169,7 +232,8 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
       setIsLocked(false)
       setPinInput('')
       localStorage.setItem('financial_os_last_active', Date.now().toString())
-    } catch {
+    } catch (authError) {
+      if (authError instanceof BiometryError && [BiometryErrorType.userCancel, BiometryErrorType.appCancel, BiometryErrorType.systemCancel].includes(authError.code)) return
       console.warn('Biometric authentication failed')
       setError(true)
       setTimeout(() => setError(false), 800)
@@ -241,6 +305,9 @@ export function AutoLockProvider({ children }: { children: React.ReactNode }) {
             onClick={triggerBiometricUnlock}
             className="rounded-xl bg-emerald-500/20 px-5 py-3 text-emerald-300 border border-emerald-500/30"
           ><Fingerprint className="inline w-5 h-5 mr-2" />Use device screen lock</button>}
+          <button type="button" onClick={() => void handleAccountPasswordFallback()} className="mt-5 text-sm text-white/70 underline underline-offset-4 hover:text-white">
+            Cancel unlock and use account password
+          </button>
         </div>
       </div>
     )

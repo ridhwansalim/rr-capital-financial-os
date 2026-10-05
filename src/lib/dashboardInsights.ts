@@ -9,6 +9,8 @@ import { visibleOfflineItems } from './offlineOwnership'
 import { supabase } from './supabase'
 import type { FeatureFlags } from './optionalFeatures'
 import { addIndiaCalendarDays as addIndiaDays, budgetTransactionWindow } from './dashboardInsightsMath'
+import { syncAndroidDashboardWidget } from './dashboardWidget'
+import { calculateWidgetMonthlyCommitments, calculateWidgetNetFlow30Day } from './dashboardWidgetMath'
 
 export type ActionableAlert = { id: string; title: string; detail: string; href: string; kind: 'offline' | 'account' | 'commitment' | 'approval' }
 export type DatedOccurrence = { id: string; scheduleId: string; name: string; kind: 'chitti' | 'emi'; dueDate: string; amount: number; accountId: string | null; status: string; href: string }
@@ -26,6 +28,7 @@ export type OfflineInsight = { pendingCount: number; failedCount: number; lastAt
 export type DashboardInsights = {
   loading: boolean; error: string | null; ownerId: string | null; asOfDate: string
   netWorth: number; liquidBalance: number; reserveMonths: number | null; eligibleMonthlyExpense: number; avgDailyEligiblePersonalExpense: number
+  monthlyCommitmentsThisMonth: number; safeLeftoverThisMonth: number; netFlow30Day: number
   datedCommitments7Day: number; datedCommitments30Day: number; unassignedUndatedMonthlyEstimate: number
   datedOccurrences7Day: DatedOccurrence[]; datedOccurrences30Day: DatedOccurrence[]; nextDatedOccurrence: DatedOccurrence | null
   nextOccurrenceBySchedule: Record<string, DatedOccurrence>; unassignedOccurrences: DatedOccurrence[]
@@ -39,6 +42,7 @@ export type DashboardInsights = {
 const emptyOffline = (): OfflineInsight => ({ pendingCount: 0, failedCount: 0, lastAttemptAt: null, isOnline: typeof navigator === 'undefined' ? true : navigator.onLine, items: [] })
 const emptyInsights = (ownerId: string | null): DashboardInsights => ({
   loading: Boolean(ownerId), error: null, ownerId, asOfDate: toIndiaDateInputValue(), netWorth: 0, liquidBalance: 0, reserveMonths: null,
+  monthlyCommitmentsThisMonth: 0, safeLeftoverThisMonth: 0, netFlow30Day: 0,
   eligibleMonthlyExpense: 0, avgDailyEligiblePersonalExpense: 0, datedCommitments7Day: 0, datedCommitments30Day: 0,
   unassignedUndatedMonthlyEstimate: 0, datedOccurrences7Day: [], datedOccurrences30Day: [], nextDatedOccurrence: null, nextOccurrenceBySchedule: {}, unassignedOccurrences: [],
   commitmentAdjustedRunwayDays: null, accounts: [], lowBalanceAccountCount: 0, creditAccountCount: 0, receivableTotal: 0, payableTotal: 0,
@@ -130,6 +134,7 @@ async function calculateInsights(ownerId: string, flags: FeatureFlags): Promise<
     flags.savings_goals ? query<any[]>(supabase.from('savings_goals').select('id,name,target_amount,target_date,created_at')) : Promise.resolve([]),
     flags.savings_goals ? query<any[]>(supabase.from('savings_goal_contributions').select('id,goal_id,amount,contributed_on')) : Promise.resolve([]),
   ])
+  const monthlyCommitmentsThisMonth = calculateWidgetMonthlyCommitments(today, ownerId, chittiRows, emiRows)
 
   const balances = new Map<string, number>((balanceRows as any[]).map(row => [row.id, numeric(row.balance)]))
   const ownedAccountIds = new Set<string>((accountRows as any[]).map(row => row.id))
@@ -144,6 +149,7 @@ async function calculateInsights(ownerId: string, flags: FeatureFlags): Promise<
   const recentStartIso = indiaDateStartToIso(historyStart)
   const recentEndIso = indiaDateStartToIso(historyEnd)
   const recentEligible = personalTransactions.filter(row => row.created_at >= recentStartIso && row.created_at < recentEndIso)
+  const netFlow30Day = calculateWidgetNetFlow30Day(today, personalTransactions)
   const fullHistoryDays = observedHistoryDays(historyStart, historyEnd, [])
   const historyDays = observedHistoryDays(historyStart, historyEnd, (accountRows as any[]).map(row => row.opening_date))
   const historyExpenses = recentEligible.filter(row => row.from_account_id && !row.to_account_id).reduce((sum, row) => sum + numeric(row.amount) + numeric(row.fee_amount), 0)
@@ -338,6 +344,7 @@ async function calculateInsights(ownerId: string, flags: FeatureFlags): Promise<
   const unassignedMonthly = [...undatedMonthlyEstimate.values()].reduce((sum, item) => sum + item.amount, 0)
   return {
     loading: false, error: null, ownerId, asOfDate: today, netWorth: totalNetWorth, liquidBalance,
+    monthlyCommitmentsThisMonth, safeLeftoverThisMonth: liquidBalance - monthlyCommitmentsThisMonth, netFlow30Day,
     reserveMonths: eligibleMonthlyExpense > 0 ? Math.max(0, liquidBalance) / eligibleMonthlyExpense : null,
     eligibleMonthlyExpense, avgDailyEligiblePersonalExpense: avgDailyExpense, datedCommitments7Day: dated7Total,
     datedCommitments30Day: dated30Total, unassignedUndatedMonthlyEstimate: unassignedMonthly,
@@ -393,8 +400,24 @@ export function useDashboardInsights(ownerId: string | null, flags: FeatureFlags
     return () => { active = false }
   }, [ownerId, flags, revision])
   const ownerScopedData = serverData.ownerId === ownerId ? serverData : emptyInsights(ownerId)
-  return useMemo(() => ({ ...ownerScopedData, offline, offlineCount: offline.pendingCount + offline.failedCount, alerts: [
+  const result = useMemo(() => ({ ...ownerScopedData, offline, offlineCount: offline.pendingCount + offline.failedCount, alerts: [
     ...offline.items.map(item => ({ id: `offline-${item.id ?? item.request_id ?? item.created_at}`, title: item.sync_status === 'failed' ? 'Offline transaction needs attention' : 'Transaction waiting to sync', detail: item.description || money(numeric(item.amount)), href: '/offline', kind: 'offline' as const })),
     ...ownerScopedData.alerts.filter(alert => alert.kind !== 'offline'),
   ] }), [ownerScopedData, offline])
+  useEffect(() => {
+    // Keep the last good widget snapshot while an authenticated owner's data is
+    // hydrating or temporarily unavailable. Only clear it on an actual sign-out.
+    if (ownerId && (result.loading || result.error)) return
+    const nextDue = result.nextDatedOccurrence
+    void syncAndroidDashboardWidget({
+      signedIn: Boolean(ownerId),
+      netWorth: result.netWorth,
+      safeLeftover: result.safeLeftoverThisMonth,
+      netFlow30Day: result.netFlow30Day,
+      nextDueName: nextDue?.name || 'No upcoming due',
+      nextDueDate: nextDue?.dueDate || '',
+      nextDueAmount: nextDue?.amount ?? null,
+    })
+  }, [ownerId, result])
+  return result
 }

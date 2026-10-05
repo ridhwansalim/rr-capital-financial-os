@@ -198,6 +198,7 @@ export default function AddDebtModal({ isOpen, onClose }: AddDebtModalProps) {
       
       if (rpcError) throw rpcError
 
+      window.dispatchEvent(new Event('rr:financial-data-changed'))
       handleClose(true)
       if (window.location.pathname === '/debts') window.location.reload()
     } catch (error: any) {

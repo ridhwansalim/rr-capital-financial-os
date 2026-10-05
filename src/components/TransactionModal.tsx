@@ -397,6 +397,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
       }]).select().single()
 
       if (insertError) throw insertError
+      window.dispatchEvent(new Event('rr:financial-data-changed'))
       
       await fetchAccounts()
       
@@ -503,6 +504,7 @@ export default function TransactionModal({ isOpen, onClose, initialFile, initial
         alert('Transaction saved on this device. It will sync when you reconnect.')
       }
 
+      window.dispatchEvent(new Event('rr:financial-data-changed'))
       handleClose(true)
       if (navigator.onLine && window.location.pathname === '/') window.location.reload()
 

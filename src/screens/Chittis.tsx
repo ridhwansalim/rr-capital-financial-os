@@ -147,6 +147,7 @@ export default function Chittis() {
         if (error) throw error
       }
 
+      window.dispatchEvent(new Event('rr:financial-data-changed'))
       handleCloseModal(true)
       fetchData()
     } catch {
@@ -174,6 +175,7 @@ export default function Chittis() {
       if (error) throw error
 
       claimRequestId.current = null
+      window.dispatchEvent(new Event('rr:financial-data-changed'))
       setClaimModalData(null)
       setClaimMonth('')
       setClaimFee('')
@@ -207,6 +209,7 @@ export default function Chittis() {
       if (error) throw error
 
       payRequestId.current = null
+      window.dispatchEvent(new Event('rr:financial-data-changed'))
       setPayModalData(null)
       setPayAccountId('')
       setPayDate(toIndiaDateInputValue())
@@ -245,6 +248,7 @@ export default function Chittis() {
     try {
       const { error } = await supabase.from('chittis').delete().eq('id', id)
       if (error) throw error
+      window.dispatchEvent(new Event('rr:financial-data-changed'))
       fetchData()
     } catch {
       alert("Failed to delete Chitti plan.")

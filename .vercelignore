@@ -4,6 +4,13 @@
 node_modules/
 dist/
 dev-dist/
+/.android-sdk/
+/android/.gradle/
+/android/app/build/
+/android/capacitor-cordova-android-plugins/build/
+/android/app/src/main/assets/public/
+*.zip
+/RR-Capital.apk
 test-results/
 playwright-report/
 design-backups/

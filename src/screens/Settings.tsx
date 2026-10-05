@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, useNavigate } from 'react-router-dom'
-import { Settings as SettingsIcon, Search, User, Key, Lock, RotateCcw, Trash2, Loader2, Palette, Bot, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut, Sun, Moon, RefreshCw, Download, ArrowLeftRight, ArrowRight, LayoutGrid, X, ArrowUp, ArrowDown } from 'lucide-react'
+import { Settings as SettingsIcon, Search, User, Key, Lock, RotateCcw, Trash2, Loader2, Palette, Bot, Info, Fingerprint, Plus, Laptop, Smartphone, LogOut, Sun, Moon, RefreshCw, Download, ArrowLeftRight, ArrowRight, LayoutGrid, X, ArrowUp, ArrowDown, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { formatIndiaDate } from '../lib/financeDate'
 import { normalizeThemeMode, useTheme } from '../components/ThemeProvider'
@@ -20,8 +20,30 @@ import { ROUTE_REGISTRY, SETTINGS_GROUPS } from '../lib/routeRegistry'
 import { useWorkspaceLayoutContext } from '../lib/workspaceLayoutContext'
 import NativeMessagingIntake from '../components/NativeMessagingIntake'
 import { Capacitor } from '@capacitor/core'
+import { authenticateWithBiometrics, checkBiometricAvailability, disableBiometricForOwner, enableBiometricForOwner, isBiometricEnabledForOwner } from '../lib/biometrics'
 import { CapacitorUpdater } from '@capgo/capacitor-updater'
 import { NativeApkUpdater, type AndroidReleaseManifest } from '../lib/nativeApkUpdater'
+import { getNativeLauncherIcon, setNativeLauncherIcon, type LauncherIconId } from '../lib/nativeLauncherIcon'
+
+const RELEASE_ORIGIN = 'https://financial-os-orcin-ten.vercel.app'
+
+interface AppVersionManifest {
+  version: string
+  build: number
+  commit: string
+  minNativeVersion: number
+  apkUrl: string
+}
+
+function isAppVersionManifest(value: unknown): value is AppVersionManifest {
+  if (!value || typeof value !== 'object') return false
+  const manifest = value as Partial<AppVersionManifest>
+  return typeof manifest.version === 'string'
+    && Number.isSafeInteger(manifest.build)
+    && typeof manifest.commit === 'string'
+    && Number.isSafeInteger(manifest.minNativeVersion)
+    && typeof manifest.apkUrl === 'string'
+}
 
 // WebAuthn Helper to encode hardware keys
 const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
@@ -30,10 +52,47 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
 
 export default function Settings() {
   const navigate = useNavigate()
+  const [launcherIcon, setLauncherIcon] = useState<LauncherIconId>(() => {
+    const saved = localStorage.getItem('rr-capital-app-icon')
+    return saved === 'dark' || saved === 'cream' || saved === 'monochrome' ? saved : 'system'
+  })
+  const [launcherIconMessage, setLauncherIconMessage] = useState('')
+  const [launcherIconBusy, setLauncherIconBusy] = useState(false)
   const telegramBotUsername = (import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'ridhwans_fin_bot').replace(/^@/, '')
   const { themeMode, setTheme } = useTheme()
   const { flags: featureFlags } = useOptionalFeatures()
   const workspace = useWorkspaceLayoutContext()
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    let active = true
+    void getNativeLauncherIcon().then(icon => {
+      if (!active) return
+      setLauncherIcon(icon)
+      localStorage.setItem('rr-capital-app-icon', icon)
+    }).catch(() => undefined)
+    return () => { active = false }
+  }, [])
+  useEffect(() => {
+    if (!launcherIconMessage) return
+    const timeout = window.setTimeout(() => setLauncherIconMessage(''), 2600)
+    return () => window.clearTimeout(timeout)
+  }, [launcherIconMessage])
+  const chooseLauncherIcon = async (icon: LauncherIconId) => {
+    if (launcherIconBusy) return
+    setLauncherIconBusy(true)
+    setLauncherIconMessage('')
+    try {
+      const activeIcon = await setNativeLauncherIcon(icon)
+      setLauncherIcon(activeIcon)
+      localStorage.setItem('rr-capital-app-icon', activeIcon)
+      const title = activeIcon === 'system' ? 'System Default' : activeIcon === 'dark' ? 'Dark Inverted' : activeIcon === 'cream' ? 'Classic Cream' : 'Minimalist'
+      setLauncherIconMessage(`${title} icon applied.`)
+    } catch (error) {
+      setLauncherIconMessage(safeCaughtErrorMessage(error, 'Could not change the app icon.'))
+    } finally {
+      setLauncherIconBusy(false)
+    }
+  }
   const [navbarModalOpen, setNavbarModalOpen] = useState(false)
   const [navbarEditorViewport, setNavbarEditorViewport] = useState<'mobile' | 'desktop'>(workspace.isMobile ? 'mobile' : 'desktop')
   useModalBack(navbarModalOpen, () => setNavbarModalOpen(false))
@@ -45,12 +104,21 @@ export default function Settings() {
   }, [navbarModalOpen])
   const [checkingAppUpdate, setCheckingAppUpdate] = useState(false)
   const [appUpdateStatus, setAppUpdateStatus] = useState('')
-  const [lastAppUpdateCheck, setLastAppUpdateCheck] = useState('')
+  const [lastAppUpdateCheck, setLastAppUpdateCheck] = useState(() => localStorage.getItem('rr-capital-remote-version-checked-at') || '')
   const [appUpdateAvailable, setAppUpdateAvailable] = useState(() => localStorage.getItem('rr-capital-update-available') === 'true')
   const [nativeOtaBundleId, setNativeOtaBundleId] = useState<string | null>(null)
   const [installedWebVersion, setInstalledWebVersion] = useState(import.meta.env.VITE_OTA_RELEASE_VERSION || currentRelease.version)
   const [installedWebHash, setInstalledWebHash] = useState('')
-  const [remoteWebVersion, setRemoteWebVersion] = useState('')
+  const [remoteAppManifest, setRemoteAppManifest] = useState<AppVersionManifest | null>(() => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem('rr-capital-remote-version-manifest') || 'null')
+      return isAppVersionManifest(stored) ? stored : null
+    } catch {
+      return null
+    }
+  })
+  const remoteWebVersion = remoteAppManifest?.version || ''
+  const [webUpdateProgress, setWebUpdateProgress] = useState<number | null>(null)
   const [installedNativeVersion, setInstalledNativeVersion] = useState('')
   const [nativeRelease, setNativeRelease] = useState<AndroidReleaseManifest | null>(null)
   const [nativeReleaseAvailable, setNativeReleaseAvailable] = useState(false)
@@ -76,33 +144,62 @@ export default function Settings() {
 
   useEffect(() => {
     const markAvailable = () => setAppUpdateAvailable(true)
+    const syncVersionManifest = (event: Event) => {
+      const detail = (event as CustomEvent<{ manifest?: unknown; checkedAt?: string }>).detail
+      if (detail && isAppVersionManifest(detail.manifest)) setRemoteAppManifest(detail.manifest)
+      if (typeof detail?.checkedAt === 'string') setLastAppUpdateCheck(detail.checkedAt)
+    }
     window.addEventListener('rr:update-found', markAvailable)
+    window.addEventListener('rr:version-manifest', syncVersionManifest)
     const releaseNotesTimer = window.setTimeout(() => { void loadReleaseInfo() }, 0)
+    if (Capacitor.isNativePlatform()) {
+      void Promise.all([CapacitorUpdater.current(), NativeApkUpdater.getInstalledVersion()])
+        .then(([current, installed]) => {
+          setInstalledWebVersion(current.bundle.version || 'Built-in web bundle')
+          setInstalledWebHash(current.bundle.checksum || '')
+          setInstalledNativeVersion(installed.versionName + ' (' + installed.versionCode + ')')
+        })
+        .catch(() => undefined)
+    }
     if (new URLSearchParams(window.location.search).get('section') === 'updates') {
       window.setTimeout(() => document.getElementById('app-updates')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 250)
     }
-    return () => { window.clearTimeout(releaseNotesTimer); window.removeEventListener('rr:update-found', markAvailable) }
+    return () => {
+      window.clearTimeout(releaseNotesTimer)
+      window.removeEventListener('rr:update-found', markAvailable)
+      window.removeEventListener('rr:version-manifest', syncVersionManifest)
+    }
   }, [])
 
   const checkForAppUpdate = async () => {
     setCheckingAppUpdate(true)
-    setAppUpdateStatus('Checking for an updateâ€¦')
-    setLastAppUpdateCheck(new Date().toISOString())
+    setAppUpdateStatus('Checking for an update…')
+    setWebUpdateProgress(null)
+    const checkedAt = new Date().toISOString()
+    setLastAppUpdateCheck(checkedAt)
+    localStorage.setItem('rr-capital-remote-version-checked-at', checkedAt)
+    let minimumNativeVersion = remoteAppManifest?.minNativeVersion ?? 1
     try {
       await loadReleaseInfo()
-      const webManifestResponse = await fetch('/ota/manifest.json', { cache: 'no-store' })
-      if (webManifestResponse.ok) {
-        const webManifest = await webManifestResponse.json() as { version?: unknown }
-        if (typeof webManifest.version === 'string') setRemoteWebVersion(webManifest.version)
+      const releaseBase = Capacitor.isNativePlatform() ? RELEASE_ORIGIN : window.location.origin
+      const appManifestResponse = await fetch(releaseBase + '/version.json', { cache: 'no-store' })
+      if (appManifestResponse.ok) {
+        const manifest: unknown = await appManifestResponse.json()
+        if (isAppVersionManifest(manifest)) {
+          minimumNativeVersion = manifest.minNativeVersion
+          setRemoteAppManifest(manifest)
+          localStorage.setItem('rr-capital-remote-version-manifest', JSON.stringify(manifest))
+        }
       }
       if (Capacitor.isNativePlatform()) {
         const current = await CapacitorUpdater.current()
         setInstalledWebVersion(current.bundle.version || 'Built-in web bundle')
         setInstalledWebHash(current.bundle.checksum || '')
         const installedNative = await NativeApkUpdater.getInstalledVersion()
+        let apkUpdateIsAvailable = false
         setInstalledNativeVersion(`${installedNative.versionName} (${installedNative.versionCode})`)
         try {
-          const nativeResponse = await fetch('/api/android/version', { cache: 'no-store' })
+          const nativeResponse = await fetch(RELEASE_ORIGIN + '/api/android/version', { cache: 'no-store' })
           if (nativeResponse.ok) {
             const manifest = await nativeResponse.json() as AndroidReleaseManifest
             const validManifest = manifest.packageId === 'com.rrcapital.finance'
@@ -112,11 +209,19 @@ export default function Settings() {
               && typeof manifest.sha256 === 'string'
             if (validManifest) {
               setNativeRelease(manifest)
-              setNativeReleaseAvailable(manifest.versionCode > installedNative.versionCode && /^https:\/\//.test(manifest.apkUrl) && /^[a-f0-9]{64}$/i.test(manifest.sha256))
+              apkUpdateIsAvailable = manifest.versionCode > installedNative.versionCode && /^https:\/\//.test(manifest.apkUrl) && /^[a-f0-9]{64}$/i.test(manifest.sha256)
+              setNativeReleaseAvailable(apkUpdateIsAvailable)
             }
           }
         } catch {
           // The OTA channel can still be checked if the native release feed is offline.
+        }
+        if (installedNative.versionCode < minimumNativeVersion) {
+          setAppUpdateAvailable(false)
+          setAppUpdateStatus(apkUpdateIsAvailable
+            ? 'This web release requires Android build ' + minimumNativeVersion + '. Download the native APK update below to continue.'
+            : 'This web release requires Android build ' + minimumNativeVersion + '. A compatible APK has not been published yet.')
+          return
         }
         const response = await fetch('https://financial-os-orcin-ten.vercel.app/api/ota/updates', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -130,10 +235,20 @@ export default function Settings() {
           setAppUpdateAvailable(false)
           return
         }
-        const bundle = await CapacitorUpdater.download({ url: update.url, version: update.version, checksum: update.checksum })
+        setWebUpdateProgress(0)
+        const progressListener = await CapacitorUpdater.addListener('download', info => {
+          setWebUpdateProgress(Math.max(0, Math.min(100, Math.round(info.percent))))
+        })
+        let bundle
+        try {
+          bundle = await CapacitorUpdater.download({ url: update.url, version: update.version, checksum: update.checksum })
+        } finally {
+          await progressListener.remove()
+        }
+        setWebUpdateProgress(100)
         setNativeOtaBundleId(bundle.id)
         setAppUpdateAvailable(true)
-        setRemoteWebVersion(update.version)
+        setRemoteAppManifest(previous => previous ? { ...previous, version: update.version! } : previous)
         setAppUpdateStatus(`Web update ${update.version} is downloaded and checksum-verified. Update Now to apply it.`)
         return
       }
@@ -150,7 +265,7 @@ export default function Settings() {
         setAppUpdateAvailable(true)
         setAppUpdateStatus('A new version is ready to install.')
       } else {
-        setAppUpdateStatus('Youâ€™re using the latest version available to this device.')
+        setAppUpdateStatus('You’re using the latest version available to this device.')
       }
     } catch {
       setAppUpdateStatus('Could not check right now. Check your connection and try again.')
@@ -161,6 +276,7 @@ export default function Settings() {
 
   const installAppUpdate = () => {
     if (Capacitor.isNativePlatform() && nativeOtaBundleId) {
+      setAppUpdateStatus('Installing the web update and restarting RR Capital…')
       void CapacitorUpdater.set({ id: nativeOtaBundleId }).catch(() => setAppUpdateStatus('The downloaded web update could not be applied. It will remain on the current version.'))
       return
     }
@@ -216,6 +332,7 @@ export default function Settings() {
   }))
   const [originalProfile, setOriginalProfile] = useState(defaultProfile)
   const [draftProfile, setDraftProfile] = useState(defaultProfile)
+  const [nativeBiometryVerified, setNativeBiometryVerified] = useState(false)
   const isProfileModified = JSON.stringify(originalProfile) !== JSON.stringify(draftProfile)
   const unsavedActionsRef = useRef<HTMLDivElement>(null)
   const discardActionRef = useRef<HTMLButtonElement>(null)
@@ -343,6 +460,10 @@ export default function Settings() {
             // Keep device preferences locally; Gemini credentials are managed server-side in Vault.
             localStorage.setItem('financial_os_devices', JSON.stringify(loadedProfile.registered_devices))
             localStorage.setItem('financial_os_bio_enabled', loadedProfile.is_biometric_enabled ? 'true' : 'false')
+            if (Capacitor.isNativePlatform()) {
+              void isBiometricEnabledForOwner(user.id).then(setNativeBiometryVerified).catch(() => setNativeBiometryVerified(false))
+              if (!loadedProfile.is_biometric_enabled) void disableBiometricForOwner(user.id).catch(() => undefined)
+            }
           }
         }
 
@@ -443,8 +564,20 @@ export default function Settings() {
 
   const handleSaveProfile = async () => {
     setIsSavingProfile(true)
+    let priorNativeBiometry: boolean | null = null
+    let nativeBiometryWriteCompleted = false
     try {
       if (!userId) throw new Error('No user found')
+      if (Capacitor.isNativePlatform() && draftProfile.is_biometric_enabled && !nativeBiometryVerified && !(await isBiometricEnabledForOwner(userId))) {
+        alert('Confirm this device’s biometrics before saving Biometric Unlock.')
+        return
+      }
+      if (Capacitor.isNativePlatform()) {
+        priorNativeBiometry = await isBiometricEnabledForOwner(userId)
+        if (draftProfile.is_biometric_enabled) await enableBiometricForOwner(userId)
+        else await disableBiometricForOwner(userId)
+        nativeBiometryWriteCompleted = true
+      }
       const profileUpdate = {
         full_name: draftProfile.full_name,
         username: draftProfile.username,
@@ -461,7 +594,15 @@ export default function Settings() {
       setOriginalProfile(draftProfile)
       localStorage.setItem('financial_os_devices', JSON.stringify(draftProfile.registered_devices))
       localStorage.setItem('financial_os_bio_enabled', draftProfile.is_biometric_enabled ? 'true' : 'false')
+      if (Capacitor.isNativePlatform()) {
+        setNativeBiometryVerified(draftProfile.is_biometric_enabled)
+        window.dispatchEvent(new CustomEvent('rr:native-biometry-enabled', { detail: { enabled: draftProfile.is_biometric_enabled } }))
+      }
     } catch {
+      if (userId && Capacitor.isNativePlatform() && nativeBiometryWriteCompleted && priorNativeBiometry !== null) {
+        const restore = priorNativeBiometry ? enableBiometricForOwner(userId) : disableBiometricForOwner(userId)
+        await restore.catch(() => undefined)
+      }
       alert('Failed to save settings.')
     } finally {
       setIsSavingProfile(false)
@@ -680,10 +821,12 @@ export default function Settings() {
     setDraftProfile({ ...draftProfile, registered_devices: updatedDevices })
   }
 
-  const toggleAutoLock = () => {
+  const toggleAutoLock = async () => {
     const newVal = !autoLock
     const savedDevices = JSON.parse(localStorage.getItem('financial_os_devices') || '[]')
-    const hasSavedBiometric = localStorage.getItem('financial_os_bio_enabled') === 'true' && savedDevices.length > 0
+    const hasSavedBiometric = Capacitor.isNativePlatform()
+      ? Boolean(userId && await isBiometricEnabledForOwner(userId))
+      : localStorage.getItem('financial_os_bio_enabled') === 'true' && savedDevices.length > 0
     if (newVal && !hasPinConfigured && !hasSavedBiometric) {
       alert('Set a four-digit app PIN, or save Biometric / FaceID Lock with a registered device first.')
       return
@@ -706,7 +849,9 @@ export default function Settings() {
 
   const clearAppPin = async () => {
     const savedDevices = JSON.parse(localStorage.getItem('financial_os_devices') || '[]')
-    const hasSavedBiometric = localStorage.getItem('financial_os_bio_enabled') === 'true' && savedDevices.length > 0
+    const hasSavedBiometric = Capacitor.isNativePlatform()
+      ? Boolean(userId && await isBiometricEnabledForOwner(userId))
+      : localStorage.getItem('financial_os_bio_enabled') === 'true' && savedDevices.length > 0
     if (autoLock && !hasSavedBiometric) {
       alert('Disable Auto-Lock or enable a registered device screen lock before removing the PIN.')
       return
@@ -714,6 +859,26 @@ export default function Settings() {
     await removeAppPin()
     setHasPinConfigured(false)
     setSavedPin('')
+  }
+
+  const setBiometricEnabled = async (enabled: boolean) => {
+    if (enabled && Capacitor.isNativePlatform()) {
+      try {
+        const availability = await checkBiometricAvailability()
+        if (!availability.isAvailable || !availability.isEnrolled) {
+          alert(availability.reason || 'Set up a fingerprint or face unlock in Android settings before enabling this option.')
+          return
+        }
+        await authenticateWithBiometrics('Confirm biometric unlock for RR Capital')
+        setNativeBiometryVerified(true)
+      } catch {
+        alert('Biometric confirmation was cancelled or could not be completed. The setting was not changed.')
+        return
+      }
+    } else if (!enabled && Capacitor.isNativePlatform()) {
+      setNativeBiometryVerified(false)
+    }
+    setDraftProfile(prev => ({ ...prev, is_biometric_enabled: enabled }))
   }
 
   const renderUndo = (key: keyof typeof defaultProfile) => {
@@ -901,24 +1066,34 @@ export default function Settings() {
 
         <section id="app-updates" className="surface-panel scroll-mt-20 rounded-3xl p-6 md:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><Download className="h-5 w-5" /></span><div><h2 className="text-xl font-bold">App updates</h2><p className="mt-1 text-sm text-[var(--muted)]">Check for the latest RR Capital version and review its release notes.</p></div></div>
-            <button type="button" onClick={() => void checkForAppUpdate()} disabled={checkingAppUpdate} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] px-4 text-sm font-semibold text-[var(--ink)] hover:bg-[var(--surface-strong)] disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${checkingAppUpdate ? 'animate-spin' : ''}`} />{checkingAppUpdate ? 'Checkingâ€¦' : 'Check for updates'}</button>
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><Download className="h-5 w-5" /></span>
+              <div><h2 className="text-xl font-bold">App Version &amp; Updates</h2><p className="mt-1 text-sm text-[var(--muted)]">Keep RR Capital current on this device.</p></div>
+            </div>
+            <button type="button" onClick={() => void checkForAppUpdate()} disabled={checkingAppUpdate} className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] px-4 text-sm font-semibold text-[var(--ink)] hover:bg-[var(--surface-strong)] disabled:opacity-50"><RefreshCw className={'h-4 w-4 ' + (checkingAppUpdate ? 'animate-spin' : '')} />{checkingAppUpdate ? 'Checking...' : 'Check for Updates'}</button>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="rounded-full border border-[var(--line)] bg-[var(--surface-soft)] px-3 py-1 text-xs font-semibold text-[var(--ink)]">{Capacitor.isNativePlatform() ? 'Android APK' : 'Web PWA'}</span>
+            <span className="rounded-full border border-[var(--line)] bg-[var(--surface-soft)] px-3 py-1 text-xs font-semibold text-[var(--muted)]">Stable / Live</span>
           </div>
           {appUpdateStatus && <p role="status" className="mt-3 text-sm text-[var(--muted)]">{appUpdateStatus}</p>}
           {lastAppUpdateCheck && <p className="mt-1 text-xs text-[var(--muted-soft)]">Last checked {new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(lastAppUpdateCheck))}</p>}
-          <div className="mt-4 grid gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface-soft)] p-3 text-xs text-[var(--muted)] sm:grid-cols-2">
-            <p>Installed web build: <strong className="text-[var(--ink)]">{installedWebVersion}</strong>{installedWebHash && <span className="ml-1">· {installedWebHash.slice(0, 12)}</span>}</p>
-            <p>Latest web build: <strong className="text-[var(--ink)]">{remoteWebVersion || 'Check for updates'}</strong></p>
+          <div className="mt-4 grid gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface-soft)] p-3 text-xs text-[var(--muted)] sm:grid-cols-2 lg:grid-cols-3">
+            <p>Installed web version: <strong className="text-[var(--ink)]">{installedWebVersion}</strong>{installedWebHash && <span className="ml-1"># {installedWebHash.slice(0, 12)}</span>}</p>
+            <p>Latest web version: <strong className="text-[var(--ink)]">{remoteWebVersion || 'Check for updates'}</strong></p>
+            <p>Release build: <strong className="text-[var(--ink)]">{remoteAppManifest ? remoteAppManifest.build : 'Not checked'}</strong></p>
+            <p>Commit: <strong className="text-[var(--ink)]">{remoteAppManifest?.commit || 'Not checked'}</strong></p>
+            <p>Minimum native version: <strong className="text-[var(--ink)]">{remoteAppManifest?.minNativeVersion ?? 'Not checked'}</strong></p>
             {Capacitor.isNativePlatform() && <>
               <p>Installed Android app: <strong className="text-[var(--ink)]">{installedNativeVersion || 'Check for updates'}</strong></p>
-              <p>Latest Android app: <strong className="text-[var(--ink)]">{nativeRelease ? `${nativeRelease.versionName} (${nativeRelease.versionCode})` : 'No published APK update'}</strong></p>
+              <p>Latest Android app: <strong className="text-[var(--ink)]">{nativeRelease ? nativeRelease.versionName + ' (' + nativeRelease.versionCode + ')' : 'No published APK update'}</strong></p>
             </>}
           </div>
-          {appUpdateAvailable && <div className="mt-4 rounded-2xl border border-[var(--brand-primary)]/30 bg-[var(--brand-tint)] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--brand-primary-active)]">Web update available · {remoteWebVersion || releaseInfo.version}</p><p className="mt-1 text-xs text-[var(--muted)]">This update changes the web app without reinstalling the Android APK.</p></div><button type="button" onClick={installAppUpdate} className="min-h-10 rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-semibold text-white hover:bg-[var(--brand-primary-active)]">Update Now</button></div></div>}
-          {Capacitor.isNativePlatform() && nativeReleaseAvailable && nativeRelease && <div className="mt-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-[var(--ink)]">Android app update · {nativeRelease.versionName}</p><p className="mt-1 text-xs text-[var(--muted)]">Required for native changes. The APK is SHA-256 verified, then Android asks you to confirm installation.</p></div><button type="button" onClick={() => void installNativeAppUpdate()} className="min-h-10 rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-semibold text-white hover:bg-[var(--brand-primary-active)]">Update APK</button></div></div>}
-          <div className="mt-5 border-t border-[var(--line)] pt-4"><p className="text-sm font-semibold">Latest release Â· {releaseInfo.version}</p><p className="mt-1 text-sm leading-6 text-[var(--muted)]">{releaseInfo.brief}</p><button type="button" aria-expanded={showReleaseDetails} onClick={() => setShowReleaseDetails(value => !value)} className="mt-3 text-sm font-semibold text-[var(--brand-primary-active)] hover:underline">{showReleaseDetails ? 'Hide detailed summary' : 'View detailed summary'}</button>{showReleaseDetails && <ul className="mt-3 space-y-2 pl-5 text-sm leading-6 text-[var(--muted)]">{releaseInfo.details.map(detail => <li key={detail} className="list-disc">{detail}</li>)}</ul>}</div>
+          {webUpdateProgress !== null && <div className="mt-4" role="status" aria-live="polite"><div className="mb-1 flex justify-between text-xs text-[var(--muted)]"><span>Downloading web update</span><span>{webUpdateProgress}%</span></div><div className="h-2 overflow-hidden rounded-full bg-[var(--surface-strong)]"><div className="h-full rounded-full bg-[var(--brand-primary)] transition-[width] duration-200" style={{ width: webUpdateProgress + '%' }} /></div></div>}
+          {appUpdateAvailable && <div className="mt-4 rounded-2xl border border-[var(--brand-primary)]/30 bg-[var(--brand-tint)] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--brand-primary-active)]">Web update available - {remoteWebVersion || releaseInfo.version}</p><p className="mt-1 text-xs text-[var(--muted)]">This refreshes the app web runtime without reinstalling the Android APK.</p></div><button type="button" onClick={installAppUpdate} className="min-h-10 rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-semibold text-white hover:bg-[var(--brand-primary-active)]">Install &amp; Reload</button></div></div>}
+          {Capacitor.isNativePlatform() && nativeReleaseAvailable && nativeRelease && <div className="mt-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-[var(--ink)]">Native Android update - {nativeRelease.versionName}</p><p className="mt-1 text-xs text-[var(--muted)]">The APK is SHA-256 verified. Android will ask you to confirm installation.</p></div><button type="button" onClick={() => void installNativeAppUpdate()} className="min-h-10 rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-semibold text-white hover:bg-[var(--brand-primary-active)]">Download &amp; Install APK</button></div></div>}
+          <div className="mt-5 border-t border-[var(--line)] pt-4"><p className="text-sm font-semibold">Latest release - {releaseInfo.version}</p><p className="mt-1 text-sm leading-6 text-[var(--muted)]">{releaseInfo.brief}</p><button type="button" aria-expanded={showReleaseDetails} onClick={() => setShowReleaseDetails(value => !value)} className="mt-3 text-sm font-semibold text-[var(--brand-primary-active)] hover:underline">{showReleaseDetails ? 'Hide detailed summary' : 'View detailed summary'}</button>{showReleaseDetails && <ul className="mt-3 space-y-2 pl-5 text-sm leading-6 text-[var(--muted)]">{releaseInfo.details.map(detail => <li key={detail} className="list-disc">{detail}</li>)}</ul>}</div>
         </section>
-
         {showModules && <section className="surface-panel rounded-3xl p-6 md:p-8">
           <div className="flex items-center justify-between gap-4">
             <div><h2 className="text-xl font-bold">Optional features</h2><p className="text-sm text-slate-400 mt-1">Turn planning tools on only when you want them.</p></div>
@@ -1026,6 +1201,45 @@ export default function Settings() {
                     </button>
                   })}
                 </LiquidGlassSwitcher>
+              </div>
+
+              <div className="flex flex-col space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold tracking-wide text-white/50 uppercase">App Icon</p>
+                    <p className="mt-1 text-xs text-slate-400">Choose the RR Capital icon shown in your Android launcher.</p>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-[var(--line)] bg-[var(--surface-soft)] px-2.5 py-1 text-[10px] font-semibold text-[var(--muted)]">Android APK</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {([
+                    { id: 'system', title: 'System Default', caption: 'Adaptive', background: 'bg-white', image: '/rr-favicon.svg', imageClass: '' },
+                    { id: 'dark', title: 'Dark Inverted', caption: 'Coral + white', background: 'bg-[#cc785c]', image: '/rr-favicon-inverted.svg', imageClass: '' },
+                    { id: 'cream', title: 'Classic Cream', caption: 'Warm canvas', background: 'bg-[#faf9f5]', image: '/rr-favicon.svg', imageClass: '' },
+                    { id: 'monochrome', title: 'Minimalist', caption: 'Black & white', background: 'bg-white', image: '/rr-favicon.svg', imageClass: 'grayscale' },
+                  ] satisfies Array<{ id: LauncherIconId; title: string; caption: string; background: string; image: string; imageClass: string }>).map(option => {
+                    const selected = launcherIcon === option.id
+                    return <button
+                      key={option.id}
+                      type="button"
+                      disabled={!Capacitor.isNativePlatform() || launcherIconBusy}
+                      aria-pressed={selected}
+                      onClick={() => void chooseLauncherIcon(option.id)}
+                      className={`group flex min-w-0 items-center gap-2 rounded-2xl border p-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${selected ? 'border-[var(--brand-primary)] bg-[var(--brand-primary)]/10 ring-1 ring-[var(--brand-primary)]/30' : 'border-[var(--line)] bg-[var(--surface-soft)] hover:border-[var(--brand-primary)]/50'}`}
+                    >
+                      <span className={`relative grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl border border-black/10 ${option.background}`}>
+                        <img src={option.image} alt="" className={`h-8 w-8 object-contain ${option.imageClass}`} />
+                        {selected && <span className="absolute bottom-0.5 right-0.5 grid h-4 w-4 place-items-center rounded-full bg-[var(--brand-primary)] text-white"><Check className="h-3 w-3" /></span>}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs font-semibold text-[var(--ink)]">{option.title}</span>
+                        <span className="mt-0.5 block truncate text-[10px] text-[var(--muted)]">{option.caption}</span>
+                      </span>
+                    </button>
+                  })}
+                </div>
+                {launcherIconMessage && <p role="status" className="fixed bottom-24 left-1/2 z-[80] -translate-x-1/2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-4 py-2 text-xs font-medium text-[var(--ink)] shadow-xl">{launcherIconMessage}</p>}
+                {!Capacitor.isNativePlatform() && <p className="text-xs text-[var(--muted)]">Icon selection is available in the installed Android app.</p>}
               </div>
             </div>
           </section>
@@ -1196,16 +1410,22 @@ export default function Settings() {
                       <span className="flex items-center"><Fingerprint className="w-4 h-4 mr-2 text-slate-400" /> Biometric / FaceID Lock</span>
                       <span className="ml-4">{renderUndo('is_biometric_enabled')}</span>
                     </h3>
-                    <p className="text-sm text-slate-400 mt-1">Register devices to unlock the app with FaceID or TouchID.</p>
+                    <p className="text-sm text-slate-400 mt-1">{Capacitor.isNativePlatform() ? 'Use Android fingerprint or face authentication to unlock RR Capital. Your biometric data stays on this device.' : 'Register this browser profile’s platform authenticator to unlock the app.'}</p>
                   </div>
                   <LiquidSwitch
                     label="Biometric / FaceID Lock"
                     checked={draftProfile.is_biometric_enabled}
-                    onCheckedChange={(enabled) => setDraftProfile({ ...draftProfile, is_biometric_enabled: enabled })}
+                    onCheckedChange={(enabled) => void setBiometricEnabled(enabled)}
                   />
                 </div>
 
-                {draftProfile.is_biometric_enabled && (
+                {Capacitor.isNativePlatform() && draftProfile.is_biometric_enabled && (
+                  <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-100/80">
+                    Android will display its native fingerprint/face prompt whenever Auto-Lock engages. RR Capital never receives or stores biometric templates.
+                  </div>
+                )}
+
+                {!Capacitor.isNativePlatform() && draftProfile.is_biometric_enabled && (
                   <div className="mt-4 pt-4 border-t border-white/10 animate-in fade-in">
                     <div className="flex justify-between items-center mb-3">
                       <label className="text-xs font-semibold tracking-wide text-white/50 uppercase">Registered Devices</label>
