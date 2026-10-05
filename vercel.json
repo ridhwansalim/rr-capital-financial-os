@@ -16,7 +16,7 @@
   ],
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!android/|ota/|assets/|api/).*)",
       "destination": "/index.html"
     }
   ]
