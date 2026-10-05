@@ -1,8 +1,8 @@
 {
   "packageId": "com.rrcapital.finance",
-  "versionName": "2026.10.6",
-  "versionCode": 20261006,
+  "versionName": "2026.10.7",
+  "versionCode": 20261007,
   "apkUrl": "https://financial-os-orcin-ten.vercel.app/android/RR-Capital.apk",
-  "sha256": "7e8116afff7034129c03d1f3e88d0294c1fc194e478be3b03b327677de5fc3c2",
-  "releasedAt": "2026-10-05T04:49:48.773Z"
+  "sha256": "bfd0ec4ba9f4f56a6956803efaf969ba7f22e6e6664dbae4a204b7953deabbad",
+  "releasedAt": "2026-10-05T09:07:06.746Z"
 }

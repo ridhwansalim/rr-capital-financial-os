@@ -1064,8 +1064,8 @@ test('disabled optional routes return to dashboard and unknown routes show a not
 test('settings presents release information and manual update check', async ({ page }) => {
   await installSyntheticBackend(page)
   await page.goto('/settings?section=updates')
-  await expect(page.getByRole('heading', { name: 'App updates' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Check for updates' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'App Version & Updates' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Check for Updates' })).toBeVisible()
   await expect(page.getByText(new RegExp(`Latest release .*${currentRelease.version.replaceAll('.', '\\.')}`))).toBeVisible()
   await expect(page.getByRole('button', { name: 'View detailed summary' })).toBeVisible()
 })

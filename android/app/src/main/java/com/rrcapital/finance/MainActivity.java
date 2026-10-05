@@ -11,6 +11,9 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(MessagingIntakePlugin.class);
         registerPlugin(NativeApkUpdatePlugin.class);
+        registerPlugin(BiometricPreferencePlugin.class);
+        registerPlugin(LauncherIconPlugin.class);
+        registerPlugin(DashboardWidgetPlugin.class);
         super.onCreate(savedInstanceState);
         openPendingIfRequested(getIntent());
     }
@@ -25,18 +28,27 @@ public class MainActivity extends BridgeActivity {
     private void openPendingIfRequested(Intent intent) {
         if (intent == null) return;
         Uri data = intent.getData();
-        boolean fromUrl = data != null
+        boolean fromRRActionUrl = data != null
             && "com.rrcapital.financialos".equals(data.getScheme())
-            && "app".equals(data.getHost())
-            && data.getPath() != null && data.getPath().startsWith("/pending-transactions");
-        if (!intent.getBooleanExtra("openPending", false) && !fromUrl) return;
+            && ("app".equals(data.getHost()) || "action".equals(data.getHost()))
+            && data.getPath() != null;
+        String path = fromRRActionUrl ? data.getPath() : null;
+        String webRoute = intent.getBooleanExtra("openPending", false)
+            || ("app".equals(data == null ? null : data.getHost()) && path != null && path.startsWith("/pending-transactions")) ? "/settings?review=pending"
+            : "action".equals(data == null ? null : data.getHost()) && "/dashboard".equals(path) ? "/"
+            : "action".equals(data == null ? null : data.getHost()) && "/add-transaction".equals(path) ? "/?widgetAction=expense"
+            : "action".equals(data == null ? null : data.getHost()) && "/split-bill".equals(path) ? "/?widgetAction=split"
+            : path != null && path.startsWith("/quick-expense") ? "/?widgetAction=expense"
+            : path != null && path.startsWith("/approvals") ? "/notifications"
+            : null;
+        if (webRoute == null) return;
         if (bridge == null || bridge.getWebView() == null) return;
         WebView webView = bridge.getWebView();
-        // The extra is handled natively and this route loads the app's local review screen,
-        // including when Android cold-starts the activity from the notification shade.
-        webView.postDelayed(() -> webView.evaluateJavascript(
-            "window.location.replace('/settings?review=pending')", null), 350);
+        // This also handles explicit widget PendingIntents after Android cold-starts the Activity.
+        String safeRoute = webRoute.replace("'", "");
+        webView.postDelayed(() -> webView.evaluateJavascript("window.location.replace('" + safeRoute + "')", null), 500);
         intent.removeExtra("openPending");
+        intent.setData(null);
     }
 
     @Override

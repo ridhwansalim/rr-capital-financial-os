@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">RR Capital</string>
     <string name="title_activity_main">RR Capital</string>
+    <string name="rr_quick_actions_widget_label">RR Capital quick actions</string>
     <string name="package_name">com.rrcapital.finance</string>
     <string name="custom_url_scheme">com.rrcapital.finance</string>
 </resources>

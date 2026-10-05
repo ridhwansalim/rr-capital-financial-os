@@ -116,8 +116,24 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       setIsTxModalOpen(true)
     }
     window.addEventListener('rr:transaction-draft', openDraft)
-    return () => window.removeEventListener('rr:transaction-draft', openDraft)
-  }, [])
+    const widgetAction = new URLSearchParams(location.search).get('widgetAction')
+    let widgetTimer = 0
+    if (widgetAction === 'expense' && location.pathname === '/') {
+      widgetTimer = window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('rr:transaction-draft', { detail: { type: 'expense' } }))
+        navigate('/', { replace: true, state: location.state })
+      }, 300)
+    } else if (widgetAction === 'split' && location.pathname === '/') {
+      widgetTimer = window.setTimeout(() => {
+        setIsSplitModalOpen(true)
+        navigate('/', { replace: true, state: location.state })
+      }, 300)
+    }
+    return () => {
+      window.removeEventListener('rr:transaction-draft', openDraft)
+      if (widgetTimer) window.clearTimeout(widgetTimer)
+    }
+  }, [location.pathname, location.search, location.state, navigate])
 
   useEffect(() => {
     const modalOpen = isTxModalOpen || isDebtModalOpen || isSplitModalOpen

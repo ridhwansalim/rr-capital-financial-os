@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <rect width="800" height="600" rx="24" fill="#cc785c" />
+  <defs>
+    <!-- Premium Navy Gradient for the continuous line -->
+    <linearGradient id="navyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#ffffff" />
+    </linearGradient>
+
+    <!-- Subtle drop shadow to give the mark a high-end app feel -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000000" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <!-- Clean Canvas Background -->
+
+  <!-- Flawless Continuous Curve Logo Mark -->
+  <g transform="translate(200, 50)" filter="url(#shadow)">
+    <!--
+      This single path traces your exact sketch:
+      Top-left leg -> Left inverted loop -> Central spine -> Right standard loop -> Bottom-right leg
+    -->
+    <path d="M 120 100
+             C 150 100, 170 170, 200 200
+             C 120 200, 120 320, 200 320
+             L 200 80
+             C 280 80, 280 200, 200 200
+             C 230 230, 250 300, 280 300"
+          fill="none"
+          stroke="url(#navyGradient)"
+          stroke-width="22"
+          stroke-linecap="round"
+          stroke-linejoin="round" />
+  </g>
+
+  <!-- App Name & Subtitle -->
+  <text x="400" y="480" font-family="'Montserrat', 'Segoe UI', 'Helvetica Neue', sans-serif" font-size="46" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="6">RR CAPITAL</text>
+  <text x="400" y="525" font-family="'Montserrat', 'Segoe UI', 'Helvetica Neue', sans-serif" font-size="15" font-weight="700" fill="#ffffff" text-anchor="middle" letter-spacing="8">FINANCIAL MANAGEMENT</text>
+
+  <!-- Decorative Accent Line -->
+  <line x1="330" y1="555" x2="470" y2="555" stroke="#ffffff" stroke-width="3" stroke-linecap="round" />
+</svg>

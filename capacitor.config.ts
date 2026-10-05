@@ -10,7 +10,7 @@ const config: CapacitorConfig = {
   plugins: {
     CapacitorUpdater: {
       appId: 'com.rrcapital.finance',
-      version: '2026.10.6',
+      version: '2026.10.7',
       autoUpdate: 'atBackground',
       updateUrl: 'https://financial-os-orcin-ten.vercel.app/api/ota/updates',
       statsUrl: '',

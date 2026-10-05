@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { loadEnv } from 'vite'
 import { getOtaVersion } from './otaVersion.mjs'
+import { createAppVersionManifest } from './appVersionManifest.mjs'
 
 const env = loadEnv('production', process.cwd(), 'VITE_')
 const otaVersion = getOtaVersion()
@@ -29,6 +30,13 @@ const result = spawnSync(process.execPath, [viteBin, 'build'], {
 
 if (result.error) throw result.error
 if (result.status !== 0) process.exit(result.status ?? 1)
+
+// Publish a small, cache-busted release snapshot for the app updater UI and
+// native startup check. Keep the same manifest in Vite output and OTA bundles.
+const appVersionManifest = await createAppVersionManifest({ version: otaVersion })
+const appVersionJson = JSON.stringify(appVersionManifest, null, 2) + '\n'
+await writeFile(path.resolve('public/version.json'), appVersionJson)
+await writeFile(path.resolve('dist/version.json'), appVersionJson)
 
 // The native installer is served as a release asset, not shipped inside the
 // WebView app. Remove any previously staged copy before Capacitor sync/build.

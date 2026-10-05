@@ -216,6 +216,7 @@ export default function Calendar() {
         if (rpcError) throw rpcError
       }
 
+      window.dispatchEvent(new Event('rr:financial-data-changed'))
       setIsAddModalOpen(false)
       resetEmiForm()
       fetchEngineData()
@@ -262,6 +263,7 @@ export default function Calendar() {
         throw new Error('This peer payment has no linked debt. Refresh the EMI and check its setup before paying.')
       }
 
+      window.dispatchEvent(new Event('rr:financial-data-changed'))
       setPayEmiData(null); setPayAccountId(''); setPayDate(toIndiaDateInputValue())
       fetchEngineData()
     } catch (err) { alert(safeCaughtErrorMessage(err, 'Could not record this installment. Refresh the schedule and try again.')) } finally { setIsSubmitting(false) }
@@ -272,6 +274,7 @@ export default function Calendar() {
     try {
       const { error } = await supabase.rpc('cancel_owned_emi', { p_emi_id: id })
       if (error) throw error
+      window.dispatchEvent(new Event('rr:financial-data-changed'))
       fetchEngineData()
     } catch (err: any) {
       alert(safeCaughtErrorMessage(err, 'Unable to cancel this recurring payment. Refresh the schedule and try again.'))
