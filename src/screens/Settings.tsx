@@ -18,6 +18,10 @@ import { getExpandedCapBounds } from '../components/ui/liquidGlassCapGeometry'
 import { liquidGlassItemProps } from '../components/ui/liquidGlassSwitcherItem'
 import { ROUTE_REGISTRY, SETTINGS_GROUPS } from '../lib/routeRegistry'
 import { useWorkspaceLayoutContext } from '../lib/workspaceLayoutContext'
+import NativeMessagingIntake from '../components/NativeMessagingIntake'
+import { Capacitor } from '@capacitor/core'
+import { CapacitorUpdater } from '@capgo/capacitor-updater'
+import { NativeApkUpdater, type AndroidReleaseManifest } from '../lib/nativeApkUpdater'
 
 // WebAuthn Helper to encode hardware keys
 const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
@@ -43,6 +47,13 @@ export default function Settings() {
   const [appUpdateStatus, setAppUpdateStatus] = useState('')
   const [lastAppUpdateCheck, setLastAppUpdateCheck] = useState('')
   const [appUpdateAvailable, setAppUpdateAvailable] = useState(() => localStorage.getItem('rr-capital-update-available') === 'true')
+  const [nativeOtaBundleId, setNativeOtaBundleId] = useState<string | null>(null)
+  const [installedWebVersion, setInstalledWebVersion] = useState(import.meta.env.VITE_OTA_RELEASE_VERSION || currentRelease.version)
+  const [installedWebHash, setInstalledWebHash] = useState('')
+  const [remoteWebVersion, setRemoteWebVersion] = useState('')
+  const [installedNativeVersion, setInstalledNativeVersion] = useState('')
+  const [nativeRelease, setNativeRelease] = useState<AndroidReleaseManifest | null>(null)
+  const [nativeReleaseAvailable, setNativeReleaseAvailable] = useState(false)
   const [showReleaseDetails, setShowReleaseDetails] = useState(false)
   const [releaseInfo, setReleaseInfo] = useState<ReleaseNotes>(currentRelease)
 
@@ -79,11 +90,59 @@ export default function Settings() {
     setLastAppUpdateCheck(new Date().toISOString())
     try {
       await loadReleaseInfo()
+      const webManifestResponse = await fetch('/ota/manifest.json', { cache: 'no-store' })
+      if (webManifestResponse.ok) {
+        const webManifest = await webManifestResponse.json() as { version?: unknown }
+        if (typeof webManifest.version === 'string') setRemoteWebVersion(webManifest.version)
+      }
+      if (Capacitor.isNativePlatform()) {
+        const current = await CapacitorUpdater.current()
+        setInstalledWebVersion(current.bundle.version || 'Built-in web bundle')
+        setInstalledWebHash(current.bundle.checksum || '')
+        const installedNative = await NativeApkUpdater.getInstalledVersion()
+        setInstalledNativeVersion(`${installedNative.versionName} (${installedNative.versionCode})`)
+        try {
+          const nativeResponse = await fetch('/api/android/version', { cache: 'no-store' })
+          if (nativeResponse.ok) {
+            const manifest = await nativeResponse.json() as AndroidReleaseManifest
+            const validManifest = manifest.packageId === 'com.rrcapital.finance'
+              && Number.isSafeInteger(manifest.versionCode)
+              && typeof manifest.versionName === 'string'
+              && typeof manifest.apkUrl === 'string'
+              && typeof manifest.sha256 === 'string'
+            if (validManifest) {
+              setNativeRelease(manifest)
+              setNativeReleaseAvailable(manifest.versionCode > installedNative.versionCode && /^https:\/\//.test(manifest.apkUrl) && /^[a-f0-9]{64}$/i.test(manifest.sha256))
+            }
+          }
+        } catch {
+          // The OTA channel can still be checked if the native release feed is offline.
+        }
+        const response = await fetch('https://financial-os-orcin-ten.vercel.app/api/ota/updates', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ version_name: current.bundle.version || current.native }),
+          cache: 'no-store',
+        })
+        if (!response.ok) throw new Error('Native update check failed.')
+        const update = await response.json() as { version?: string; url?: string; checksum?: string; message?: string }
+        if (!update.version || !update.url || !update.checksum) {
+          setAppUpdateStatus(`Web bundle ${current.bundle.version || 'built-in'} is current${remoteWebVersion ? ` (latest ${remoteWebVersion})` : ''}.${nativeReleaseAvailable ? ' An Android app update is also available below.' : ''}`)
+          setAppUpdateAvailable(false)
+          return
+        }
+        const bundle = await CapacitorUpdater.download({ url: update.url, version: update.version, checksum: update.checksum })
+        setNativeOtaBundleId(bundle.id)
+        setAppUpdateAvailable(true)
+        setRemoteWebVersion(update.version)
+        setAppUpdateStatus(`Web update ${update.version} is downloaded and checksum-verified. Update Now to apply it.`)
+        return
+      }
       const registration = await navigator.serviceWorker?.getRegistration()
       if (!registration) {
         setAppUpdateStatus('Update checks are unavailable until the app has finished installing on this device.')
         return
       }
+      setInstalledWebVersion(import.meta.env.VITE_OTA_RELEASE_VERSION || currentRelease.version)
       await registration.update()
       const waiting = registration.waiting || (registration.installing?.state === 'installed' ? registration.installing : null)
       if (waiting) {
@@ -100,7 +159,30 @@ export default function Settings() {
     }
   }
 
-  const installAppUpdate = () => window.dispatchEvent(new Event('rr:install-app-update'))
+  const installAppUpdate = () => {
+    if (Capacitor.isNativePlatform() && nativeOtaBundleId) {
+      void CapacitorUpdater.set({ id: nativeOtaBundleId }).catch(() => setAppUpdateStatus('The downloaded web update could not be applied. It will remain on the current version.'))
+      return
+    }
+    window.dispatchEvent(new Event('rr:install-app-update'))
+  }
+
+  const installNativeAppUpdate = async () => {
+    if (!nativeRelease) return
+    setAppUpdateStatus(`Preparing Android ${nativeRelease.versionName}…`)
+    try {
+      const result = await NativeApkUpdater.downloadAndInstall({
+        url: nativeRelease.apkUrl,
+        sha256: nativeRelease.sha256,
+        versionCode: nativeRelease.versionCode,
+      })
+      setAppUpdateStatus(result.permissionRequired
+        ? 'Allow RR Capital to install updates in Android Settings, return here, then tap Update APK again.'
+        : 'The verified APK is ready. Complete the installation in Android’s package installer.')
+    } catch (error) {
+      setAppUpdateStatus(safeCaughtErrorMessage(error, 'Could not prepare the Android update. Check your connection and try again.'))
+    }
+  }
   const [featureBusy, setFeatureBusy] = useState(false)
   const [featureError, setFeatureError] = useState('')
   const [isSigningOut, setIsSigningOut] = useState(false)
@@ -308,8 +390,16 @@ export default function Settings() {
         if (!window.confirm(`${pendingCount} offline ${noun} will remain saved on this browser after sign-out. You can review them under Offline transactions when you sign in again. Continue?`)) return
       }
 
-      const { error } = await supabase.auth.signOut()
+      const { error } = await supabase.auth.signOut({ scope: 'local' })
       if (error) throw error
+      // Supabase's PKCE verifier is one-use; remove any stale verifier left by
+      // a canceled browser OAuth flow before the next native sign-in attempt.
+      for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+        const key = window.localStorage.key(index)
+        if (key?.startsWith('sb-') && key.includes('-code-verifier')) {
+          window.localStorage.removeItem(key)
+        }
+      }
       window.location.replace('/auth')
     } catch {
       setSignOutError('Sign-out could not be confirmed. Check your connection and try again.')
@@ -807,6 +897,8 @@ export default function Settings() {
 
       <div className="space-y-6">
 
+        <NativeMessagingIntake />
+
         <section id="app-updates" className="surface-panel scroll-mt-20 rounded-3xl p-6 md:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--brand-tint)] text-[var(--brand-primary-active)]"><Download className="h-5 w-5" /></span><div><h2 className="text-xl font-bold">App updates</h2><p className="mt-1 text-sm text-[var(--muted)]">Check for the latest RR Capital version and review its release notes.</p></div></div>
@@ -814,7 +906,16 @@ export default function Settings() {
           </div>
           {appUpdateStatus && <p role="status" className="mt-3 text-sm text-[var(--muted)]">{appUpdateStatus}</p>}
           {lastAppUpdateCheck && <p className="mt-1 text-xs text-[var(--muted-soft)]">Last checked {new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(lastAppUpdateCheck))}</p>}
-          {appUpdateAvailable && <div className="mt-5 rounded-2xl border border-[var(--brand-primary)]/30 bg-[var(--brand-tint)] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--brand-primary-active)]">New version available Â· {releaseInfo.version}</p><p className="mt-1 text-xs text-[var(--muted)]">Released {new Intl.DateTimeFormat('en-IN', { dateStyle: 'long', timeStyle: 'short' }).format(new Date(releaseInfo.releasedAt))}</p></div><button type="button" onClick={installAppUpdate} className="min-h-10 rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-semibold text-white hover:bg-[var(--brand-primary-active)]">Install update</button></div></div>}
+          <div className="mt-4 grid gap-2 rounded-2xl border border-[var(--line)] bg-[var(--surface-soft)] p-3 text-xs text-[var(--muted)] sm:grid-cols-2">
+            <p>Installed web build: <strong className="text-[var(--ink)]">{installedWebVersion}</strong>{installedWebHash && <span className="ml-1">· {installedWebHash.slice(0, 12)}</span>}</p>
+            <p>Latest web build: <strong className="text-[var(--ink)]">{remoteWebVersion || 'Check for updates'}</strong></p>
+            {Capacitor.isNativePlatform() && <>
+              <p>Installed Android app: <strong className="text-[var(--ink)]">{installedNativeVersion || 'Check for updates'}</strong></p>
+              <p>Latest Android app: <strong className="text-[var(--ink)]">{nativeRelease ? `${nativeRelease.versionName} (${nativeRelease.versionCode})` : 'No published APK update'}</strong></p>
+            </>}
+          </div>
+          {appUpdateAvailable && <div className="mt-4 rounded-2xl border border-[var(--brand-primary)]/30 bg-[var(--brand-tint)] p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--brand-primary-active)]">Web update available · {remoteWebVersion || releaseInfo.version}</p><p className="mt-1 text-xs text-[var(--muted)]">This update changes the web app without reinstalling the Android APK.</p></div><button type="button" onClick={installAppUpdate} className="min-h-10 rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-semibold text-white hover:bg-[var(--brand-primary-active)]">Update Now</button></div></div>}
+          {Capacitor.isNativePlatform() && nativeReleaseAvailable && nativeRelease && <div className="mt-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-[var(--ink)]">Android app update · {nativeRelease.versionName}</p><p className="mt-1 text-xs text-[var(--muted)]">Required for native changes. The APK is SHA-256 verified, then Android asks you to confirm installation.</p></div><button type="button" onClick={() => void installNativeAppUpdate()} className="min-h-10 rounded-xl bg-[var(--brand-primary)] px-4 text-sm font-semibold text-white hover:bg-[var(--brand-primary-active)]">Update APK</button></div></div>}
           <div className="mt-5 border-t border-[var(--line)] pt-4"><p className="text-sm font-semibold">Latest release Â· {releaseInfo.version}</p><p className="mt-1 text-sm leading-6 text-[var(--muted)]">{releaseInfo.brief}</p><button type="button" aria-expanded={showReleaseDetails} onClick={() => setShowReleaseDetails(value => !value)} className="mt-3 text-sm font-semibold text-[var(--brand-primary-active)] hover:underline">{showReleaseDetails ? 'Hide detailed summary' : 'View detailed summary'}</button>{showReleaseDetails && <ul className="mt-3 space-y-2 pl-5 text-sm leading-6 text-[var(--muted)]">{releaseInfo.details.map(detail => <li key={detail} className="list-disc">{detail}</li>)}</ul>}</div>
         </section>
 

@@ -138,22 +138,18 @@ export function useWorkspaceLayout(userId: string | null, serverFlags: FeatureFl
     return () => { observer.disconnect(); window.removeEventListener('resize', updateCapacity) }
   }, [])
 
-  const persist = useCallback((nextPlacements: Record<string, RoutePlacement>, nextLayout: NavbarLayoutPreferences, nextFlags: FeatureFlags = serverFlags) => {
+  const persist = useCallback((nextPlacements: Record<string, RoutePlacement>, nextLayout: NavbarLayoutPreferences, nextFlags: FeatureFlags = serverFlags, sync?: StoredWorkspaceLayout) => {
     if (!storageKey) return
     try {
       const current = readStoredWorkspace(storageKey)
       const writerId = makeWriterId(storageKey)
-      const updatedAt = Math.max(Date.now(), current.layoutSync.updatedAt + 1)
-      localStorage.setItem(storageKey, JSON.stringify({ version: 3, placements: nextPlacements, navbarLayout: { ...nextLayout, _sync: { updatedAt, writerId } }, optionalFlags: nextFlags }))
+      const metadata = sync ?? { updatedAt: Math.max(Date.now(), current.layoutSync.updatedAt + 1), writerId }
+      localStorage.setItem(storageKey, JSON.stringify({ version: 3, placements: nextPlacements, navbarLayout: { ...nextLayout, _sync: metadata }, optionalFlags: nextFlags }))
       window.dispatchEvent(new CustomEvent('rr:workspace-layout-changed', { detail: { storageKey } }))
     } catch {
       // Private browsing or a full storage quota must not block navigation.
     }
   }, [serverFlags, storageKey])
-
-  useEffect(() => {
-    if (userId) persist(placements, navbarLayout, serverFlags)
-  }, [placements, navbarLayout, persist, serverFlags, userId])
 
   // Profile storage is the cross-device source of truth; localStorage keeps the
   // same layout available immediately and while temporarily offline.
@@ -185,6 +181,7 @@ export function useWorkspaceLayout(userId: string | null, serverFlags: FeatureFl
       const local = readStoredWorkspace(storageKey)
       const localVersion: StoredWorkspaceLayout = { ...local.navbarLayout, ...local.layoutSync }
       if (remote && compareStoredLayouts(remote, localVersion) > 0) {
+        persist(local.placements, { mobileSelectedUrls: remote.mobileSelectedUrls, desktopSelectedUrls: remote.desktopSelectedUrls }, local.optionalFlags, remote)
         setLayoutState(current => ({
           storageKey,
           placements: current.storageKey === storageKey ? current.placements : local.placements,
@@ -209,7 +206,7 @@ export function useWorkspaceLayout(userId: string | null, serverFlags: FeatureFl
     }
     void syncProfile()
     return () => { cancelled = true; window.clearTimeout(retryTimer) }
-  }, [profileRetry, storageKey, userId])
+  }, [persist, profileRetry, storageKey, userId])
 
   useEffect(() => {
     if (!userId || profileReadyUserId !== userId) return
@@ -246,15 +243,18 @@ export function useWorkspaceLayout(userId: string | null, serverFlags: FeatureFl
   }, [storageKey])
 
   const setNavbarLayout = useCallback((update: NavbarLayoutUpdate) => {
+    const active = layoutState.storageKey === storageKey ? layoutState : { storageKey, ...readStoredWorkspace(storageKey) }
+    const next = typeof update === 'function' ? update(active.navbarLayout) : update
+    const normalized = { mobileSelectedUrls: cleanUrls(next.mobileSelectedUrls, 3) || [], desktopSelectedUrls: cleanUrls(next.desktopSelectedUrls, 10) || [] }
+    if (JSON.stringify(normalized) === JSON.stringify(active.navbarLayout)) return
+
+    // User edits write through immediately. The hydration effect never writes
+    // defaults, so a late auth/profile response cannot erase a saved layout.
     localEditRevisionRef.current += 1
-    setLayoutState(current => {
-      const active = current.storageKey === storageKey ? current : { storageKey, ...readStoredWorkspace(storageKey) }
-      const next = typeof update === 'function' ? update(active.navbarLayout) : update
-      const normalized = { mobileSelectedUrls: cleanUrls(next.mobileSelectedUrls, 3) || [], desktopSelectedUrls: cleanUrls(next.desktopSelectedUrls, 10) || [] }
-      if (JSON.stringify(normalized) === JSON.stringify(active.navbarLayout)) return active
-      return { ...active, navbarLayout: normalized }
-    })
-  }, [storageKey])
+    const nextState = { ...active, navbarLayout: normalized }
+    setLayoutState(nextState)
+    persist(nextState.placements, normalized, nextState.optionalFlags)
+  }, [layoutState, persist, storageKey])
 
   const setPlacement = useCallback((path: string, placement: RoutePlacement) => {
     const route = ROUTE_REGISTRY.find(item => item.path === path)

@@ -121,6 +121,9 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 .app-mobile-context {
   top: 0;
+  height: calc(3.5rem + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px);
+  box-sizing: border-box;
   color: var(--ink);
   background: color-mix(in srgb, var(--canvas) 96%, transparent);
   border-color: var(--line);

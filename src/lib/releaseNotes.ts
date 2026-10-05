@@ -8,9 +8,9 @@ export type ReleaseNotes = {
 // Update this entry for each user-facing production release. The date is the
 // release date, not the time this client happens to check for a new build.
 export const currentRelease: ReleaseNotes = {
-  version: '2026.10.04.1',
-  releasedAt: '2026-10-04T00:42:00+05:30',
-  brief: 'Settings adds a brighter liquid-glass viewport selector, and credit-line limits now protect historical balances.',
+  version: '2026.10.5',
+  releasedAt: '2026-10-05T00:00:00+05:30',
+  brief: 'RR Capital adds a native Android sign-in return, private on-device transaction message parsing, and automatic web-bundle updates.',
   details: [
     'Desktop and mobile navigation use one route registry. Settings remains pinned, and moving a module between navigation and Settings updates its canonical group automatically.',
     'Mobile navigation is a fixed, floating glass dock with a centered Add action and safe-area spacing.',
@@ -24,5 +24,7 @@ export const currentRelease: ReleaseNotes = {
     'Telegram Settings verifies webhook setup and one-time challenge linking; automated checks use synthetic responses and do not contact Telegram.',
     'The Mobile/Desktop navbar layout selector has a stronger translucent glass cap, while desktop Add remains a floating lower-right action.',
     'Backdated credit-line purchases are rejected if the dated balance would exceed the approved limit, even when a later credit would make the current balance appear safe.',
+    'Android Google sign-in returns through the native app callback. Native message intake parses locally and only stores transaction candidates after explicit permission is enabled.',
+    'Android web-only releases can update in the background with a self-hosted, checksum-verified bundle feed; native code changes still require an APK update.',
   ],
 }

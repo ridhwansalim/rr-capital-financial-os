@@ -1,0 +1,1 @@
+export const androidReleaseManifest = {"packageId":"com.rrcapital.finance","versionName":"2026.10.6","versionCode":20261006,"apkUrl":"https://financial-os-orcin-ten.vercel.app/android/RR-Capital.apk","sha256":"ae36e2554f528681e0c572ac2e2edcdb2502d20342ef58a681ca759bbff0bd0c","releasedAt":"2026-10-05T04:17:55.958Z"} as const

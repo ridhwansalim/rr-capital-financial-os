@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { safeCaughtErrorMessage } from '../lib/safeErrorMessages'
 import { getPasswordPolicyError, PASSWORD_MIN_LENGTH } from '../lib/passwordPolicy'
 import { Mail, Lock, Loader2, LogIn, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Capacitor } from '@capacitor/core'
+import { Browser } from '@capacitor/browser'
 
 type AuthMode = 'login' | 'invite' | 'recovery'
 
@@ -16,6 +19,9 @@ function getInitialAuthMode(): AuthMode {
 }
 
 export default function Auth() {
+  const navigate = useNavigate()
+  const browserCloseTimer = useRef<number | null>(null)
+  const callbackHandled = useRef(false)
   const [authMode, setAuthMode] = useState<AuthMode>(getInitialAuthMode)
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null)
@@ -24,15 +30,66 @@ export default function Auth() {
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        setIsLoading(false)
+        navigate('/', { replace: true })
+      }
       if (event === 'PASSWORD_RECOVERY') {
         setAuthMode('recovery')
         setMessage(null)
       }
     })
 
-    return () => subscription.unsubscribe()
-  }, [])
+    const handleNativeAuthComplete = async (event: Event) => {
+      const detail = (event as CustomEvent<{ success?: boolean; error?: string }>).detail
+      callbackHandled.current = true
+      if (browserCloseTimer.current !== null) window.clearTimeout(browserCloseTimer.current)
+      if (detail?.success) {
+        const { data: { session } } = await supabase.auth.getSession()
+        setIsLoading(false)
+        if (session?.user) navigate('/', { replace: true })
+        else setMessage({ type: 'error', text: 'Google sign-in completed without an active session. Please try again.' })
+      } else {
+        setIsLoading(false)
+        setMessage({ type: 'error', text: detail?.error || 'Google sign-in failed. Please try again.' })
+      }
+    }
+    window.addEventListener('rr-native-auth-complete', handleNativeAuthComplete)
+    const handleNativeAuthStarted = () => {
+      callbackHandled.current = true
+      if (browserCloseTimer.current !== null) window.clearTimeout(browserCloseTimer.current)
+    }
+    window.addEventListener('rr-native-auth-started', handleNativeAuthStarted)
+
+    let disposed = false
+    let browserListener: { remove: () => Promise<void> } | null = null
+    if (Capacitor.isNativePlatform()) {
+      void Browser.addListener('browserFinished', () => {
+        if (browserCloseTimer.current !== null) window.clearTimeout(browserCloseTimer.current)
+        browserCloseTimer.current = window.setTimeout(() => {
+          if (callbackHandled.current) return
+          void supabase.auth.getSession().then(({ data: { session } }) => {
+            setIsLoading(false)
+            if (session?.user) navigate('/', { replace: true })
+            else setMessage({ type: 'error', text: 'Google sign-in was closed before it finished. You can try again.' })
+          })
+        }, 1500)
+      }).then(listener => {
+        if (disposed) void listener.remove()
+        else browserListener = listener
+      })
+    }
+
+    return () => {
+      disposed = true
+      subscription.unsubscribe()
+      window.removeEventListener('rr-native-auth-complete', handleNativeAuthComplete)
+      window.removeEventListener('rr-native-auth-started', handleNativeAuthStarted)
+      if (browserCloseTimer.current !== null) window.clearTimeout(browserCloseTimer.current)
+      if (browserListener) void browserListener.remove()
+    }
+  }, [navigate])
 
   const handleAuth = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -94,14 +151,23 @@ export default function Auth() {
   }
 
   const handleGoogleAuth = async () => {
+    callbackHandled.current = false
+    if (browserCloseTimer.current !== null) window.clearTimeout(browserCloseTimer.current)
     setIsLoading(true)
     setMessage(null)
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      const native = Capacitor.isNativePlatform()
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin + '/' }
+        options: {
+          redirectTo: native ? 'com.rrcapital.financialos://auth/callback' : `${window.location.origin}/auth/callback`,
+          skipBrowserRedirect: native,
+          queryParams: { prompt: 'select_account' },
+        }
       })
       if (error) throw error
+      if (native && data.url) await Browser.open({ url: data.url, windowName: '_system' })
+      if (native && !data.url) throw new Error('Google sign-in did not return an authorization URL.')
     } catch (error) {
       setMessage({ type: 'error', text: safeCaughtErrorMessage(error, 'Google sign-in failed. Please try again.') })
       setIsLoading(false)

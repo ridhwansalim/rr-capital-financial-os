@@ -2,6 +2,16 @@
 
 This checkpoint reflects fresh hosted reads and supersedes earlier dated observations below where they conflict.
 
+## Verification and recovery follow-up - 2026-10-04 17:45 UTC
+
+The Creator Details mobile device-tilt implementation is present in `CreatorProfileDialog.tsx` and `Layout.tsx`: iOS motion permission is requested from the logo tap, the sensor baseline is calibrated when the modal opens, tilt is clamped and interpolated with requestAnimationFrame, pointer movement is the fallback, and listeners are removed on close. The current source includes automated creator tilt coverage in the Playwright suite.
+
+Fresh checks passed: `npx tsc -b --pretty false`, `npm test`, `npm run typecheck:e2e`, `npm audit --omit=dev --audit-level=moderate` (zero vulnerabilities), production build using Vite's native config loader, and all 24 Playwright tests against the synthetic `.invalid` backend. `npm run lint` exits successfully with existing warnings. The default `npm run build` and `npm run test:e2e` wrappers hit sandbox `spawn EPERM`; direct native-loader build and a manually served synthetic test build were used successfully. The build retains the known >500 kB main-chunk and PWA `inlineDynamicImports` warnings.
+
+Created protected RR Capital application-schema snapshot `%LOCALAPPDATA%\\RR-Capital-Backups\\20261004-230810-428` (Supabase CLI 2.119.0). Its completion manifest, project ref, ACLs, exact file list, sizes, and SHA-256 hashes pass `Test-RR-Capital-Backup.ps1`. A schema-and-data restore rehearsal could not run because Docker Desktop denied access to `npipe:////./pipe/dockerDesktopLinuxEngine`; no container or hosted database was changed.
+
+Vercel deployment `dpl_7mhqFaS7chJCHgpTroZfQ9WSzSPY` remains READY in production at `https://financial-os-orcin-ten.vercel.app`, sourced from `fda4be2ec73a0af02e2f780976575de8f2d70954`. That deployed app commit contains the checked creator tilt implementation; subsequent local commits only record readiness evidence and fixture-cleanup guard changes, so no new frontend deployment was necessary. The user chose to keep Supabase Free and leave the leaked-password-protection warning open.
+
 ## Live readiness recheck - 2026-10-04 17:33 UTC
 
 Fresh production reads reconfirm the dedicated test owner has zero finance rows (accounts, contacts/categories, transactions, obligations/payments, settlements, recurring EMIs, Chittis, installment occurrences, budgets, templates, savings goals/contributions, shopping lists/items, Split Groups, and account-health settings). Its Auth identity/profile and six feature flags remain. The other owner still has one account, one Chitti, and ten installment occurrences.

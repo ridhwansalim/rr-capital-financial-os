@@ -1,11 +1,16 @@
-import { lazy, Suspense } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { lazy, Suspense, useEffect } from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { App as CapacitorApp } from '@capacitor/app'
+import { Browser } from '@capacitor/browser'
+import { Capacitor } from '@capacitor/core'
 import { ThemeProvider } from './components/ThemeProvider'
 import { AutoLockProvider } from './components/AutoLockProvider'
 import ProtectedRoute from './components/ProtectedRoute'
 import Layout from './components/Layout'
 import ReloadPrompt from './components/ReloadPrompt'
 import { AUTH_ROUTE, ROUTE_COMPONENT_LOADERS, ROUTE_REGISTRY } from './lib/routeRegistry'
+import { supabase } from './lib/supabase'
+import { handleAuthDeepLink } from './lib/nativeOAuthCallback'
 
 // Load only the active screen immediately; keep the established route and layout flow.
 const Auth = lazy(() => import('./screens/Auth'))
@@ -47,16 +52,46 @@ function LiquidToggleFilters() {
   )
 }
 
+function OAuthDeepLinkHandler() {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    let disposed = false
+    const dependencies = {
+      closeBrowser: () => Browser.close(),
+      setSession: (tokens: { access_token: string; refresh_token: string }) => supabase.auth.setSession(tokens),
+      exchangeCode: (code: string) => supabase.auth.exchangeCodeForSession(code),
+      onStarted: () => window.dispatchEvent(new CustomEvent('rr-native-auth-started')),
+      onComplete: (detail: { success: boolean; error?: string }) => {
+        window.dispatchEvent(new CustomEvent('rr-native-auth-complete', { detail }))
+        if (detail.success && !disposed) navigate('/', { replace: true })
+        if (!detail.success && !disposed) navigate('/auth?oauth_error=1', { replace: true })
+      },
+    }
+
+    const listener = CapacitorApp.addListener('appUrlOpen', ({ url }) => { void handleAuthDeepLink(url, dependencies) })
+    void CapacitorApp.getLaunchUrl().then(result => {
+      if (result?.url) void handleAuthDeepLink(result.url, dependencies)
+    }).catch(() => undefined)
+    return () => { disposed = true; void listener.then(handle => handle.remove()) }
+  }, [navigate])
+
+  return null
+}
+
 export default function App() {
   return (
     <ThemeProvider>
       <AutoLockProvider>
         <LiquidToggleFilters />
         <Router>
+          <OAuthDeepLinkHandler />
           <ReloadPrompt />
             <Routes>
               {/* Public Route */}
               <Route path={AUTH_ROUTE.path} element={<Suspense fallback={<ScreenLoading />}><Auth /></Suspense>} />
+              <Route path="/auth/callback" element={<Suspense fallback={<ScreenLoading />}><Auth /></Suspense>} />
 
               {/* Protected Application Routes */}
               <Route path="/*" element={
