@@ -1,1 +1,1 @@
-export const releaseManifest = {"version":"2026.10.5041841471","url":"https://financial-os-orcin-ten.vercel.app/ota/rr-capital-2026.10.5041841471.zip","checksum":"214792a711149e5a2972285e0e46bb075295bd22094892003d6ce2f093c18da6"} as const
+export const releaseManifest = {"version":"2026.10.5044941306","url":"https://financial-os-orcin-ten.vercel.app/ota/rr-capital-2026.10.5044941306.zip","checksum":"1589741a27623b9cfb43259541ec464ab9678dd281ff35fd8723ed72c8b33002"} as const
