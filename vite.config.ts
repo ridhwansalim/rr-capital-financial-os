@@ -12,6 +12,7 @@ export default defineConfig({
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'sw.js',
+      injectManifest: { globIgnores: ['android/**'] },
       registerType: 'prompt',
       injectRegister: 'auto',
       devOptions: {

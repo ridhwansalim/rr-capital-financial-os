@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
+import { currentRelease } from '../src/lib/releaseNotes'
 
 const backendOrigin = 'https://rr-capital-test.invalid'
 const syntheticUserId = '00000000-0000-4000-a000-000000000099'
@@ -714,6 +715,39 @@ test('desktop navbar truncates only the visible tail on compact screens', async 
   await expect(page.getByRole('region', { name: 'Vaults, Directory & Sync' }).getByRole('link', { name: 'Accounts' })).toHaveCount(0)
 })
 
+test('navbar additions, removals, and reorder persist locally and through profile hydration after reload', async ({ page }) => {
+  const evidence = await installSyntheticBackend(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/settings')
+  await page.getByRole('button', { name: 'Customize Navbar Layout' }).click()
+
+  const dialog = page.getByRole('dialog', { name: 'Customize Navbar Layout' })
+  const accounts = dialog.getByRole('switch', { name: 'Show Accounts in desktop navbar' })
+  await accounts.click()
+  await dialog.getByRole('button', { name: 'Move Accounts up' }).click()
+  await dialog.getByRole('button', { name: 'Move Accounts up' }).click()
+  await dialog.getByRole('button', { name: 'Move Accounts up' }).click()
+  await dialog.getByRole('switch', { name: 'Show Calendar in desktop navbar' }).click()
+
+  await expect(accounts).toHaveAttribute('aria-checked', 'true')
+  await expect(dialog.getByRole('switch', { name: 'Show Calendar in desktop navbar' })).toHaveAttribute('aria-checked', 'false')
+  const savedLayout = await page.evaluate(userId => JSON.parse(localStorage.getItem(`rr-capital.workspace-layout.v1.${userId}`) || '{}'), syntheticUserId)
+  expect(savedLayout.navbarLayout.desktopSelectedUrls).toEqual(['/accounts', '/ledger', '/chittis'])
+  await expect.poll(() => evidence.navbarLayoutUpdates.at(-1)?.desktopSelectedUrls).toEqual(['/accounts', '/ledger', '/chittis'])
+
+  await dialog.getByRole('button', { name: 'Close navbar customization' }).click()
+  const primary = page.getByRole('navigation', { name: 'Primary navigation' })
+  await expect(primary.getByRole('link', { name: 'Accounts' })).toBeVisible()
+  await page.reload()
+
+  const rehydratedPrimary = page.getByRole('navigation', { name: 'Primary navigation' })
+  await expect(rehydratedPrimary.getByRole('link', { name: 'Accounts' })).toBeVisible()
+  await expect(rehydratedPrimary.getByRole('link', { name: 'Calendar' })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Core Operations & Daily Flow' }).getByRole('link', { name: 'Calendar' })).toBeVisible()
+  const rehydratedOrder = await rehydratedPrimary.locator('a[aria-current], a').evaluateAll(links => links.map(link => link.getAttribute('aria-label') || link.textContent?.trim()).filter(Boolean))
+  expect(rehydratedOrder.indexOf('Accounts')).toBeLessThan(rehydratedOrder.indexOf('Ledger'))
+})
+
 test('navbar viewport selector fits the narrow-phone customization modal', async ({ page }) => {
   await installSyntheticBackend(page)
   await page.setViewportSize({ width: 320, height: 720 })
@@ -1032,7 +1066,7 @@ test('settings presents release information and manual update check', async ({ p
   await page.goto('/settings?section=updates')
   await expect(page.getByRole('heading', { name: 'App updates' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Check for updates' })).toBeVisible()
-  await expect(page.getByText(/Latest release .*2026\.10\.04\.1/)).toBeVisible()
+  await expect(page.getByText(new RegExp(`Latest release .*${currentRelease.version.replaceAll('.', '\\.')}`))).toBeVisible()
   await expect(page.getByRole('button', { name: 'View detailed summary' })).toBeVisible()
 })
 
