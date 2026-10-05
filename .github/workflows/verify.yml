@@ -45,4 +45,7 @@ jobs:
         run: npm run test:e2e
 
       - name: Build production app
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://example.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'ci-build-placeholder' }}
         run: npm run build
